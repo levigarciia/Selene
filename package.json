@@ -40,7 +40,12 @@
       "dist/**/*",
       "dist-electron/**/*",
       "!node_modules/**/*",
+      "node_modules/robotjs/**/*",
       "node_modules/electron-updater/**/*"
+    ],
+    "asarUnpack": [
+      "node_modules/robotjs/**/*",
+      "**/*.node"
     ],
     "extraResources": [
       {
