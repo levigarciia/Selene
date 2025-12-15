@@ -9,6 +9,9 @@ import {
 import ReactMarkdown from 'react-markdown'
 import { v4 as uuidv4 } from 'uuid'
 
+// Import logo image for production compatibility
+import seleneLogo from '/tray-icon.png'
+
 import type { ChatMessage } from '../types/chat'
 import { useAI } from '../hooks/useAI'
 import { useUserProfile } from '../hooks/useUserProfile'
@@ -1030,7 +1033,7 @@ const ChatWindow: React.FC = () => {
                         {!sidebarCollapsed && (
                             <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 flex items-center justify-center">
-                                    <img src="/tray-icon.png" alt="Selene Logo" className="w-full h-full object-contain" />
+                                <img src={seleneLogo} alt="Selene Logo" className="w-full h-full object-contain" />
                                 </div>
                                 <span className="font-semibold text-sm">Selene</span>
                             </div>
@@ -1173,7 +1176,7 @@ const ChatWindow: React.FC = () => {
                     {messages.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-neutral-600 gap-4">
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-indigo-600/20 flex items-center justify-center">
-                                <img src="/tray-icon.png" alt="Selene Logo" className="w-full h-full object-contain" />
+                                <img src={seleneLogo} alt="Selene Logo" className="w-full h-full object-contain" />
                             </div>
                             <div className="text-center">
                                 <p className="text-[30px] text-neutral-400 font-sans font-light tracking-wide">
