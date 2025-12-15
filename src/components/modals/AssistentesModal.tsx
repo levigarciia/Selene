@@ -1,8 +1,8 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Plus, Save, Check, X, Sparkles, Wand2, Trash } from 'lucide-react'
-import { ASSISTENTES_PADRAO, criarAssistenteVazio } from '../utils/assistentesPadrao'
-import type { AssistenteConfig } from '../utils/assistentesPadrao'
+import { ASSISTENTES_PADRAO, criarAssistenteVazio } from '../../utils/assistentesPadrao'
+import type { AssistenteConfig } from '../../utils/assistentesPadrao'
 
 type AssistentesModalProps = {
     aberto: boolean

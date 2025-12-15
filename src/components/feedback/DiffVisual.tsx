@@ -1,4 +1,4 @@
-import type { LinhaDiff } from '../utils/diff'
+import type { LinhaDiff } from '../../utils/diff'
 
 type DiffVisualProps = {
   linhas: LinhaDiff[]

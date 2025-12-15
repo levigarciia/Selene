@@ -2,7 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import GrammarWindow from './windows/GrammarWindow.tsx'
+import { GrammarWindow } from './components'
 
 const urlParams = new URLSearchParams(window.location.search)
 const isGrammarWindow = urlParams.get('window') === 'grammar'

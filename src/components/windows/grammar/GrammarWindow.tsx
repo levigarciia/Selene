@@ -1,9 +1,9 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Check, X, Sparkles, FileText, ListChecks, PenSquare, Highlighter } from 'lucide-react'
-import DiffVisual from '../components/DiffVisual'
-import { gerarDiffPorLinhas } from '../utils/diff'
-import { useAI } from '../hooks/useAI'
+import { DiffVisual } from '../../feedback'
+import { gerarDiffPorLinhas } from '../../../utils/diff'
+import { useAI } from '../../../hooks/useAI'
 
 export type AcaoAssistente = 'corrigir' | 'markdown' | 'resumir' | 'detalhar' | 'reescrever'
 export type TomReescrita = 'formal' | 'casual' | 'tecnico'

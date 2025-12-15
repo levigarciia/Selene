@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import FloatingModal from './components/FloatingModal'
-import BottomToolbar from './components/BottomToolbar'
-import AssistentesModal from './components/AssistentesModal'
-import ModalConfiguracoes from './components/ModalConfiguracoes'
-import Toast from './components/Toast'
+import {
+  ChatWindow,
+  FloatingModal,
+  BottomToolbar,
+  AssistentesModal,
+  ModalConfiguracoes,
+  Toast,
+  ScreenshotOverlay
+} from './components'
 import { ASSISTENTES_PADRAO } from './utils/assistentesPadrao'
 import type { AssistenteConfig } from './utils/assistentesPadrao'
 import { useAI } from './hooks/useAI'
@@ -15,7 +19,6 @@ import { useAutoDismiss } from './hooks/useAutoDismiss'
 import { useUserProfile } from './hooks/useUserProfile'
 import type { ChatMessage } from './types/chat'
 import { v4 as uuidv4 } from 'uuid'
-import ChatWindow from './components/ChatWindow'
 
 function App() {
   const [isChatMode, setIsChatMode] = useState(window.location.hash === '#chat')
@@ -36,8 +39,10 @@ function App() {
   const [mostrarConfiguracoes, setMostrarConfiguracoes] = useState(false)
   const [toast, setToast] = useState<{ mensagem: string; tipo?: 'info' | 'erro' } | null>(null)
   const [debugInteractive, setDebugInteractive] = useState(false)
-  const [perguntaScreenshot, setPerguntaScreenshot] = useState('')
+
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [chatAberto, setChatAberto] = useState(false)
   const toastTimeoutRef = useRef<number | null>(null)
 
   const [assistentes, setAssistentes] = useState<AssistenteConfig[]>(() => {
@@ -95,68 +100,261 @@ function App() {
     }])
   }
 
+  const [pendingScreenshots, setPendingScreenshots] = useState<string[]>([])
   const perguntasPendentesRef = useRef<boolean>(false)
 
-  const perguntarComScreenshot = useCallback(
-    async (pergunta?: string) => {
-      console.log('[screenshot] iniciar fluxo')
-      const servico = criarOuObterServico()
-      if (!servico) {
-        exibirToast('Configure uma chave de API ou LM Studio para usar imagem.', 'erro')
-        return
+  // State for Area Screenshot
+  const [isAreaMode, setIsAreaMode] = useState(false)
+
+  const tentarEnviarParaChat = useCallback(async (dataUrl: string) => {
+    try {
+      const entregue = await window.electronAPI?.enviarScreenshotParaChat?.(dataUrl)
+      if (entregue) {
+        exibirToast('Screenshot enviada para o chat expandido.', 'info')
+        setChatAberto(true)
+        setToolbarCollapsed(true)
+        return true
       }
+    } catch (e) {
+      console.warn('Falha ao enviar screenshot para chat expandido', e)
+    }
+    return false
+  }, [exibirToast])
 
-      const promptPergunta =
-        (pergunta || perguntaScreenshot || '').trim() || 'Descreva a imagem e responda em portugues.'
+  const finalizarSelecaoArea = useCallback(() => {
+    setIsAreaMode(false)
+    setToolbarCollapsed(false)
+    window.electronAPI?.setAreaSelectionMode?.(false)
+  }, [])
 
+  const handleAreaCaptureComplete = async (rect: { x: number; y: number; width: number; height: number } | null) => {
+    finalizarSelecaoArea()
+    if (!rect) return
+    
+    exibirToast('Capturando e recortando...')
+    
+    try {
+        // 1. Capture Full Screen
+        const fullDataUrl = await window.electronAPI?.capturarScreenshot?.()
+        if (!fullDataUrl) {
+            exibirToast('Falha na captura base.', 'erro')
+            return
+        }
+
+        // 2. Crop using Canvas
+        const img = new Image()
+        img.onload = async () => {
+            const canvas = document.createElement('canvas')
+            
+            const scaleX = img.width / window.innerWidth
+            const scaleY = img.height / window.innerHeight
+            
+            canvas.width = rect.width * scaleX
+            canvas.height = rect.height * scaleY
+            
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return
+            
+            ctx.drawImage(
+                img,
+                rect.x * scaleX, rect.y * scaleY, rect.width * scaleX, rect.height * scaleY, // Source
+                0, 0, canvas.width, canvas.height // Dest
+            )
+            
+            const croppedUrl = canvas.toDataURL('image/png')
+            const entregue = await tentarEnviarParaChat(croppedUrl)
+            if (!entregue) {
+              setPendingScreenshots((lista) => [...lista, croppedUrl])
+              exibirToast('Area capturada!', 'info')
+              setToolbarCollapsed(false)
+            } else {
+              // Se já foi direto para o chat expandido, mantém a toolbar recolhida
+              setToolbarCollapsed(true)
+            }
+        }
+        img.src = fullDataUrl
+
+    } catch (e: any) {
+        console.error('Erro no crop', e)
+        exibirToast('Erro ao processar área.', 'erro')
+    } finally {
+        // Reforça a saída do modo área mesmo em caso de erro
+        finalizarSelecaoArea()
+    }
+  }
+
+
+  // Effect for Screenshot Area Shortcut
+  useEffect(() => {
+    if (!window.electronAPI?.onAtalhoScreenshotArea) return
+    const cleanup = window.electronAPI.onAtalhoScreenshotArea(() => {
+        if (isAreaMode) return // Evita reentrância
+        console.log('[App] Atalho de area recebido')
+        // Force window to be interactive
+        window.electronAPI?.setIgnoreMouseEvents(false)
+        window.electronAPI?.requestWindowFocus?.()
+        window.electronAPI?.setAreaSelectionMode?.(true)
+        // Reforços para evitar voltar ao pass-through
+        window.setTimeout(() => window.electronAPI?.setIgnoreMouseEvents(false), 30)
+        window.setTimeout(() => window.electronAPI?.setIgnoreMouseEvents(false), 120)
+        
+        setToolbarCollapsed(true) 
+        setIsAreaMode(true)
+    })
+    return cleanup
+  }, [isAreaMode])
+
+  const perguntarComScreenshot = useCallback(
+    async () => {
+      console.log('[screenshot] iniciar captura')
+      
       if (!window.electronAPI?.capturarScreenshot) {
         exibirToast('Captura de tela indisponivel no preload.', 'erro')
-        console.warn('[screenshot] electronAPI.capturarScreenshot ausente')
         return
       }
 
       exibirToast('Capturando screenshot...')
-      setPerguntaScreenshot(promptPergunta)
-      adicionarMensagem('user', `[Screenshot] ${promptPergunta}`)
-
-      perguntasPendentesRef.current = true
+      // Ensure UI is visible
+      setToolbarCollapsed(false) 
 
       try {
-        const dataUrl = await window.electronAPI?.capturarScreenshot?.()
+        const dataUrl = await window.electronAPI.capturarScreenshot()
         if (!dataUrl) {
-          perguntasPendentesRef.current = false
-          exibirToast('Nao consegui capturar a tela.', 'erro')
+            exibirToast('Nao consegui capturar a tela.', 'erro')
           return
         }
-        const resposta = await servico.analisarImagem(promptPergunta, dataUrl)
-        adicionarMensagem('assistant', resposta)
-        perguntasPendentesRef.current = false
-        setShowPreview(true)
+        const entregue = await tentarEnviarParaChat(dataUrl)
+        if (!entregue) {
+          setPendingScreenshots((lista) => [...lista, dataUrl])
+          exibirToast('Screenshot capturado! Digite sua pergunta.', 'info')
+          setToolbarCollapsed(false)
+        } else {
+          // Enviou direto pro chat expandido, mantemos a toolbar recolhida
+          setToolbarCollapsed(true)
+        }
       } catch (error: any) {
-        console.error('Erro ao analisar imagem', error)
-        perguntasPendentesRef.current = false
-        exibirToast(error?.message || 'Falha ao analisar imagem.', 'erro')
+        console.error('Erro ao capturar screenshot', error)
+        exibirToast('Falha ao capturar screenshot.', 'erro')
       }
     },
-    [exibirToast, perguntaScreenshot, criarOuObterServico]
+    [exibirToast, tentarEnviarParaChat]
   )
 
-  const {
-    atalhoGramatical, setAtalhoGramatical,
-    atalhoScreenshot, setAtalhoScreenshot
-  } = useShortcuts(
-    () => { }, // A janela independente captura o evento agora
-    () => perguntarComScreenshot(),
-    (msg) => exibirToast(msg)
-  )
+  const handleChat = async () => {
+    const servico = criarOuObterServico()
+    if (!servico) {
+      exibirToast('Informe uma chave de API valida (OpenAI, OpenRouter, Gemini ou LM Studio).', 'erro')
+      return
+    }
+    const texto = transcription.trim()
 
-  useEffect(() => {
-    localStorage.setItem('selene_assistentes', JSON.stringify(assistentes))
-  }, [assistentes])
+    const juntarScreenshots = async (imagens: string[]) => {
+      if (imagens.length === 1) return imagens[0]
+      const carregadas = await Promise.all(imagens.map((src) => new Promise<HTMLImageElement>((resolve, reject) => {
+        const im = new Image()
+        im.onload = () => resolve(im)
+        im.onerror = (e) => reject(e)
+        im.src = src
+      })))
+      const largura = Math.max(...carregadas.map(im => im.width))
+      const altura = carregadas.reduce((acc, im) => acc + im.height, 0)
+      const canvas = document.createElement('canvas')
+      canvas.width = largura
+      canvas.height = altura
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      let offsetY = 0
+      carregadas.forEach((im) => {
+        ctx.drawImage(im, 0, offsetY, im.width, im.height)
+        offsetY += im.height
+      })
+      return canvas.toDataURL('image/png')
+    }
+    
+    // Se temos screenshots, permitimos texto vazio (usa prompt default) ou texto informado
+    if (pendingScreenshots.length > 0) {
+       const prompt = texto || 'Descreva a imagem e responda em português.'
+       const imagemUnica = await juntarScreenshots(pendingScreenshots)
+       if (!imagemUnica) {
+        exibirToast('Falha ao preparar imagens.', 'erro')
+        return
+       }
+       adicionarMensagem('user', `[Screenshot] ${prompt}`)
+       setTranscription('')
+       setPendingScreenshots([]) // Limpa pendências locais
+       perguntasPendentesRef.current = true
+       setIsGenerating(true)
 
-  useEffect(() => {
-    localStorage.setItem('selene_assistente_ativo', assistenteSelecionadoId)
-  }, [assistenteSelecionadoId])
+       const aiMsgId = uuidv4()
+       setMessages(prev => [...prev, {
+         id: aiMsgId,
+         role: 'assistant',
+         content: '',
+         timestamp: Date.now()
+       }])
+
+       try {
+           const resposta = await servico.analisarImagem(prompt, imagemUnica)
+           setMessages(prev => prev.map(msg => 
+               msg.id === aiMsgId ? { ...msg, content: resposta } : msg
+           ))
+           setShowPreview(true)
+       } catch (error: any) {
+           console.error('Erro ao analisar imagem', error)
+           exibirToast(error?.message || 'Falha ao analisar imagem.', 'erro')
+           setMessages(prev => prev.map(msg => 
+               msg.id === aiMsgId ? { ...msg, content: `⚠️ Erro: ${error?.message}` } : msg
+           ))
+       } finally {
+           perguntasPendentesRef.current = false
+           setIsGenerating(false)
+       }
+       return
+    }
+
+    if (!texto) return
+
+    adicionarMensagem('user', texto)
+    setTranscription('')
+    perguntasPendentesRef.current = true
+    setIsGenerating(true)
+
+    // Placeholder message for streaming
+    const aiMsgId = uuidv4()
+    setMessages(prev => [...prev, {
+      id: aiMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now()
+    }])
+
+    let streamedContent = ''
+
+    try {
+      const enhancedPrompt = systemPrompt + getProfileContext()
+      
+      await servico.streamChat(
+        texto,
+        (chunk: string) => {
+          streamedContent += chunk
+          setMessages(prev => prev.map(msg => 
+            msg.id === aiMsgId ? { ...msg, content: streamedContent } : msg
+          ))
+        },
+        enhancedPrompt,
+        messages
+      )
+    } catch (e: any) {
+      const mensagem = e?.message || 'Falha ao enviar'
+      exibirToast(mensagem, 'erro')
+      setMessages(prev => prev.map(msg => 
+        msg.id === aiMsgId ? { ...msg, content: `⚠️ Erro: ${mensagem}` } : msg
+      ))
+    } finally {
+      perguntasPendentesRef.current = false
+      setIsGenerating(false)
+    }
+  }
 
   const salvarAssistente = (assistente: AssistenteConfig) => {
     setAssistentes((lista) => lista.map((item) => (item.id === assistente.id ? assistente : item)))
@@ -194,31 +392,14 @@ function App() {
     setSystemPrompt(ASSISTENTES_PADRAO[0].prompt)
   }
 
-  const handleChat = async () => {
-    const servico = criarOuObterServico()
-    if (!servico) {
-      exibirToast('Informe uma chave de API valida (OpenAI, OpenRouter, Gemini ou LM Studio).', 'erro')
-      return
-    }
-    const texto = transcription.trim()
-    if (!texto) return
-
-    adicionarMensagem('user', texto)
-    setTranscription('')
-    perguntasPendentesRef.current = true
-
-    try {
-      const enhancedPrompt = systemPrompt + getProfileContext()
-      const result = await servico.chat(texto, enhancedPrompt, messages)
-      adicionarMensagem('assistant', result)
-    } catch (e: any) {
-      const mensagem = e?.message || 'Falha ao enviar'
-      exibirToast(mensagem, 'erro')
-      adicionarMensagem('assistant', `⚠️ Erro: ${mensagem}`)
-    } finally {
-      perguntasPendentesRef.current = false
-    }
-  }
+  const {
+    atalhoGramatical, setAtalhoGramatical,
+    atalhoScreenshot, setAtalhoScreenshot
+  } = useShortcuts(
+    () => { },
+    () => perguntarComScreenshot(),
+    (msg) => exibirToast(msg)
+  )
 
   const handleAnalyze = async () => {
     const servico = criarOuObterServico()
@@ -239,7 +420,7 @@ function App() {
     } catch (e: any) {
       const mensagem = e?.message || 'Falha ao analisar'
       exibirToast(mensagem, 'erro')
-      adicionarMensagem('assistant', `⚠️ Erro: ${mensagem}`)
+      adicionarMensagem('assistant', `[Erro] ${mensagem}`)
     } finally {
       perguntasPendentesRef.current = false
     }
@@ -277,6 +458,7 @@ function App() {
   useEffect(() => {
     const removeListener = window.electronAPI?.onCollapseToolbar?.(() => {
       setToolbarCollapsed(true)
+      setChatAberto(false)
     })
     return () => removeListener?.()
   }, [])
@@ -306,6 +488,14 @@ function App() {
 
   return (
     <div className={`h-screen w-screen relative overflow-hidden transition-colors duration-200 ${debugInteractive ? 'bg-black/20' : 'bg-transparent'} pointer-events-none`}>
+      <ScreenshotOverlay
+        isActive={isAreaMode}
+        onComplete={handleAreaCaptureComplete}
+        onCancel={() => {
+            finalizarSelecaoArea()
+        }}
+      />
+      
       <AnimatePresence>
         {deveExibirModalFlutuante && !dismissed && (
           <FloatingModal
@@ -320,27 +510,37 @@ function App() {
               setMessages([])
               setTranscription('')
             }}
+            isGenerating={isGenerating}
           />
         )}
       </AnimatePresence>
 
-      <BottomToolbar
-        ref={toolbarRef}
-        isRecording={isRecording}
-        toggleRecording={toggleRecording}
-        transcription={transcription}
-        setTranscription={setTranscription}
-        handleChat={handleChat}
-        handleAnalyze={handleAnalyze}
-        aoPerguntarScreenshot={() => perguntarComScreenshot()}
-        aoAbrirAssistentes={() => setMostrarAssistentes(true)}
-        aoAbrirAssistenteGramatical={() => window.electronAPI?.abrirAssistenteGramatical?.()}
-        aoAbrirConfiguracoes={() => setMostrarConfiguracoes(true)}
-        aoAbrirChatWindow={() => window.electronAPI?.openExpandedChat?.(messages)}
-        aoFecharAplicacao={fecharAplicacao}
-        menuDropdownRef={menuDropdownRef}
-        initialCollapsed={toolbarCollapsed}
-      />
+      {!isAreaMode && !chatAberto && (
+        <BottomToolbar
+          ref={toolbarRef}
+          isRecording={isRecording}
+          toggleRecording={toggleRecording}
+          transcription={transcription}
+          setTranscription={setTranscription}
+          handleChat={handleChat}
+          handleAnalyze={handleAnalyze}
+          aoPerguntarScreenshot={() => perguntarComScreenshot()}
+          pendingScreenshots={pendingScreenshots}
+          onDeleteScreenshot={(idx) => setPendingScreenshots((lista) => lista.filter((_, i) => i !== idx))}
+          aoAbrirAssistentes={() => setMostrarAssistentes(true)}
+          aoAbrirAssistenteGramatical={() => window.electronAPI?.abrirAssistenteGramatical?.()}
+          aoAbrirConfiguracoes={() => setMostrarConfiguracoes(true)}
+          aoAbrirChatWindow={() => {
+            setChatAberto(true)
+            setToolbarCollapsed(true)
+            window.electronAPI?.openExpandedChat?.(messages)
+          }}
+          aoFecharAplicacao={fecharAplicacao}
+          menuDropdownRef={menuDropdownRef}
+          initialCollapsed={toolbarCollapsed}
+          forceCollapse={toolbarCollapsed}
+        />
+      )}
 
       <AssistentesModal
         ref={assistentesRef}
@@ -386,6 +586,8 @@ function App() {
         aoAdicionarMemoria={addMemory}
         aoRemoverMemoria={removeMemory}
       />
+
+
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80]">

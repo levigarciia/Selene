@@ -3,7 +3,7 @@ import { Sparkles, Eye, EyeOff, X, Terminal, Maximize2 } from 'lucide-react'
 import { forwardRef } from 'react'
 import { motion, useDragControls, AnimatePresence } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import type { ChatMessage } from '../types/chat'
+import type { ChatMessage } from '../../types/chat'
 
 interface FloatingModalProps {
     transcription: string
@@ -11,6 +11,7 @@ interface FloatingModalProps {
     showPreview: boolean
     setShowPreview: (show: boolean) => void
     onClose: () => void
+    isGenerating?: boolean
 }
 
 const FloatingModal = forwardRef<HTMLDivElement, FloatingModalProps>(({
@@ -18,7 +19,8 @@ const FloatingModal = forwardRef<HTMLDivElement, FloatingModalProps>(({
     messages,
     showPreview,
     setShowPreview,
-    onClose
+    onClose,
+    isGenerating = false
 }, ref) => {
     const dragControls = useDragControls()
 
@@ -102,7 +104,7 @@ const FloatingModal = forwardRef<HTMLDivElement, FloatingModalProps>(({
                             className="flex-1 overflow-x-hidden overflow-y-auto relative flex flex-col p-5 gap-4 min-h-[0] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent"
                         >
 
-                            {messages.map((msg) => (
+                            {messages.map((msg, index) => (
                                 <motion.div
                                     key={msg.id}
                                     initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -123,7 +125,14 @@ const FloatingModal = forwardRef<HTMLDivElement, FloatingModalProps>(({
                                             </div>
                                             <div className="relative group">
                                                 <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-500 to-blue-500 rounded-2xl opacity-20 blur group-hover:opacity-30 transition duration-1000"></div>
-                                                <div className="relative px-5 py-4 rounded-2xl rounded-tl-sm bg-neutral-900/90 border border-white/10 text-sm text-neutral-100 leading-relaxed shadow-xl">
+                                                <div className={`relative px-5 py-4 rounded-2xl rounded-tl-sm bg-neutral-900/90 border border-white/10 text-sm text-neutral-100 leading-relaxed shadow-xl ${
+                                                    isGenerating && index === messages.length - 1 && msg.role === 'assistant'
+                                                        ? "[&>*:last-child]:after:content-[''] [&>*:last-child]:after:inline-block [&>*:last-child]:after:w-2.5 [&>*:last-child]:after:h-2.5 [&>*:last-child]:after:bg-purple-400 [&>*:last-child]:after:rounded-full [&>*:last-child]:after:ml-1.5 [&>*:last-child]:after:align-baseline [&>*:last-child]:after:animate-pulse"
+                                                        : ''
+                                                }`}>
+                                                    {(isGenerating && index === messages.length - 1 && msg.role === 'assistant' && !msg.content) && (
+                                                        <div className="inline-block w-2.5 h-2.5 bg-purple-400 rounded-full animate-pulse" />
+                                                    )}
                                                     <ReactMarkdown
                                                         components={{
                                                             p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,

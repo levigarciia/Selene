@@ -118,11 +118,27 @@ Selene/
 ├── src/                       # Código do React (renderer process)
 │   ├── App.tsx               # Componente raiz do overlay
 │   ├── main.tsx              # Entry point do React
-│   ├── components/           # Componentes React
-│   │   ├── ChatWindow.tsx    # Janela principal de chat
-│   │   ├── BottomToolbar.tsx # Barra de ferramentas flutuante
-│   │   ├── FloatingModal.tsx # Modal de chat flutuante
-│   │   └── ModalConfiguracoes.tsx # Painel de configurações
+│   ├── components/           # Componentes React organizados por categoria
+│   │   ├── index.ts          # Re-exports centralizados
+│   │   ├── windows/          # Janelas standalone do Electron
+│   │   │   ├── chat/         # ChatWindow - janela principal de chat
+│   │   │   │   ├── ChatWindow.tsx
+│   │   │   │   └── index.ts
+│   │   │   └── grammar/      # GrammarWindow - assistente gramatical
+│   │   │       ├── GrammarWindow.tsx
+│   │   │       └── index.ts
+│   │   ├── modals/           # Modais overlay
+│   │   │   ├── AssistentesModal.tsx  # Modal de gerenciamento de assistentes
+│   │   │   ├── FloatingModal.tsx     # Modal de chat flutuante
+│   │   │   ├── ModalConfiguracoes.tsx # Painel de configurações
+│   │   │   └── index.ts
+│   │   ├── toolbar/          # Barra de ferramentas
+│   │   │   ├── BottomToolbar.tsx     # Barra de ferramentas flutuante
+│   │   │   └── index.ts
+│   │   └── feedback/         # Componentes de feedback visual
+│   │       ├── Toast.tsx             # Notificações toast
+│   │       ├── DiffVisual.tsx        # Visualização de diff de texto
+│   │       └── index.ts
 │   ├── hooks/                # Custom hooks
 │   │   ├── useAI.ts          # Hook para serviço de IA
 │   │   ├── useAudio.ts       # Hook para gravação de áudio
@@ -134,8 +150,6 @@ Selene/
 │   │   ├── memory/           # Sistema de memória automática
 │   │   ├── crosschat/        # Sistema de contexto entre conversas
 │   │   └── PromptPipeline.ts # Composição de prompts
-│   ├── windows/              # Janelas especializadas
-│   │   └── GrammarWindow.tsx # Janela do assistente gramatical
 │   └── types/                # Definições de tipos TypeScript
 ├── public/                   # Assets estáticos
 ├── build-resources/          # Recursos para build (entitlements, etc.)

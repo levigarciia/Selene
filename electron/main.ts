@@ -24,9 +24,20 @@ let estadoAtual: JanelaEstado = 'pass_through'
 let ultimoLogEstado: { estado: JanelaEstado; relX: number; relY: number; sobre: boolean } | null = null
 let atalhoGramaticalAtual: string | null = null
 let atalhoScreenshotAtual: string | null = null
+let atalhoScreenshotAreaAtual: string | null = null
+let overlayIsVisible = true // Rastreia se o overlay está "ativo" (não escondido pelo usuário)
+let updateTrayMenuCallback: (() => void) | null = null // Callback para atualizar menu do tray
 const ATALHO_SCREENSHOT_PADRAO = 'Control+Alt+S'
 const logDebug = (...args: unknown[]) => {
     if (isDebugMode) console.log(...args)
+}
+let isAreaSelectionMode = false
+let areaEnforceInterval: NodeJS.Timeout | null = null
+
+// Helper para atualizar estado do overlay e menu do tray
+const setOverlayVisible = (visible: boolean) => {
+    overlayIsVisible = visible
+    if (updateTrayMenuCallback) updateTrayMenuCallback()
 }
 
 const dispararColarGlobal = () => {
@@ -171,7 +182,84 @@ function registrarAtalhoScreenshot(atalho: string) {
     }
 }
 
+function registrarAtalhoScreenshotArea(atalho: string) {
+    if (atalhoScreenshotAreaAtual) {
+        globalShortcut.unregister(atalhoScreenshotAreaAtual)
+    }
+
+    if (!atalho) {
+        atalhoScreenshotAreaAtual = null
+        return
+    }
+
+    atalhoScreenshotAreaAtual = atalho
+    const registrado = globalShortcut.register(atalho, () => {
+         iniciarModoArea()
+    })
+
+    if (!registrado) {
+        console.warn('[atalho-screenshot-area] não foi possível registrar', atalho)
+        atalhoScreenshotAreaAtual = null
+    }
+}
+
+function iniciarModoArea() {
+    if (!win || win.isDestroyed()) return
+    console.log('[modo-area] Iniciando...')
+    
+    isAreaSelectionMode = true
+    pararTracker() // Stop tracker to prevent interference
+    
+    win.show()
+    win.focus()
+    
+    // TRICK: Slightly increase opacity to force OS to register the window as clickable
+    // #00000002 is just 1/255 more opaque than default #00000001
+    win.setBackgroundColor('#00000002')
+
+    // Force immediate interactivity
+    forcarInteracao(win, false)
+    win.setIgnoreMouseEvents(false) // Redundant but necessary
+    definirEstado('interativo')
+
+    // Reforço contínuo para evitar voltar a pass-through durante a seleção
+    if (areaEnforceInterval) {
+        clearInterval(areaEnforceInterval)
+    }
+    areaEnforceInterval = setInterval(() => {
+        if (win && !win.isDestroyed()) {
+            win.setIgnoreMouseEvents(false)
+            definirEstado('interativo')
+        }
+    }, 60)
+
+    win.webContents.send('atalho-screenshot-area')
+}
+
+function finalizarModoArea() {
+    if (!win || win.isDestroyed()) return
+    console.log('[modo-area] Finalizando...')
+    
+    isAreaSelectionMode = false
+    if (areaEnforceInterval) {
+        clearInterval(areaEnforceInterval)
+        areaEnforceInterval = null
+    }
+    
+    // Return to pass-through immediately
+    win.setBackgroundColor('#00000001') // Reset to base transparency level
+    aplicarPassThrough(win, { forward: true })
+    definirEstado('pass_through')
+    
+    iniciarTracker() // Restart tracker
+    checarCursor() // Check initial state
+}
+
+
 function atualizarRegioes(regioes: Array<{ x: number; y: number; width: number; height: number }>) {
+    // Em modo de seleção de área, ignorar updates de regiões para não forçar pass-through.
+    if (isAreaSelectionMode) return
+
     modalRegions = Array.isArray(regioes) ? regioes : []
 
     if (modalRegions.length > 0) {
@@ -190,7 +278,8 @@ function checarCursor() {
         return
     }
 
-    if (estadoAtual === 'debug') return
+    // Skip tracker if debugging or in area selection mode (keep interactive)
+    if (estadoAtual === 'debug' || isAreaSelectionMode) return
 
     const cursor = screen.getCursorScreenPoint()
     const bounds = win.getContentBounds()
@@ -312,6 +401,15 @@ function createWindow() {
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
     ipcMain.on('set-ignore-mouse-events', (event, ignore, options) => {
+        // Durante seleção de área, nunca permita voltar para pass-through
+        if (isAreaSelectionMode) {
+            if (win && !win.isDestroyed()) {
+                win.setIgnoreMouseEvents(false)
+                definirEstado('interativo')
+            }
+            return
+        }
+
         if (isDebugMode) {
             if (win && !win.isDestroyed()) {
                 definirEstado('debug')
@@ -340,8 +438,31 @@ function createWindow() {
     ipcMain.on('registrar-atalho-screenshot', (_event, atalho: string) => {
         registrarAtalhoScreenshot(atalho)
     })
+    ipcMain.on('registrar-atalho-screenshot-area', (_event, atalho: string) => {
+        registrarAtalhoScreenshotArea(atalho)
+    })
+    
+    ipcMain.on('set-area-selection-mode', (_event, enabled: boolean) => {
+        console.log('[ipc] set-area-selection-mode', enabled)
+        if (enabled) {
+            iniciarModoArea()
+        } else {
+            finalizarModoArea()
+        }
+    })
+
+    ipcMain.handle('enviar-screenshot-chat', (_event, dataUrl: string) => {
+        if (chatWin && !chatWin.isDestroyed() && chatWin.isVisible()) {
+            chatWin.webContents.send('chat-receber-screenshot', dataUrl)
+            chatWin.focus()
+            return true
+        }
+        return false
+    })
+
     // Atalho de screenshot (fixo por ora)
     registrarAtalhoScreenshot(ATALHO_SCREENSHOT_PADRAO)
+    registrarAtalhoScreenshotArea('Control+Alt+A')
 
     ipcMain.on('fechar-aplicacao', () => {
         app.quit()
@@ -396,14 +517,19 @@ function createWindow() {
         }
     })
 
-    ipcMain.on('request-window-focus', () => {
+    const focarJanelaOverlay = () => {
         if (!win || win.isDestroyed()) return
         try {
+            definirEstado('interativo')
             win.focus()
         } catch (error) {
             console.error('request-window-focus error', error)
         }
-    })
+    }
+
+    ipcMain.on('request-window-focus', focarJanelaOverlay)
+    // Alias para chamadas legadas
+    ipcMain.on('request-focus', focarJanelaOverlay)
 
     ipcMain.handle('get-window-bounds', () => {
         if (!win || win.isDestroyed()) return null
@@ -429,12 +555,13 @@ function createWindow() {
         }
     })
 
-    let chatWin: BrowserWindow | null = null
+    // Usar a variável global chatWin declarada no topo do arquivo
 
     ipcMain.on('open-expanded-chat', (_event, messages) => {
         // Hide overlay window
         if (win && !win.isDestroyed()) {
             win.hide()
+            setOverlayVisible(false)
         }
 
         if (chatWin && !chatWin.isDestroyed()) {
@@ -488,6 +615,7 @@ function createWindow() {
             chatWin = null
             if (win && !win.isDestroyed()) {
                 win.show()
+                setOverlayVisible(true)
                 win.webContents.send('collapse-toolbar')
             }
         })
@@ -547,6 +675,7 @@ app.whenReady().then(() => {
     setTimeout(() => {
         if (win && !win.isDestroyed()) {
             win.hide()
+            setOverlayVisible(false)
         }
 
         const preloadPath = path.join(__dirname, 'preload.cjs')
@@ -587,6 +716,7 @@ app.whenReady().then(() => {
             chatWin = null
             if (win && !win.isDestroyed()) {
                 win.show()
+                setOverlayVisible(true)
                 win.webContents.send('collapse-toolbar')
             }
         })
@@ -613,45 +743,146 @@ app.whenReady().then(() => {
     tray = new Tray(trayIcon)
     tray.setToolTip('Selene - AI Assistant')
 
-    const contextMenu = Menu.buildFromTemplate([
-        {
-            label: 'Abrir Selene Chat',
-            click: () => {
-                if (chatWin && !chatWin.isDestroyed()) {
-                    chatWin.show()
-                    chatWin.focus()
-                } else if (win && !win.isDestroyed()) {
-                    win.webContents.send('open-chat-from-tray')
+    // Função para criar menu dinâmico
+    const buildTrayMenu = () => {
+        return Menu.buildFromTemplate([
+            {
+                label: 'Abrir Selene Chat',
+                click: () => {
+                    if (chatWin && !chatWin.isDestroyed()) {
+                        chatWin.show()
+                        chatWin.focus()
+                    } else {
+                        // Criar nova janela de chat (simula click no botão expand)
+                        if (win && !win.isDestroyed()) {
+                            win.hide()
+                            setOverlayVisible(false)
+                        }
+                        
+                        const preloadPath = path.join(__dirname, 'preload.cjs')
+                        const iconPath = path.join(process.env.VITE_PUBLIC || '', 'selene.ico')
+                        
+                        chatWin = new BrowserWindow({
+                            width: 1200,
+                            height: 800,
+                            minWidth: 800,
+                            minHeight: 600,
+                            center: true,
+                            icon: iconPath,
+                            backgroundColor: '#0a0a0c',
+                            frame: false,
+                            titleBarStyle: 'hidden',
+                            skipTaskbar: false,
+                            webPreferences: {
+                                preload: preloadPath,
+                                nodeIntegration: false,
+                                contextIsolation: true,
+                            },
+                        })
+                        
+                        const appIcon = nativeImage.createFromPath(iconPath)
+                        if (!appIcon.isEmpty()) {
+                            chatWin.setIcon(appIcon)
+                        }
+                        
+                        if (VITE_DEV_SERVER_URL) {
+                            chatWin.loadURL(`${VITE_DEV_SERVER_URL}#chat`)
+                        } else {
+                            chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
+                        }
+                        
+                        chatWin.on('closed', () => {
+                            chatWin = null
+                            if (win && !win.isDestroyed()) {
+                                win.show()
+                                setOverlayVisible(true)
+                                win.webContents.send('collapse-toolbar')
+                            }
+                        })
+                    }
+                }
+            },
+            {
+                label: overlayIsVisible ? 'Ocultar Overlay' : 'Mostrar Overlay',
+                click: () => {
+                    if (overlayIsVisible) {
+                        // Ocultar overlay
+                        if (win && !win.isDestroyed()) {
+                            win.hide()
+                            setOverlayVisible(false)
+                        }
+                    } else {
+                        // Mostrar overlay e ocultar chat
+                        if (chatWin && !chatWin.isDestroyed()) {
+                            chatWin.hide()
+                        }
+                        if (win && !win.isDestroyed()) {
+                            win.show()
+                            win.focus()
+                            setOverlayVisible(true)
+                        }
+                    }
+                }
+            },
+            {
+                label: 'Assistente Gramatical',
+                accelerator: 'Ctrl+Alt+X',
+                click: () => {
+                    if (!grammarWin || grammarWin.isDestroyed()) {
+                        createGrammarWindow()
+                    } else {
+                        grammarWin.show()
+                        grammarWin.focus()
+                    }
+                }
+            },
+            { type: 'separator' },
+            {
+                label: 'Sair',
+                click: () => {
+                    app.quit()
                 }
             }
-        },
-        {
-            label: 'Mostrar Overlay',
-            click: () => {
-                if (chatWin && !chatWin.isDestroyed()) {
-                    chatWin.close()
-                } else if (win && !win.isDestroyed()) {
-                    win.show()
-                }
-            }
-        },
-        { type: 'separator' },
-        {
-            label: 'Sair',
-            click: () => {
-                app.quit()
-            }
-        }
-    ])
+        ])
+    }
 
-    tray.setContextMenu(contextMenu)
+    // Função para atualizar o menu do tray
+    const updateTrayMenu = () => {
+        tray?.setContextMenu(buildTrayMenu())
+    }
 
+    // Registrar callback global para atualizar menu quando estado mudar
+    updateTrayMenuCallback = updateTrayMenu
+
+    // Definir menu inicial
+    updateTrayMenu()
+
+    // Atualizar menu quando o tray receber clique direito (antes de mostrar o menu)
+    tray.on('right-click', updateTrayMenu)
+
+    // Click on tray icon toggles chat window
     tray.on('click', () => {
         if (chatWin && !chatWin.isDestroyed()) {
-            chatWin.show()
-            chatWin.focus()
+            if (chatWin.isVisible()) {
+                chatWin.hide()
+            } else {
+                chatWin.show()
+                chatWin.focus()
+            }
         } else if (win && !win.isDestroyed()) {
             win.show()
+        }
+    })
+
+    // Register global shortcut to show overlay (Ctrl+Alt+O)
+    globalShortcut.register('Control+Alt+O', () => {
+        if (chatWin && !chatWin.isDestroyed()) {
+            chatWin.hide()
+        }
+        if (win && !win.isDestroyed()) {
+            win.show()
+            win.focus()
+            setOverlayVisible(true)
         }
     })
 })

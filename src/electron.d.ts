@@ -17,7 +17,12 @@ declare global {
             aplicarTextoGramatical?: () => void;
             requestWindowFocus?: () => void;
             capturarScreenshot?: () => Promise<string | null>;
-            onAtalhoScreenshot?: (callback: () => void) => (() => void) | void;
+            onAtalhoScreenshot?: (callback: () => void) => () => void;
+            registrarAtalhoScreenshotArea?: (atalho: string) => void;
+            onAtalhoScreenshotArea?: (callback: () => void) => () => void;
+            setAreaSelectionMode?: (enabled: boolean) => void;
+            enviarScreenshotParaChat?: (dataUrl: string) => Promise<boolean>;
+            onScreenshotChat?: (callback: (dataUrl: string) => void) => (() => void) | void;
             openExpandedChat?: (messages: any[]) => void;
             onHydrateChat?: (callback: (messages: any[]) => void) => (() => void) | void;
             minimizeWindow?: () => void;

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
     Sparkles, Send, Minus, Square, X, Terminal,
     MessageSquare, Plus, Settings, ChevronLeft, ChevronRight,
-    Copy, RefreshCw, StopCircle, Check, Loader2, User, Briefcase, Heart, Brain, Trash2, KeyRound, Settings2,
+    Copy, RefreshCw, StopCircle, Check, User, Briefcase, Heart, Brain, Trash2, KeyRound, Settings2,
     Zap, Link2, Download
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
@@ -12,13 +12,13 @@ import { v4 as uuidv4 } from 'uuid'
 // Import logo image for production compatibility
 import seleneLogo from '/tray-icon.png'
 
-import type { ChatMessage } from '../types/chat'
-import { useAI } from '../hooks/useAI'
-import { useUserProfile } from '../hooks/useUserProfile'
-import type { UserProfile, Memory } from '../hooks/useUserProfile'
-import { useCrossChatContext } from '../hooks/useCrossChatContext'
-import { useMemoryAutopilot } from '../hooks/useMemoryAutopilot'
-import { composePrompt, processUserMessageForMemory } from '../services/PromptPipeline'
+import type { ChatMessage } from '../../../types/chat'
+import { useAI } from '../../../hooks/useAI'
+import { useUserProfile } from '../../../hooks/useUserProfile'
+import type { UserProfile, Memory } from '../../../hooks/useUserProfile'
+import { useCrossChatContext } from '../../../hooks/useCrossChatContext'
+import { useMemoryAutopilot } from '../../../hooks/useMemoryAutopilot'
+import { composePrompt, processUserMessageForMemory } from '../../../services/PromptPipeline'
 
 // Types
 interface Conversation {
@@ -34,23 +34,24 @@ const SidebarItem: React.FC<{
     icon: React.ElementType
     label: string
     active?: boolean
+    collapsed?: boolean
     onClick?: () => void
     onDelete?: () => void
     trailing?: React.ReactNode
-}> = ({ icon: Icon, label, active, onClick, onDelete, trailing }) => (
+}> = ({ icon: Icon, label, active, collapsed, onClick, onDelete, trailing }) => (
     <div className="relative group">
         <button
             onClick={onClick}
-            className={`w-full p-3 rounded-xl flex items-center gap-3 transition-all duration-200 text-left ${active
+            className={`w-full p-3 rounded-xl flex items-center transition-all duration-200 text-left ${active
                 ? 'bg-purple-500/15 text-purple-200'
-                : 'hover:bg-white/5 text-neutral-400 hover:text-neutral-200'
-                }`}
+                : 'hover:bg-white/5 text-neutral-400 hover:text-neutral-200'} ${collapsed ? 'justify-center' : 'gap-3'}`}
+            title={collapsed ? label : undefined}
         >
             <Icon size={18} className={active ? 'text-purple-400' : 'group-hover:text-purple-300 transition-colors'} />
-            <span className="flex-1 text-sm font-medium truncate pr-6">{label}</span>
-            {trailing}
+            {!collapsed && <span className="flex-1 text-sm font-medium truncate pr-6">{label}</span>}
+            {!collapsed && trailing}
         </button>
-        {onDelete && (
+        {!collapsed && onDelete && (
             <button
                 onClick={(e) => {
                     e.stopPropagation()
@@ -92,13 +93,8 @@ const MessageActions: React.FC<{
     </div>
 )
 
-// Streaming Indicator Component
-const StreamingIndicator: React.FC = () => (
-    <div className="flex items-center gap-2 text-purple-400">
-        <Loader2 size={14} className="animate-spin" />
-        <span className="text-xs">Gerando resposta...</span>
-    </div>
-)
+// Streaming Indicator Component - Removed as requested
+// const StreamingIndicator: React.FC = () => (...)
 
 // Settings Panel Component
 const SettingsPanel: React.FC<{
@@ -599,7 +595,7 @@ const SettingsPanel: React.FC<{
                                 <button
                                     onClick={() => {
                                         if (window.confirm('Isso apagará todo o histórico de contexto entre conversas. Continuar?')) {
-                                            import('../services/crosschat/EmbeddingIndex').then(({ clearIndex }) => {
+                                            import('../../../services/crosschat/EmbeddingIndex').then(({ clearIndex }) => {
                                                 clearIndex()
                                                 alert('Índice de embeddings limpo com sucesso!')
                                             })
@@ -773,6 +769,7 @@ const ChatWindow: React.FC = () => {
     const [input, setInput] = useState('')
     const [isGenerating, setIsGenerating] = useState(false)
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+    const [pendingScreenshots, setPendingScreenshots] = useState<string[]>([])
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
@@ -805,6 +802,16 @@ const ChatWindow: React.FC = () => {
         return () => removeListener?.()
     }, [])
 
+    // Receber screenshot encaminhada do overlay/atalho
+    useEffect(() => {
+        const remover = window.electronAPI?.onScreenshotChat?.((dataUrl: string) => {
+            setPendingScreenshots((lista) => [...lista, dataUrl])
+            setShowSettings(false)
+            setInput('')
+        })
+        return () => remover?.()
+    }, [])
+
     // Auto-scroll
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -812,15 +819,8 @@ const ChatWindow: React.FC = () => {
 
     // Create new conversation
     const createNewConversation = useCallback(() => {
-        const newConv: Conversation = {
-            id: uuidv4(),
-            title: 'Nova conversa',
-            messages: [],
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-        }
-        setConversations(prev => [newConv, ...prev])
-        setActiveConversationId(newConv.id)
+        setActiveConversationId(null)
+        setInput('')
     }, [])
 
     // Update conversation messages
@@ -841,7 +841,7 @@ const ChatWindow: React.FC = () => {
             setActiveConversationId(null)
         }
         // Also remove from embedding index (cross-chat memory)
-        import('../services/crosschat/EmbeddingIndex').then(({ removeConversation }) => {
+        import('../../../services/crosschat/EmbeddingIndex').then(({ removeConversation }) => {
             const removed = removeConversation(convId)
             console.log(`[ChatWindow] Removed ${removed} messages from embedding index`)
         }).catch(err => console.warn('[ChatWindow] Failed to clean embedding index:', err))
@@ -849,7 +849,8 @@ const ChatWindow: React.FC = () => {
 
     // Send message with streaming
     const handleSend = async () => {
-        if (!input.trim() || isGenerating) return
+        const hasTexto = input.trim().length > 0
+        if ((!hasTexto && pendingScreenshots.length === 0) || isGenerating) return
 
         const servico = criarOuObterServico()
         if (!servico) {
@@ -857,12 +858,36 @@ const ChatWindow: React.FC = () => {
             return
         }
 
+        const juntarScreenshots = async (imagens: string[]) => {
+            if (imagens.length === 1) return imagens[0]
+            const carregadas = await Promise.all(imagens.map((src) => new Promise<HTMLImageElement>((resolve, reject) => {
+                const im = new Image()
+                im.onload = () => resolve(im)
+                im.onerror = (e) => reject(e)
+                im.src = src
+            })))
+            const largura = Math.max(...carregadas.map(im => im.width))
+            const altura = carregadas.reduce((acc, im) => acc + im.height, 0)
+            const canvas = document.createElement('canvas')
+            canvas.width = largura
+            canvas.height = altura
+            const ctx = canvas.getContext('2d')
+            if (!ctx) return null
+            let offsetY = 0
+            carregadas.forEach((im) => {
+                ctx.drawImage(im, 0, offsetY, im.width, im.height)
+                offsetY += im.height
+            })
+            return canvas.toDataURL('image/png')
+        }
+
         // Create conversation if none active
         let convId = activeConversationId
         if (!convId) {
+            const titulo = hasTexto ? input.trim().slice(0, 30) : 'Screenshots'
             const newConv: Conversation = {
                 id: uuidv4(),
-                title: input.trim().slice(0, 30) + (input.trim().length > 30 ? '...' : ''),
+                title: titulo + (hasTexto && input.trim().length > 30 ? '...' : ''),
                 messages: [],
                 createdAt: Date.now(),
                 updatedAt: Date.now()
@@ -872,14 +897,17 @@ const ChatWindow: React.FC = () => {
             convId = newConv.id
         }
 
+        const promptImagem = pendingScreenshots.length > 0 ? (hasTexto ? input.trim() : 'Descreva a imagem e responda em português.') : null
+        const userContent = promptImagem ?? input.trim()
+
         const userMsg: ChatMessage = {
             id: uuidv4(),
             role: 'user',
-            content: input.trim(),
+            content: userContent,
             timestamp: Date.now()
         }
 
-        // Create placeholder AI message for streaming
+        // Create placeholder AI message for streaming ou imagem
         const aiMsgId = uuidv4()
         const aiMsg: ChatMessage = {
             id: aiMsgId,
@@ -891,43 +919,57 @@ const ChatWindow: React.FC = () => {
         const currentMessages = [...messages, userMsg, aiMsg]
         updateConversationMessages(convId, currentMessages)
         setInput('')
+        setPendingScreenshots([])
         setIsGenerating(true)
 
         abortControllerRef.current = new AbortController()
         let streamedContent = ''
 
         try {
-            // Compose prompt with all contexts using the pipeline
-            const { systemPrompt: composedPrompt } = await composePrompt({
-                systemPrompt,
-                userProfileContext: getProfileContext(),
-                currentConversationId: convId,
-                currentUserMessage: userMsg.content
-            })
-
-            // Stream the response
-            await servico.streamChat(
-                userMsg.content,
-                (chunk: string) => {
-                    streamedContent += chunk
-                    // Update the AI message in real-time
-                    setConversations(prev => prev.map(c => {
-                        if (c.id === convId) {
-                            return {
-                                ...c,
-                                messages: c.messages.map(m =>
-                                    m.id === aiMsgId ? { ...m, content: streamedContent } : m
-                                )
-                            }
+            if (pendingScreenshots.length > 0 && promptImagem) {
+                const imagemUnica = await juntarScreenshots(pendingScreenshots)
+                if (!imagemUnica) throw new Error('Falha ao preparar imagens')
+                const resposta = await servico.analisarImagem(promptImagem, imagemUnica)
+                setConversations(prev => prev.map(c => {
+                    if (c.id === convId) {
+                        return {
+                            ...c,
+                            messages: c.messages.map(m =>
+                                m.id === aiMsgId ? { ...m, content: resposta } : m
+                            )
                         }
-                        return c
-                    }))
-                },
-                composedPrompt,
-                messages
-            )
+                    }
+                    return c
+                }))
+            } else {
+                const { systemPrompt: composedPrompt } = await composePrompt({
+                    systemPrompt,
+                    userProfileContext: getProfileContext(),
+                    currentConversationId: convId,
+                    currentUserMessage: userMsg.content
+                })
 
-            // Process message for memory systems (async, non-blocking)
+                await servico.streamChat(
+                    userMsg.content,
+                    (chunk: string) => {
+                        streamedContent += chunk
+                        setConversations(prev => prev.map(c => {
+                            if (c.id === convId) {
+                                return {
+                                    ...c,
+                                    messages: c.messages.map(m =>
+                                        m.id === aiMsgId ? { ...m, content: streamedContent } : m
+                                    )
+                                }
+                            }
+                            return c
+                        }))
+                    },
+                    composedPrompt,
+                    messages
+                )
+            }
+
             processUserMessageForMemory(
                 userMsg.id,
                 convId,
@@ -943,7 +985,7 @@ const ChatWindow: React.FC = () => {
                 const errorMsg: ChatMessage = {
                     id: uuidv4(),
                     role: 'assistant',
-                    content: '⚠️ Erro ao processar mensagem. Verifique sua conexão ou chaves de API.',
+                    content: 'Falha ao processar mensagem. Verifique sua conexão ou chaves de API.',
                     timestamp: Date.now()
                 }
                 updateConversationMessages(convId, [...messages, userMsg, errorMsg])
@@ -1027,7 +1069,7 @@ const ChatWindow: React.FC = () => {
                 >
                     {/* Sidebar Header */}
                     <div
-                        className="h-14 flex items-center justify-between px-4 border-b border-white/5"
+                        className={`h-14 flex items-center px-4 border-b border-white/5 ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
                         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
                     >
                         {!sidebarCollapsed && (
@@ -1069,10 +1111,11 @@ const ChatWindow: React.FC = () => {
                             <SidebarItem
                                 key={conv.id}
                                 icon={MessageSquare}
-                                label={sidebarCollapsed ? '' : conv.title}
+                                label={conv.title}
+                                collapsed={sidebarCollapsed}
                                 active={conv.id === activeConversationId}
                                 onClick={() => setActiveConversationId(conv.id)}
-                                onDelete={!sidebarCollapsed ? () => deleteConversation(conv.id) : undefined}
+                                onDelete={() => deleteConversation(conv.id)}
                             />
                         ))}
                     </div>
@@ -1081,7 +1124,8 @@ const ChatWindow: React.FC = () => {
                     <div className="p-3 border-t border-white/5">
                         <SidebarItem
                             icon={Settings}
-                            label={sidebarCollapsed ? '' : 'Configurações'}
+                            label="Configurações"
+                            collapsed={sidebarCollapsed}
                             onClick={() => setShowSettings(true)}
                         />
                     </div>
@@ -1204,8 +1248,14 @@ const ChatWindow: React.FC = () => {
                                         className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
                                             ? 'bg-purple-600 text-white rounded-tr-sm shadow-md shadow-purple-900/30'
                                             : 'bg-neutral-800/60 border border-white/5 text-neutral-200 rounded-tl-sm'
+                                            } ${isGenerating && index === messages.length - 1 && msg.role === 'assistant'
+                                                ? "[&>*:last-child]:after:content-[''] [&>*:last-child]:after:inline-block [&>*:last-child]:after:w-2.5 [&>*:last-child]:after:h-2.5 [&>*:last-child]:after:bg-purple-400 [&>*:last-child]:after:rounded-full [&>*:last-child]:after:ml-1.5 [&>*:last-child]:after:align-baseline [&>*:last-child]:after:animate-pulse"
+                                                : ''
                                             }`}
                                     >
+                                        {(isGenerating && index === messages.length - 1 && msg.role === 'assistant' && !msg.content) && (
+                                            <div className="inline-block w-2.5 h-2.5 bg-purple-400 rounded-full animate-pulse" />
+                                        )}
                                         <ReactMarkdown
                                             components={{
                                                 p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -1277,27 +1327,30 @@ const ChatWindow: React.FC = () => {
                         ))
                     )}
 
-                    {/* Streaming Indicator */}
-                    {isGenerating && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex items-start"
-                        >
-                            <div className="w-8 h-8 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0 mr-3">
-                                <Sparkles size={14} className="text-purple-400" />
-                            </div>
-                            <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-neutral-800/60 border border-white/5">
-                                <StreamingIndicator />
-                            </div>
-                        </motion.div>
-                    )}
+
 
                     <div ref={messagesEndRef} />
                 </main>
 
                 {/* Input Area */}
                 <footer className="flex-none p-4 bg-neutral-900/50 border-t border-white/5">
+                    {pendingScreenshots.length > 0 && (
+                        <div className="mb-3 flex flex-wrap items-start gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                            {pendingScreenshots.map((shot, idx) => (
+                                <div key={`shot-chat-${idx}`} className="relative">
+                                    <img src={shot} alt={`Screenshot ${idx + 1}`} className="h-16 w-auto rounded-lg border border-white/10" />
+                                    <button
+                                        onClick={() => setPendingScreenshots((lista) => lista.filter((_, i) => i !== idx))}
+                                        className="absolute -top-2 -right-2 p-1 rounded-full bg-red-500 text-white text-[10px] shadow-lg"
+                                        title="Remover imagem"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </div>
+                            ))}
+                            <div className="text-xs text-neutral-400 min-w-[120px]">Imagens prontas para enviar.</div>
+                        </div>
+                    )}
                     <div className="flex items-center gap-3 bg-neutral-800/50 rounded-2xl border border-white/10 px-4 py-2 focus-within:border-purple-500/50 transition-colors">
                         <textarea
                             value={input}
@@ -1308,7 +1361,7 @@ const ChatWindow: React.FC = () => {
                                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
                             }}
                             onKeyDown={handleKeyDown}
-                            placeholder="Envie uma mensagem..."
+                            placeholder={pendingScreenshots.length > 0 ? 'Descreva as imagens ou deixe em branco para resumo...' : 'Envie uma mensagem...'}
                             disabled={isGenerating}
                             rows={1}
                             className="flex-1 bg-transparent border-none outline-none text-neutral-200 placeholder-neutral-500 text-sm resize-none overflow-y-auto leading-5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent"
@@ -1325,8 +1378,8 @@ const ChatWindow: React.FC = () => {
                         ) : (
                             <button
                                 onClick={handleSend}
-                                disabled={!input.trim()}
-                                className={`p-2.5 rounded-xl transition-all duration-200 ${input.trim()
+                                disabled={!input.trim() && pendingScreenshots.length === 0}
+                                className={`p-2.5 rounded-xl transition-all duration-200 ${(input.trim() || pendingScreenshots.length > 0)
                                     ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20 hover:scale-105'
                                     : 'bg-white/5 text-neutral-500 cursor-not-allowed'
                                     }`}

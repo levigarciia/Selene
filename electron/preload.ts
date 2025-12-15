@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onCheckHover: (callback: (x: number, y: number) => void) => {
         ipcRenderer.on('check-hover', (_event, x, y) => callback(x, y))
     },
+    setAreaSelectionMode: (enabled: boolean) => {
+        ipcRenderer.send('set-area-selection-mode', enabled)
+    },
     colarClipboardGlobal: () => {
         ipcRenderer.send('colar-clipboard-global')
     },
@@ -50,6 +53,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const listener = () => callback()
         ipcRenderer.on('atalho-screenshot', listener)
         return () => ipcRenderer.removeListener('atalho-screenshot', listener)
+    },
+    registrarAtalhoScreenshotArea: (atalho: string) => {
+        ipcRenderer.send('registrar-atalho-screenshot-area', atalho)
+    },
+    onAtalhoScreenshotArea: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('atalho-screenshot-area', listener)
+        return () => ipcRenderer.removeListener('atalho-screenshot-area', listener)
+    },
+    enviarScreenshotParaChat: (dataUrl: string) => ipcRenderer.invoke('enviar-screenshot-chat', dataUrl),
+    onScreenshotChat: (callback: (dataUrl: string) => void) => {
+        const listener = (_event: unknown, dataUrl: string) => callback(dataUrl)
+        ipcRenderer.on('chat-receber-screenshot', listener)
+        return () => ipcRenderer.removeListener('chat-receber-screenshot', listener)
     },
     openExpandedChat: (messages: any[]) => {
         ipcRenderer.send('open-expanded-chat', messages)

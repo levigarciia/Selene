@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useState } from 'react'
 import type React from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { KeyRound, Settings2, Eye, EyeOff, X, MousePointerClick, Camera, PenSquare, User, Briefcase, Heart, Brain, Trash2 } from 'lucide-react'
-import type { UserProfile, Memory } from '../hooks/useUserProfile'
+import type { UserProfile, Memory } from '../../hooks/useUserProfile'
 
 type ModalConfiguracoesProps = {
   aberto: boolean

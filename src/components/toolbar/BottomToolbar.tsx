@@ -1,5 +1,5 @@
 import { forwardRef, useMemo, useState, type RefObject } from 'react'
-import { Settings, Mic, MicOff, Sparkles, Send, ChevronUp, ChevronDown, Power, PenSquare, Camera, MessageSquare } from 'lucide-react'
+import { Settings, Mic, MicOff, Sparkles, Send, ChevronUp, ChevronDown, Power, PenSquare, Camera, MessageSquare, X } from 'lucide-react'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 
 interface BottomToolbarProps {
@@ -10,6 +10,8 @@ interface BottomToolbarProps {
     handleChat: () => void
     handleAnalyze: () => void
     aoPerguntarScreenshot: () => void
+    pendingScreenshots?: string[]
+    onDeleteScreenshot?: (index: number) => void
     aoAbrirAssistentes: () => void
     aoAbrirAssistenteGramatical: () => void
     aoAbrirConfiguracoes: () => void
@@ -17,6 +19,7 @@ interface BottomToolbarProps {
     aoFecharAplicacao: () => void
     menuDropdownRef?: RefObject<HTMLDivElement | null>
     initialCollapsed?: boolean
+    forceCollapse?: boolean
 }
 
 const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
@@ -27,15 +30,26 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     handleChat,
     handleAnalyze,
     aoPerguntarScreenshot,
+    pendingScreenshots,
+    onDeleteScreenshot,
     aoAbrirAssistentes,
     aoAbrirAssistenteGramatical,
     aoAbrirChatWindow,
     aoAbrirConfiguracoes,
     aoFecharAplicacao,
     menuDropdownRef,
-    initialCollapsed = false
+    initialCollapsed = false,
+    forceCollapse
 }, ref) => {
     const [isExpanded, setIsExpanded] = useState(!initialCollapsed)
+
+    // Sync with forceCollapse
+    useMemo(() => {
+        if (forceCollapse !== undefined) {
+             setIsExpanded(!forceCollapse)
+        }
+    }, [forceCollapse])
+
     const [menuAberto, setMenuAberto] = useState(false)
     const dragControls = useDragControls()
     const barrasWave = useMemo(() => Array.from({ length: 20 }, (_, index) => ({
@@ -146,23 +160,47 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                                         </div>
                                     ) : (
                                         <>
-                                            <input
-                                                type="text"
-                                                value={transcription}
-                                                onPointerDown={(e) => e.stopPropagation()}
-                                                onChange={(e) => setTranscription(e.target.value)}
-                                                placeholder="Digite ou use o microfone para transcrever..."
-                                                className="w-full bg-transparent border-none outline-none text-sm text-white px-4 py-3 placeholder:text-white/30"
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                                        e.preventDefault()
-                                                        handleChat()
-                                                    }
-                                                }}
-                                            />
+                                            <div className="flex flex-col w-full">
+                                                {pendingScreenshots && pendingScreenshots.length > 0 && (
+                                                    <div className="px-4 pt-3 pb-1 flex items-start gap-2 flex-wrap">
+                                                        {pendingScreenshots.map((shot, idx) => (
+                                                            <div key={`shot-${idx}`} className="relative group">
+                                                                <img 
+                                                                    src={shot} 
+                                                                    alt={`Screenshot Preview ${idx + 1}`} 
+                                                                    className="h-16 w-auto rounded-lg border border-white/20 shadow-sm"
+                                                                />
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        onDeleteScreenshot?.(idx)
+                                                                    }}
+                                                                    className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-red-500 text-white shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                                                >
+                                                                    <X size={12} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <input
+                                                    type="text"
+                                                    value={transcription}
+                                                    onPointerDown={(e) => e.stopPropagation()}
+                                                    onChange={(e) => setTranscription(e.target.value)}
+                                                    placeholder={pendingScreenshots && pendingScreenshots.length > 0 ? "Perguntar sobre as imagens..." : "Digite ou use o microfone para transcrever..."}
+                                                    className="w-full bg-transparent border-none outline-none text-sm text-white px-4 py-3 placeholder:text-white/30"
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                                            e.preventDefault()
+                                                            handleChat()
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
 
                                             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                                                {transcription.trim() && (
+                                                {(transcription.trim() || (pendingScreenshots && pendingScreenshots.length > 0)) && (
                                                     <>
                                                         <button onClick={handleChat} className="p-1.5 bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg transition-colors">
                                                             <Send size={14} />
