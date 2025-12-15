@@ -1,0 +1,274 @@
+# GitHub Actions Workflow for Selene
+# Builds and releases the application on tag push (v*)
+#
+# This workflow:
+# 1. Triggers on push of tags matching 'v*' (e.g., v1.0.0, v2.1.0-beta)
+# 2. Builds the application on Windows and macOS
+# 3. Creates installers for each platform
+# 4. Publishes artifacts to GitHub Releases
+#
+# Required Secrets (for code signing - optional for initial setup):
+# - APPLE_ID: Apple ID for notarization
+# - APPLE_ID_PASSWORD: App-specific password for Apple ID
+# - APPLE_TEAM_ID: Apple Developer Team ID
+# - CSC_LINK: Base64-encoded .p12 certificate for macOS code signing
+# - CSC_KEY_PASSWORD: Password for the .p12 certificate
+# - WINDOWS_CSC_LINK: Base64-encoded .pfx certificate for Windows code signing
+# - WINDOWS_CSC_KEY_PASSWORD: Password for the .pfx certificate
+
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Allow manual trigger for testing
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to GitHub Releases'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+# Permissions needed for creating releases
+permissions:
+  contents: write
+
+jobs:
+  # Validate the tag format
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate tag format
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+            if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+              echo "❌ Invalid tag format: $TAG"
+              echo "Expected format: vX.Y.Z or vX.Y.Z-suffix (e.g., v1.0.0, v2.1.0-beta)"
+              exit 1
+            fi
+            VERSION="${TAG#v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "✅ Valid tag: $TAG (version: $VERSION)"
+          else
+            # Manual trigger - get version from package.json
+            VERSION=$(node -p "require('./package.json').version")
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "📦 Using package.json version: $VERSION"
+          fi
+
+      - name: Verify package.json version matches tag
+        if: github.ref_type == 'tag'
+        run: |
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [[ "$TAG_VERSION" != "$PKG_VERSION" ]]; then
+            echo "⚠️ Warning: Tag version ($TAG_VERSION) differs from package.json version ($PKG_VERSION)"
+            echo "Consider updating package.json before tagging."
+          fi
+
+  # Build on Windows
+  build-windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules for Electron
+        run: npx electron-rebuild
+
+      - name: Build Vite and Electron
+        run: npm run build
+
+      - name: Build Windows installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Windows code signing (optional - uncomment when certificate is available)
+          # CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          if ("${{ github.ref_type }}" -eq "tag" -or "${{ inputs.publish }}" -eq "true") {
+            npx electron-builder --win --publish always
+          } else {
+            npx electron-builder --win --publish never
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            release/*.exe
+            release/*.yml
+            release/*.yaml
+          retention-days: 5
+
+  # Build on macOS
+  build-macos:
+    needs: validate
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules for Electron
+        run: npx electron-rebuild
+
+      - name: Build Vite and Electron
+        run: npm run build
+
+      # Optional: Import signing certificate
+      # Uncomment this section when you have code signing set up
+      # - name: Import Code Signing Certificate
+      #   if: env.CSC_LINK != ''
+      #   env:
+      #     CSC_LINK: ${{ secrets.CSC_LINK }}
+      #     CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      #   run: |
+      #     CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+      #     echo $CSC_LINK | base64 --decode > $CERTIFICATE_PATH
+      #     security create-keychain -p "" build.keychain
+      #     security default-keychain -s build.keychain
+      #     security unlock-keychain -p "" build.keychain
+      #     security import $CERTIFICATE_PATH -k build.keychain -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+      #     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+
+      - name: Build macOS installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code signing and notarization (optional - uncomment when available)
+          # CSC_LINK: ${{ secrets.CSC_LINK }}
+          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" || "${{ inputs.publish }}" == "true" ]]; then
+            npx electron-builder --mac --publish always
+          else
+            npx electron-builder --mac --publish never
+          fi
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.yml
+            release/*.yaml
+            release/*.blockmap
+          retention-days: 5
+
+  # Create GitHub Release (only on tag push)
+  create-release:
+    needs: [validate, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag' || inputs.publish == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: release/windows
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: release/macos
+
+      - name: List artifacts
+        run: |
+          echo "📦 Windows artifacts:"
+          ls -la release/windows/ || echo "No Windows artifacts"
+          echo ""
+          echo "📦 macOS artifacts:"
+          ls -la release/macos/ || echo "No macOS artifacts"
+
+      - name: Generate Release Notes
+        id: release-notes
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          cat << EOF > release_notes.md
+          ## Selene v$VERSION
+          
+          ### 📥 Downloads
+          
+          | Platform | Download |
+          |----------|----------|
+          | Windows (64-bit) | \`Selene-$VERSION-win-x64.exe\` |
+          | macOS (Intel) | \`Selene-$VERSION-mac-x64.dmg\` |
+          | macOS (Apple Silicon) | \`Selene-$VERSION-mac-arm64.dmg\` |
+          
+          ### 🔄 Auto-Update
+          
+          If you have auto-update enabled, the app will automatically download and install this version.
+          
+          ### 📝 What's Changed
+          
+          See the [commit history](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}) for detailed changes.
+          
+          ---
+          
+          > **Note**: The macOS version is not notarized. You may need to right-click and select "Open" on first launch, or go to System Preferences > Security & Privacy to allow the app.
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Selene v${{ needs.validate.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            release/windows/*
+            release/macos/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Notify on failure
+  notify-failure:
+    needs: [validate, build-windows, build-macos, create-release]
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: Notify build failure
+        run: |
+          echo "❌ Build or release failed!"
+          echo "Please check the workflow logs for details."
+          exit 1

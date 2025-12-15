@@ -1,0 +1,187 @@
+{
+  "name": "selene-assistant",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Selene - AI Assistant Desktop Overlay",
+  "author": {
+    "name": "Levi Garcia",
+    "email": "levigarcia878@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/levigarciia/Selene.git"
+  },
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:react\" \"npm run watch:tsc\" \"npm run watch:esbuild\" \"npm run dev:electron\"",
+    "dev:react": "vite",
+    "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "watch:tsc": "tsc -p tsconfig.electron.json -w",
+    "watch:esbuild": "npx esbuild electron/preload.ts --bundle --platform=node --outfile=dist-electron/preload.cjs --external:electron --watch",
+    "build:electron": "tsc -p tsconfig.electron.json && npx esbuild electron/preload.ts --bundle --platform=node --outfile=dist-electron/preload.cjs --external:electron",
+    "build": "tsc && vite build && npm run build:electron",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "release": "npm run build && electron-builder --publish always"
+  },
+  "build": {
+    "appId": "com.selene.assistant",
+    "productName": "Selene",
+    "directories": {
+      "output": "release",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "!node_modules/**/*",
+      "node_modules/electron-updater/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "public",
+        "to": "public",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "levigarciia",
+      "repo": "Selene",
+      "releaseType": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/selene.ico",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/selene.ico",
+      "uninstallerIcon": "public/selene.ico",
+      "installerHeaderIcon": "public/selene.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Selene"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/icon.png",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build-resources/entitlements.mac.plist",
+      "entitlementsInherit": "build-resources/entitlements.mac.plist"
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.png",
+      "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+      "category": "Utility"
+    }
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@tailwindcss/vite": "^4.1.18",
+    "@types/uuid": "^10.0.0",
+    "clsx": "^2.1.1",
+    "electron-selected-text": "^1.1.2",
+    "electron-updater": "^6.6.2",
+    "framer-motion": "^12.23.26",
+    "lucide-react": "^0.561.0",
+    "node-get-selected-text": "github:yetone/node-get-selected-text",
+    "openai": "^6.10.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "robotjs": "^0.6.0",
+    "tailwind-merge": "^3.4.0",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.2",
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@types/semver": "^7.7.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "autoprefixer": "^10.4.22",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.6",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.4",
+    "vite": "^7.2.4",
+    "wait-on": "^9.0.3"
+  },
+  "optionalDependencies": {
+    "node-get-selected-text-win32-x64-msvc": "^0.1.9"
+  }
+}

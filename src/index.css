@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+body {
+  @apply bg-transparent overflow-hidden;
+  /* Basic reset for transparent window */
+  margin: 0;
+  padding: 0;
+}

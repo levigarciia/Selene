@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow the app to be run on macOS -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+    
+    <!-- Required for Electron apps to work correctly -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    
+    <!-- Required for Electron apps -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    
+    <!-- Required for electron-updater auto-updates -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    
+    <!-- Network access for API calls and updates -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    
+    <!-- Accessibility features for global shortcuts -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+    
+    <!-- Screen capture for screenshot feature -->
+    <key>com.apple.security.screen-capture.allow</key>
+    <true/>
+</dict>
+</plist>
