@@ -45,13 +45,13 @@ Suporte nativo para múltiplos provedores de IA:
 
 Selecione qualquer texto em qualquer aplicativo, pressione `Ctrl+Alt+X` e a Selene irá corrigir, resumir ou reescrever o texto instantaneamente em uma janela dedicada.
 
-<img src="public/corretorgramatical.png" alt="Assistente Gramatical" width="600" />
+<img src="public/corretorgramatical.png" alt="Assistente Gramatical" />
 
 ### 🤖 Personas Personalizáveis
 
 Crie "Agentes" com prompts de sistema específicos (ex: "Programador Senior", "Tradutor", "Revisor") e alterne entre eles rapidamente.
 
-<img src="public/assistentes.png" alt="Assistentes" width="600" />
+<img src="public/assistentes.png" alt="Assistentes" />
 
 ### 🧠 Sistema de Memória Inteligente
 
@@ -307,8 +307,6 @@ Selene/
 
 ## 📄 Licença
 
-> **⚠️ Importante**: Selene é **source-available** (código-fonte disponível), mas **não é open source** segundo a definição da [Open Source Initiative (OSI)](https://opensource.org/osd).
-
 ### ✅ O que você PODE fazer:
 
 - **Uso pessoal**: Executar Selene em seu computador para uso próprio
@@ -323,17 +321,7 @@ Selene/
 - **Distribuição comercial**: Vender, licenciar ou sublicenciar Selene
 - **Patentes**: Registrar patentes baseadas no código ou conceitos do Selene
 
-### 🔐 Direitos do Autor
-
-O autor original (Levi Garcia) mantém todos os direitos sobre o projeto, incluindo o direito de:
-
-- Usar comercialmente
-- Criar versões comerciais
-- Licenciar para terceiros sob termos diferentes
-
-### 💼 Licenciamento Comercial
-
-Se você deseja usar Selene comercialmente, entre em contato: **levigarcia878@gmail.com**
+Se você deseja usar Selene comercialmente, entre em contato: **contato@kitelabs.com**
 
 > Versões comerciais com funcionalidades adicionais podem ser disponibilizadas no futuro.
 
@@ -345,5 +333,5 @@ Veja o arquivo [LICENSE.md](LICENSE.md) para os termos completos.
 
 **Levi Garcia**
 
-- Email: levigarcia878@gmail.com
+- Email: contato@kitelabs.com
 - GitHub: [@levigarciia](https://github.com/levigarciia)
