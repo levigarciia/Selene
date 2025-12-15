@@ -38,13 +38,11 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*",
-      "!node_modules/**/*",
-      "node_modules/robotjs/**/*",
-      "node_modules/electron-updater/**/*"
+      "dist-electron/**/*"
     ],
     "asarUnpack": [
       "node_modules/robotjs/**/*",
+      "node_modules/**/*.node",
       "**/*.node"
     ],
     "extraResources": [
