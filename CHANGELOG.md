@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] - 2025-12-29
+
+### Corrigido
+
+- Busca web via IPC no processo main para evitar bloqueio de CORS no renderer
+- Tags `[[fonte: ...]]` agora renderizam pills inline com preview no hover no ChatWindow
+
+---
+
 ## [0.2.0] - 2025-12-29
 
 ### 🎉 Highlights
