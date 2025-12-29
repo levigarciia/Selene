@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { MEMORY_AUTOPILOT_CONFIG } from '../config/memoryConfig'
+import { areSimilar } from '../services/memory/MemoryExtractor'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface UserProfile {
@@ -11,6 +13,41 @@ export interface Memory {
     id: string
     content: string
     createdAt: number
+}
+
+
+export interface FiltroContextoPerfil {
+    consulta?: string
+    permitirContextoPessoal?: boolean
+}
+
+function normalizarTextoParaRelevancia(texto: string): string {
+    return texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function filtrarMemoriasPorRelevancia(memorias: Memory[], consulta?: string): Memory[] {
+    if (!consulta) {
+        return memorias
+    }
+
+    const consultaNormalizada = normalizarTextoParaRelevancia(consulta)
+    if (!consultaNormalizada) {
+        return memorias
+    }
+
+    return memorias.filter(memoria => {
+        return areSimilar(
+            consultaNormalizada,
+            memoria.content,
+            MEMORY_AUTOPILOT_CONFIG.RELEVANCIA_MINIMA_PARA_PROMPT
+        )
+    })
 }
 
 const PROFILE_KEY = 'selene_user_profile'
@@ -91,24 +128,32 @@ export function useUserProfile() {
     }, [])
 
     // Build enhanced system prompt context
-    const getProfileContext = useCallback(() => {
+    const getProfileContext = useCallback((filtro: FiltroContextoPerfil = {}) => {
+        const permitirContextoPessoal = filtro.permitirContextoPessoal ?? true
+        const consulta = filtro.consulta?.trim() || ''
+
+        const memoriasFiltradas = permitirContextoPessoal
+            ? filtrarMemoriasPorRelevancia(memories, consulta)
+            : []
+
+        const incluirSobreMim = Boolean(permitirContextoPessoal && profile.aboutMe)
         let context = ''
 
-        if (profile.name || profile.occupation || profile.aboutMe || memories.length > 0) {
-            context += '\n\n--- Contexto do Usuário ---\n'
+        if (profile.name || profile.occupation || incluirSobreMim || memoriasFiltradas.length > 0) {
+            context += '\n\n--- Contexto do Usu\u00e1rio ---\n'
 
             if (profile.name) {
-                context += `O usuário quer ser chamado de: ${profile.name}\n`
+                context += `O usu\u00e1rio quer ser chamado de: ${profile.name}\n`
             }
             if (profile.occupation) {
-                context += `Ocupação: ${profile.occupation}\n`
+                context += `Ocupa\u00e7\u00e3o: ${profile.occupation}\n`
             }
-            if (profile.aboutMe) {
-                context += `Sobre o usuário: ${profile.aboutMe}\n`
+            if (incluirSobreMim) {
+                context += `Sobre o usu\u00e1rio: ${profile.aboutMe}\n`
             }
-            if (memories.length > 0) {
-                context += `\nMemórias importantes:\n`
-                memories.forEach(m => {
+            if (memoriasFiltradas.length > 0) {
+                context += '\nMem\u00f3rias importantes:\n'
+                memoriasFiltradas.forEach(m => {
                     context += `- ${m.content}\n`
                 })
             }
@@ -116,6 +161,7 @@ export function useUserProfile() {
 
         return context
     }, [profile, memories])
+
 
     return {
         profile,

@@ -23,14 +23,16 @@ Funciona como um overlay transparente e interativo que flutua sobre suas janelas
 
 ### 🖱️ Overlay Transparente Inteligente
 
-A interface flutua sobre o Windows. Widgets ficam interativos automaticamente quando você passa o mouse, enquanto o resto da tela permanece "clicável" (click-through).
+A interface flutua sobre o Windows/Linux. Widgets ficam interativos automaticamente quando você passa o mouse, enquanto o resto da tela permanece "clicável" (click-through).
 
 ### 🗣️ Comandos de Voz
 
 Transcrição de áudio em tempo real usando:
 
-- **Whisper** (OpenAI)
+- **Whisper Local** (whisper.cpp - modelos offline)
+- **Whisper API** (OpenAI)
 - **Gemini Flash** (Google)
+- **Groq** (transcrição rápida)
 
 ### 🧠 Multi-Modelo
 
@@ -78,13 +80,17 @@ Atualizações automáticas silenciosas quando disponíveis.
 
 Baixe a versão mais recente na [página de Releases](https://github.com/levigarciia/Selene/releases):
 
-| Plataforma            | Download                     |
-| --------------------- | ---------------------------- |
-| Windows (64-bit)      | `Selene-x.x.x-win-x64.exe`   |
-| macOS (Intel)         | `Selene-x.x.x-mac-x64.dmg`   |
-| macOS (Apple Silicon) | `Selene-x.x.x-mac-arm64.dmg` |
+| Plataforma            | Download                          |
+| --------------------- | --------------------------------- |
+| Windows (64-bit)      | `Selene-x.x.x-win-x64.exe`        |
+| macOS (Intel)         | `Selene-x.x.x-mac-x64.dmg`        |
+| macOS (Apple Silicon) | `Selene-x.x.x-mac-arm64.dmg`      |
+| Linux (AppImage)      | `Selene-x.x.x-linux-x64.AppImage` |
+| Linux (Deb)           | `Selene-x.x.x-linux-x64.deb`      |
 
 > **Nota macOS**: A versão para Mac pode não estar notarizada. Clique com botão direito > "Abrir" na primeira execução, ou vá em Preferências do Sistema > Segurança e Privacidade para permitir.
+
+> **Nota Linux**: Para o AppImage, você pode precisar dar permissão de execução: `chmod +x Selene-*.AppImage`
 
 ---
 
@@ -92,17 +98,41 @@ Baixe a versão mais recente na [página de Releases](https://github.com/levigar
 
 Ao abrir a Selene, clique no ícone de **Engrenagem** na barra de ferramentas ou no ChatWindow para acessar as configurações:
 
-- **Chaves de API**: Insira suas chaves da OpenAI, Google Gemini ou OpenRouter.
-- **Provedor Ativo**: Selecione qual provedor de IA usar.
-- **Modelos Locais**: Configure a URL base e o ID do modelo para conectar com LM Studio.
-- **Atalhos**: Configure o atalho global para o Assistente Gramatical (Padrão: `Ctrl+Alt+X`) e Screenshot (Padrão: `Ctrl+Alt+S`).
-- **Perfil do Usuário**: Nome, ocupação e informações "sobre mim" para personalização.
-- **Memórias**: Adicione memórias manuais para contextualizar a IA.
-- **Atualizações Automáticas**: Habilite ou desabilite no painel "Avançado".
+### Abas de Configuração
+
+| Aba             | Descrição                                                                      |
+| --------------- | ------------------------------------------------------------------------------ |
+| **Perfil**      | Nome, ocupação e informações sobre você                                        |
+| **Memórias**    | Adicione memórias manuais e visualize memórias automáticas                     |
+| **Chaves API**  | Insira suas chaves da OpenAI, Google Gemini ou OpenRouter                      |
+| **Modelos**     | Configure modelos para OpenRouter e LM Studio                                  |
+| **Atalhos**     | Configure atalhos globais (Gramatical: `Ctrl+Alt+X`, Screenshot: `Ctrl+Alt+S`) |
+| **Transcrição** | Configure o provedor de transcrição de voz (Nuvem ou Local)                    |
+| **Avançado**    | Cross-Chat Context, Memory Autopilot e Auto-Update                             |
 
 > **Nota**: As configurações são salvas localmente no seu computador.
 
 ![Configurações](public/configs.png)
+
+---
+
+## 🎙️ Transcrição de Voz
+
+Selene oferece múltiplas opções de transcrição:
+
+### Nuvem (API)
+
+- **OpenAI Whisper**: Alta qualidade, requer API key
+- **Google Gemini**: Integrado com sua chave Gemini
+- **Groq**: Transcrição rápida e gratuita
+
+### Local (Offline)
+
+- **Whisper Local**: Usa whisper.cpp para transcrição offline
+- **Modelos disponíveis**: tiny, base, small, medium, large
+- **Streaming em tempo real**: Transcreva enquanto fala
+
+Para usar o Whisper Local, configure o caminho do binário em Configurações > Transcrição.
 
 ---
 
@@ -124,10 +154,11 @@ Selene suporta atualizações automáticas silenciosas:
 Quer contribuir com o projeto? Seja bem-vindo! Consulte:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Guia completo para desenvolvedores
+- [CHANGELOG.md](CHANGELOG.md) - Histórico de mudanças
 
 ---
 
-## � Licença
+## 📜 Licença
 
 > **⚠️ Importante**: Selene é **source-available** (código-fonte disponível), mas **não é open source** segundo a definição da [Open Source Initiative (OSI)](https://opensource.org/osd).
 

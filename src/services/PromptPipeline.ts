@@ -29,6 +29,21 @@ export interface PromptContext {
 
     /** Mensagem do usuário atual (query para busca semântica) */
     currentUserMessage: string
+
+    /** Preferir evitar contexto pessoal quando possivel */
+    preferirSemContextoPessoal?: boolean
+
+    /** Permitir contexto pessoal mesmo quando nao recomendado */
+    permitirContextoPessoal?: boolean
+
+    /** Permitir contexto cross-chat */
+    permitirCrossChat?: boolean
+
+    /** Permitir memorias automaticas */
+    permitirMemoriasAuto?: boolean
+
+    /** Permitir contexto do perfil do usuario */
+    permitirMemoriaPerfil?: boolean
 }
 
 export interface ComposedPrompt {
@@ -59,6 +74,54 @@ function estimateTokens(text: string): number {
     return Math.ceil(text.length / 4)
 }
 
+function normalizarTextoParaAnalise(texto: string): string {
+    return texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function contemIndicadoresPessoais(textoNormalizado: string): boolean {
+    const indicadores = [
+        /meu\s+(projeto|app|produto|sistema|negocio|codigo|site|jogo|bot|trabalho)\b/,
+        /minha\s+(stack|empresa|equipe|api|marca|startup|aplicacao|carreira|rotina)\b/,
+        /nosso\s+(projeto|app|produto|sistema|negocio|time|equipe)\b/,
+        /minhas?\s+preferencias?\b/,
+        /meus?\s+objetivos?\b/,
+        /pra\s+mim|para\s+mim|comigo/,
+        /no\s+outro\s+chat|como\s+falamos|como\s+comentei|lembra\b/
+    ]
+
+    return indicadores.some(padrao => padrao.test(textoNormalizado))
+}
+
+export function deveInjetarContextoPessoal(
+    mensagem: string,
+    preferirSemContextoPessoal: boolean = false
+): boolean {
+    const textoNormalizado = normalizarTextoParaAnalise(mensagem)
+    if (!textoNormalizado) {
+        return false
+    }
+
+    if (contemIndicadoresPessoais(textoNormalizado)) {
+        return true
+    }
+
+    if (preferirSemContextoPessoal) {
+        return false
+    }
+
+    if (textoNormalizado.length < 80) {
+        return false
+    }
+
+    return true
+}
+
 // ============================================================================
 // PIPELINE PRINCIPAL
 // ============================================================================
@@ -78,22 +141,28 @@ function estimateTokens(text: string): number {
  */
 export async function composePrompt(context: PromptContext): Promise<ComposedPrompt> {
     const startTime = Date.now()
+    const permitirContextoPessoal = context.permitirContextoPessoal ?? deveInjetarContextoPessoal(
+        context.currentUserMessage,
+        context.preferirSemContextoPessoal ?? false
+    )
+    const permitirMemoriaPerfil = context.permitirMemoriaPerfil ?? true
+    const permitirMemoriasAuto = context.permitirMemoriasAuto ?? true
+    const permitirCrossChat = context.permitirCrossChat ?? true
     let additionalTokens = 0
     let hasCrossChatContext = false
     let hasAutoMemories = false
-
     // 1. Iniciar com system prompt base
     let systemPrompt = context.systemPrompt
 
     // 2. Adicionar contexto do perfil do usuário (memória persistente existente)
-    if (context.userProfileContext) {
+    if (context.userProfileContext && permitirMemoriaPerfil) {
         systemPrompt += context.userProfileContext
         additionalTokens += estimateTokens(context.userProfileContext)
     }
 
     // 3. Adicionar memórias automáticas (se habilitado)
-    if (FEATURE_FLAGS.MEMORY_AUTOPILOT_ENABLED) {
-        const autoMemoriesContext = getAutoMemoriesForPrompt()
+    if (FEATURE_FLAGS.MEMORY_AUTOPILOT_ENABLED && permitirMemoriasAuto && permitirContextoPessoal) {
+        const autoMemoriesContext = getAutoMemoriesForPrompt(context.currentUserMessage)
         if (autoMemoriesContext) {
             systemPrompt += autoMemoriesContext
             additionalTokens += estimateTokens(autoMemoriesContext)
@@ -104,7 +173,7 @@ export async function composePrompt(context: PromptContext): Promise<ComposedPro
     // 4. [Histórico do chat - gerenciado externamente pelo ChatWindow]
 
     // 5. Adicionar contexto cross-chat (se habilitado)
-    if (FEATURE_FLAGS.CROSS_CHAT_CONTEXT_ENABLED) {
+    if (FEATURE_FLAGS.CROSS_CHAT_CONTEXT_ENABLED && permitirCrossChat && permitirContextoPessoal) {
         try {
             const crossChatContext = await getContextForPrompt(
                 context.currentUserMessage,
@@ -148,15 +217,19 @@ export async function composePrompt(context: PromptContext): Promise<ComposedPro
  * Útil quando não se quer esperar pela busca semântica
  */
 export function composePromptSync(context: Omit<PromptContext, 'currentUserMessage'>): string {
+    const permitirMemoriaPerfil = context.permitirMemoriaPerfil ?? true
+    const permitirMemoriasAuto = context.permitirMemoriasAuto ?? true
+    const permitirContextoPessoal = context.permitirContextoPessoal ?? true
+
     let systemPrompt = context.systemPrompt
 
     // Adicionar contexto do perfil
-    if (context.userProfileContext) {
+    if (context.userProfileContext && permitirMemoriaPerfil) {
         systemPrompt += context.userProfileContext
     }
 
     // Adicionar memórias automáticas
-    if (FEATURE_FLAGS.MEMORY_AUTOPILOT_ENABLED) {
+    if (FEATURE_FLAGS.MEMORY_AUTOPILOT_ENABLED && permitirMemoriasAuto && permitirContextoPessoal) {
         const autoMemoriesContext = getAutoMemoriesForPrompt()
         if (autoMemoriesContext) {
             systemPrompt += autoMemoriesContext

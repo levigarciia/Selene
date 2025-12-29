@@ -11,12 +11,9 @@ import {
 } from './components'
 import { ASSISTENTES_PADRAO } from './utils/assistentesPadrao'
 import type { AssistenteConfig } from './utils/assistentesPadrao'
-import { useAI } from './hooks/useAI'
-import { useAudio } from './hooks/useAudio'
-import { useShortcuts } from './hooks/useShortcuts'
+import { useAppConfig } from './hooks/useAppConfig'
 import { useWindowManagement } from './hooks/useWindowManagement'
 import { useAutoDismiss } from './hooks/useAutoDismiss'
-import { useUserProfile } from './hooks/useUserProfile'
 import type { ChatMessage } from './types/chat'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -61,7 +58,64 @@ function App() {
     () => localStorage.getItem('selene_assistente_ativo') || ASSISTENTES_PADRAO[0].id
   )
 
+  const exibirToast = useCallback((mensagem: string, tipo: 'info' | 'erro' = 'info') => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current)
+    }
+    setToast({ mensagem, tipo })
+    toastTimeoutRef.current = window.setTimeout(() => setToast(null), 2400)
+  }, [])
+
+  // State for Area Screenshot
+  const [isAreaMode, setIsAreaMode] = useState(false)
+  const perguntasPendentesRef = useRef<boolean>(false)
+
+  const perguntarComScreenshot = useCallback(
+    async () => {
+      console.log('[screenshot] iniciar captura')
+      
+      if (!window.electronAPI?.capturarScreenshot) {
+        exibirToast('Captura de tela indisponivel no preload.', 'erro')
+        return
+      }
+
+      exibirToast('Capturando screenshot...')
+      setToolbarCollapsed(false) 
+
+      try {
+        const dataUrl = await window.electronAPI.capturarScreenshot()
+        if (!dataUrl) {
+          exibirToast('Nao consegui capturar a tela.', 'erro')
+          return
+        }
+        const entregue = await tentarEnviarParaChat(dataUrl)
+        if (!entregue) {
+          setPendingScreenshots((lista) => [...lista, dataUrl])
+          exibirToast('Screenshot capturado! Digite sua pergunta.', 'info')
+          setToolbarCollapsed(false)
+        } else {
+          setToolbarCollapsed(true)
+        }
+      } catch (error: any) {
+        console.error('Erro ao capturar screenshot', error)
+        exibirToast('Falha ao capturar screenshot.', 'erro')
+      }
+    },
+    [exibirToast]
+  )
+
+  // ============================================
+  // Centralized Config Hook
+  // ============================================
+  
+  const appConfig = useAppConfig({
+    onTriggerGrammar: () => {},
+    onTriggerScreenshot: () => perguntarComScreenshot(),
+    exibirToast: (msg) => exibirToast(msg),
+  })
+  
   const {
+    // API Keys & Provider
     apiKey, setApiKey,
     geminiKey, setGeminiKey,
     openRouterKey, setOpenRouterKey,
@@ -70,26 +124,24 @@ function App() {
     baseUrlLmStudio, setBaseUrlLmStudio,
     provedorAtivo, setProvedorAtivo,
     systemPrompt, setSystemPrompt,
-    aiService,
-    criarOuObterServico
-  } = useAI()
-
-  const {
-    profile, setProfile, memories,
-    addMemory, removeMemory, getProfileContext
-  } = useUserProfile()
-
-  const {
-    isRecording, transcription, setTranscription, toggleRecording
-  } = useAudio(aiService)
-
-  const exibirToast = useCallback((mensagem: string, tipo: 'info' | 'erro' = 'info') => {
-    if (toastTimeoutRef.current) {
-      window.clearTimeout(toastTimeoutRef.current)
-    }
-    setToast({ mensagem, tipo })
-    toastTimeoutRef.current = window.setTimeout(() => setToast(null), 2400)
-  }, [])
+    criarOuObterServico,
+    
+    // Shortcuts
+    atalhoGramatical, setAtalhoGramatical,
+    atalhoScreenshot, setAtalhoScreenshot,
+    
+    // Screenshots
+    pendingScreenshots, setPendingScreenshots,
+    
+    // Profile & Memories
+    profile, setProfile,
+    memories, addMemory, removeMemory,
+    getProfileContext,
+    
+    // Voice Input
+    voiceInput,
+    isRecording, transcription, setTranscription, toggleRecording,
+  } = appConfig
 
   const adicionarMensagem = (role: 'user' | 'assistant', content: string) => {
     setMessages(prev => [...prev, {
@@ -99,12 +151,6 @@ function App() {
       timestamp: Date.now()
     }])
   }
-
-  const [pendingScreenshots, setPendingScreenshots] = useState<string[]>([])
-  const perguntasPendentesRef = useRef<boolean>(false)
-
-  // State for Area Screenshot
-  const [isAreaMode, setIsAreaMode] = useState(false)
 
   const tentarEnviarParaChat = useCallback(async (dataUrl: string) => {
     try {
@@ -134,111 +180,68 @@ function App() {
     exibirToast('Capturando e recortando...')
     
     try {
-        // 1. Capture Full Screen
-        const fullDataUrl = await window.electronAPI?.capturarScreenshot?.()
-        if (!fullDataUrl) {
-            exibirToast('Falha na captura base.', 'erro')
-            return
-        }
+      const fullDataUrl = await window.electronAPI?.capturarScreenshot?.()
+      if (!fullDataUrl) {
+        exibirToast('Falha na captura base.', 'erro')
+        return
+      }
 
-        // 2. Crop using Canvas
-        const img = new Image()
-        img.onload = async () => {
-            const canvas = document.createElement('canvas')
-            
-            const scaleX = img.width / window.innerWidth
-            const scaleY = img.height / window.innerHeight
-            
-            canvas.width = rect.width * scaleX
-            canvas.height = rect.height * scaleY
-            
-            const ctx = canvas.getContext('2d')
-            if (!ctx) return
-            
-            ctx.drawImage(
-                img,
-                rect.x * scaleX, rect.y * scaleY, rect.width * scaleX, rect.height * scaleY, // Source
-                0, 0, canvas.width, canvas.height // Dest
-            )
-            
-            const croppedUrl = canvas.toDataURL('image/png')
-            const entregue = await tentarEnviarParaChat(croppedUrl)
-            if (!entregue) {
-              setPendingScreenshots((lista) => [...lista, croppedUrl])
-              exibirToast('Area capturada!', 'info')
-              setToolbarCollapsed(false)
-            } else {
-              // Se já foi direto para o chat expandido, mantém a toolbar recolhida
-              setToolbarCollapsed(true)
-            }
+      const img = new Image()
+      img.onload = async () => {
+        const canvas = document.createElement('canvas')
+        
+        const scaleX = img.width / window.innerWidth
+        const scaleY = img.height / window.innerHeight
+        
+        canvas.width = rect.width * scaleX
+        canvas.height = rect.height * scaleY
+        
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        
+        ctx.drawImage(
+          img,
+          rect.x * scaleX, rect.y * scaleY, rect.width * scaleX, rect.height * scaleY,
+          0, 0, canvas.width, canvas.height
+        )
+        
+        const croppedUrl = canvas.toDataURL('image/png')
+        const entregue = await tentarEnviarParaChat(croppedUrl)
+        if (!entregue) {
+          setPendingScreenshots((lista) => [...lista, croppedUrl])
+          exibirToast('Area capturada!', 'info')
+          setToolbarCollapsed(false)
+        } else {
+          setToolbarCollapsed(true)
         }
-        img.src = fullDataUrl
+      }
+      img.src = fullDataUrl
 
     } catch (e: any) {
-        console.error('Erro no crop', e)
-        exibirToast('Erro ao processar área.', 'erro')
+      console.error('Erro no crop', e)
+      exibirToast('Erro ao processar área.', 'erro')
     } finally {
-        // Reforça a saída do modo área mesmo em caso de erro
-        finalizarSelecaoArea()
+      finalizarSelecaoArea()
     }
   }
-
 
   // Effect for Screenshot Area Shortcut
   useEffect(() => {
     if (!window.electronAPI?.onAtalhoScreenshotArea) return
     const cleanup = window.electronAPI.onAtalhoScreenshotArea(() => {
-        if (isAreaMode) return // Evita reentrância
-        console.log('[App] Atalho de area recebido')
-        // Force window to be interactive
-        window.electronAPI?.setIgnoreMouseEvents(false)
-        window.electronAPI?.requestWindowFocus?.()
-        window.electronAPI?.setAreaSelectionMode?.(true)
-        // Reforços para evitar voltar ao pass-through
-        window.setTimeout(() => window.electronAPI?.setIgnoreMouseEvents(false), 30)
-        window.setTimeout(() => window.electronAPI?.setIgnoreMouseEvents(false), 120)
-        
-        setToolbarCollapsed(true) 
-        setIsAreaMode(true)
+      if (isAreaMode) return
+      console.log('[App] Atalho de area recebido')
+      window.electronAPI?.setIgnoreMouseEvents(false)
+      window.electronAPI?.requestWindowFocus?.()
+      window.electronAPI?.setAreaSelectionMode?.(true)
+      window.setTimeout(() => window.electronAPI?.setIgnoreMouseEvents(false), 30)
+      window.setTimeout(() => window.electronAPI?.setIgnoreMouseEvents(false), 120)
+      
+      setToolbarCollapsed(true) 
+      setIsAreaMode(true)
     })
     return cleanup
   }, [isAreaMode])
-
-  const perguntarComScreenshot = useCallback(
-    async () => {
-      console.log('[screenshot] iniciar captura')
-      
-      if (!window.electronAPI?.capturarScreenshot) {
-        exibirToast('Captura de tela indisponivel no preload.', 'erro')
-        return
-      }
-
-      exibirToast('Capturando screenshot...')
-      // Ensure UI is visible
-      setToolbarCollapsed(false) 
-
-      try {
-        const dataUrl = await window.electronAPI.capturarScreenshot()
-        if (!dataUrl) {
-            exibirToast('Nao consegui capturar a tela.', 'erro')
-          return
-        }
-        const entregue = await tentarEnviarParaChat(dataUrl)
-        if (!entregue) {
-          setPendingScreenshots((lista) => [...lista, dataUrl])
-          exibirToast('Screenshot capturado! Digite sua pergunta.', 'info')
-          setToolbarCollapsed(false)
-        } else {
-          // Enviou direto pro chat expandido, mantemos a toolbar recolhida
-          setToolbarCollapsed(true)
-        }
-      } catch (error: any) {
-        console.error('Erro ao capturar screenshot', error)
-        exibirToast('Falha ao capturar screenshot.', 'erro')
-      }
-    },
-    [exibirToast, tentarEnviarParaChat]
-  )
 
   const handleChat = async () => {
     const servico = criarOuObterServico()
@@ -271,45 +274,44 @@ function App() {
       return canvas.toDataURL('image/png')
     }
     
-    // Se temos screenshots, permitimos texto vazio (usa prompt default) ou texto informado
     if (pendingScreenshots.length > 0) {
-       const prompt = texto || 'Descreva a imagem e responda em português.'
-       const imagemUnica = await juntarScreenshots(pendingScreenshots)
-       if (!imagemUnica) {
+      const prompt = texto || 'Descreva a imagem e responda em português.'
+      const imagemUnica = await juntarScreenshots(pendingScreenshots)
+      if (!imagemUnica) {
         exibirToast('Falha ao preparar imagens.', 'erro')
         return
-       }
-       adicionarMensagem('user', `[Screenshot] ${prompt}`)
-       setTranscription('')
-       setPendingScreenshots([]) // Limpa pendências locais
-       perguntasPendentesRef.current = true
-       setIsGenerating(true)
+      }
+      adicionarMensagem('user', `[Screenshot] ${prompt}`)
+      setTranscription('')
+      setPendingScreenshots([])
+      perguntasPendentesRef.current = true
+      setIsGenerating(true)
 
-       const aiMsgId = uuidv4()
-       setMessages(prev => [...prev, {
-         id: aiMsgId,
-         role: 'assistant',
-         content: '',
-         timestamp: Date.now()
-       }])
+      const aiMsgId = uuidv4()
+      setMessages(prev => [...prev, {
+        id: aiMsgId,
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now()
+      }])
 
-       try {
-           const resposta = await servico.analisarImagem(prompt, imagemUnica)
-           setMessages(prev => prev.map(msg => 
-               msg.id === aiMsgId ? { ...msg, content: resposta } : msg
-           ))
-           setShowPreview(true)
-       } catch (error: any) {
-           console.error('Erro ao analisar imagem', error)
-           exibirToast(error?.message || 'Falha ao analisar imagem.', 'erro')
-           setMessages(prev => prev.map(msg => 
-               msg.id === aiMsgId ? { ...msg, content: `⚠️ Erro: ${error?.message}` } : msg
-           ))
-       } finally {
-           perguntasPendentesRef.current = false
-           setIsGenerating(false)
-       }
-       return
+      try {
+        const resposta = await servico.analisarImagem(prompt, imagemUnica)
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMsgId ? { ...msg, content: resposta } : msg
+        ))
+        setShowPreview(true)
+      } catch (error: any) {
+        console.error('Erro ao analisar imagem', error)
+        exibirToast(error?.message || 'Falha ao analisar imagem.', 'erro')
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMsgId ? { ...msg, content: `⚠️ Erro: ${error?.message}` } : msg
+        ))
+      } finally {
+        perguntasPendentesRef.current = false
+        setIsGenerating(false)
+      }
+      return
     }
 
     if (!texto) return
@@ -319,7 +321,6 @@ function App() {
     perguntasPendentesRef.current = true
     setIsGenerating(true)
 
-    // Placeholder message for streaming
     const aiMsgId = uuidv4()
     setMessages(prev => [...prev, {
       id: aiMsgId,
@@ -391,15 +392,6 @@ function App() {
     setAssistenteSelecionadoId(ASSISTENTES_PADRAO[0].id)
     setSystemPrompt(ASSISTENTES_PADRAO[0].prompt)
   }
-
-  const {
-    atalhoGramatical, setAtalhoGramatical,
-    atalhoScreenshot, setAtalhoScreenshot
-  } = useShortcuts(
-    () => { },
-    () => perguntarComScreenshot(),
-    (msg) => exibirToast(msg)
-  )
 
   const handleAnalyze = async () => {
     const servico = criarOuObterServico()
@@ -492,7 +484,7 @@ function App() {
         isActive={isAreaMode}
         onComplete={handleAreaCaptureComplete}
         onCancel={() => {
-            finalizarSelecaoArea()
+          finalizarSelecaoArea()
         }}
       />
       
@@ -574,8 +566,6 @@ function App() {
         aoAlterarBaseUrlLmStudio={setBaseUrlLmStudio}
         provedorAtivo={provedorAtivo}
         aoAlterarProvedorAtivo={setProvedorAtivo}
-        mostrarPreview={showPreview}
-        aoAlternarPreview={setShowPreview}
         atalhoGramatical={atalhoGramatical}
         atalhoScreenshot={atalhoScreenshot}
         aoAlterarAtalho={setAtalhoGramatical}
@@ -585,9 +575,8 @@ function App() {
         memories={memories}
         aoAdicionarMemoria={addMemory}
         aoRemoverMemoria={removeMemory}
+        voiceInput={voiceInput}
       />
-
-
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80]">

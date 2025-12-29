@@ -5,6 +5,9 @@ export { default as GrammarWindow } from './windows/grammar'
 // Modals
 export { AssistentesModal, FloatingModal, ModalConfiguracoes } from './modals'
 
+// Config
+export { VoiceSettings } from './config'
+
 // Toolbar
 export { BottomToolbar } from './toolbar'
 

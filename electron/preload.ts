@@ -1,4 +1,4 @@
-import { ipcRenderer, contextBridge, desktopCapturer, screen } from 'electron'
+import { ipcRenderer, contextBridge } from 'electron'
 
 console.log('[preload] inicializado', { contextIsolation: process.contextIsolated })
 
@@ -98,5 +98,77 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const listener = (_event: any, status: any) => callback(status)
         ipcRenderer.on('update-status', listener)
         return () => ipcRenderer.removeListener('update-status', listener)
+    },
+    // User data path for Whisper models
+    getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
+    // Whisper local transcription (legacy)
+    whisperBinaryExists: (binaryPath?: string) => ipcRenderer.invoke('whisper-binary-exists', binaryPath),
+    whisperModelExists: (modelSize: string) => ipcRenderer.invoke('whisper-model-exists', modelSize),
+    whisperDownloadModel: (modelSize: string) => ipcRenderer.invoke('whisper-download-model', modelSize),
+    whisperInitialize: (config: any) => ipcRenderer.invoke('whisper-initialize', config),
+    whisperTranscribe: (audioBuffer: Buffer, config: any) => ipcRenderer.invoke('whisper-transcribe', audioBuffer, config),
+    onWhisperDownloadProgress: (callback: (progress: any) => void) => {
+        const listener = (_event: any, progress: any) => callback(progress)
+        ipcRenderer.on('whisper-download-progress', listener)
+        return () => ipcRenderer.removeListener('whisper-download-progress', listener)
+    },
+    // Web search
+    webSearch: (query: string, maxResults?: number) => ipcRenderer.invoke('web-search', query, maxResults),
+    // Open URL in external browser
+    openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+    
+    // ==========================================
+    // Local Whisper Streaming API (new)
+    // ==========================================
+    localWhisper: {
+        // Model management
+        listModels: () => ipcRenderer.invoke('whisper-local:list-models'),
+        getModelStatus: (modelName: string) => ipcRenderer.invoke('whisper-local:get-model-status', modelName),
+        downloadModel: (modelName: string) => ipcRenderer.invoke('whisper-local:download-model', modelName),
+        cancelDownload: (modelName: string) => ipcRenderer.invoke('whisper-local:cancel-download', modelName),
+        deleteModel: (modelName: string) => ipcRenderer.invoke('whisper-local:delete-model', modelName),
+        getStorageInfo: () => ipcRenderer.invoke('whisper-local:get-storage-info'),
+
+        // Transcription session management
+        startSession: (config: { model?: string; language?: string; speakerLabel?: string; noGpu?: boolean }) => 
+            ipcRenderer.invoke('whisper-local:start-session', config),
+        sendAudio: (sessionId: string, audioData: ArrayBuffer) => 
+            ipcRenderer.invoke('whisper-local:send-audio', sessionId, audioData),
+        stopSession: (sessionId: string) => ipcRenderer.invoke('whisper-local:stop-session', sessionId),
+        checkAvailability: () => ipcRenderer.invoke('whisper-local:check-availability'),
+
+        // Event listeners for download progress
+        onDownloadProgress: (callback: (data: { modelName: string; downloaded: number; total: number; percent: number }) => void) => {
+            const handler = (_event: any, data: any) => callback(data)
+            ipcRenderer.on('whisper-local:download-progress', handler)
+            return () => ipcRenderer.removeListener('whisper-local:download-progress', handler)
+        },
+        onDownloadComplete: (callback: (data: { modelName: string; success: boolean; path: string }) => void) => {
+            const handler = (_event: any, data: any) => callback(data)
+            ipcRenderer.on('whisper-local:download-complete', handler)
+            return () => ipcRenderer.removeListener('whisper-local:download-complete', handler)
+        },
+        onDownloadError: (callback: (data: { modelName: string; error: string }) => void) => {
+            const handler = (_event: any, data: any) => callback(data)
+            ipcRenderer.on('whisper-local:download-error', handler)
+            return () => ipcRenderer.removeListener('whisper-local:download-error', handler)
+        },
+        
+        // Event listeners for transcription results
+        onTranscriptionDelta: (callback: (data: { sessionId: string; delta: string; text: string; speakerLabel?: string }) => void) => {
+            const handler = (_event: any, data: any) => callback(data)
+            ipcRenderer.on('whisper-local:transcription-delta', handler)
+            return () => ipcRenderer.removeListener('whisper-local:transcription-delta', handler)
+        },
+        onTranscriptionComplete: (callback: (data: { sessionId: string; text: string; speakerLabel?: string }) => void) => {
+            const handler = (_event: any, data: any) => callback(data)
+            ipcRenderer.on('whisper-local:transcription-complete', handler)
+            return () => ipcRenderer.removeListener('whisper-local:transcription-complete', handler)
+        },
+        onTranscriptionError: (callback: (data: { sessionId: string; error: string }) => void) => {
+            const handler = (_event: any, data: any) => callback(data)
+            ipcRenderer.on('whisper-local:transcription-error', handler)
+            return () => ipcRenderer.removeListener('whisper-local:transcription-error', handler)
+        }
     }
 })

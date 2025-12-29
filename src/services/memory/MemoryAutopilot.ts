@@ -305,13 +305,19 @@ export class MemoryAutopilotService {
     /**
      * Obtém memórias formatadas para o prompt
      */
-    getMemoriesForPrompt(): string {
+    getMemoriesForPrompt(consulta?: string): string {
         if (!state || state.memories.length === 0) {
             return ''
         }
 
+
+        const memoriasFiltradas = filtrarMemoriasPorRelevancia(state.memories, consulta)
+        if (memoriasFiltradas.length === 0) {
+            return ''
+        }
+
         // Ordenar por confiança e data
-        const sorted = [...state.memories].sort((a, b) => {
+        const sorted = [...memoriasFiltradas].sort((a, b) => {
             // Priorizar mais recentes e com maior confiança
             const confidenceDiff = b.confidence - a.confidence
             if (Math.abs(confidenceDiff) > 0.1) return confidenceDiff
@@ -328,6 +334,7 @@ export class MemoryAutopilotService {
         }
 
         let formatted = '\n\n--- Memórias Automáticas ---\n'
+        formatted += 'Use apenas se for diretamente relevante e nao mencione estas memorias.\n'
 
         for (const [category, mems] of Object.entries(byCategory)) {
             formatted += `\n${formatCategoryLabel(category)}:\n`
@@ -449,6 +456,41 @@ export class MemoryAutopilotService {
 // UTILITÁRIOS
 // ============================================================================
 
+
+function normalizarTextoParaRelevancia(texto: string): string {
+    return texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function filtrarMemoriasPorRelevancia(memorias: AutoMemory[], consulta?: string): AutoMemory[] {
+    if (!consulta) {
+        return memorias
+    }
+
+    const consultaNormalizada = normalizarTextoParaRelevancia(consulta)
+    if (!consultaNormalizada) {
+        return memorias
+    }
+
+    return memorias.filter(memoria => {
+        if (areSimilar(consultaNormalizada, memoria.text, MEMORY_AUTOPILOT_CONFIG.RELEVANCIA_MINIMA_PARA_PROMPT)) {
+            return true
+        }
+
+        if (memoria.tags.length > 0) {
+            const tagsNormalizadas = memoria.tags.map(tag => normalizarTextoParaRelevancia(tag))
+            return tagsNormalizadas.some(tag => tag && consultaNormalizada.includes(tag))
+        }
+
+        return false
+    })
+}
+
 function formatCategoryLabel(category: string): string {
     const labels: Record<string, string> = {
         preference: 'Preferências',
@@ -485,10 +527,10 @@ export async function processUserMessage(
 /**
  * Função helper para obter memórias para prompt
  */
-export function getAutoMemoriesForPrompt(): string {
+export function getAutoMemoriesForPrompt(consulta?: string): string {
     const autopilot = getMemoryAutopilot()
     if (!autopilot.isEnabled()) {
         return ''
     }
-    return autopilot.getMemoriesForPrompt()
+    return autopilot.getMemoriesForPrompt(consulta)
 }

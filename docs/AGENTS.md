@@ -12,27 +12,43 @@ A Selene é um aplicativo **Electron + React + TypeScript**. A característica m
 electron/
 ├── main.ts           # Processo Principal - ciclo de vida, atalhos globais, polling de mouse
 ├── preload.ts        # Ponte - APIs seguras via window.electronAPI
-└── updater.ts        # Módulo de auto-update
+├── updater.ts        # Módulo de auto-update
+└── whisper.ts        # Serviço de transcrição local (whisper.cpp)
 
 src/
 ├── App.tsx           # Raiz do Renderizador - estado global, eventos de polling
 ├── main.tsx          # Entry point React - roteamento de janelas
 ├── components/
-│   ├── ChatWindow.tsx       # Janela principal de chat com histórico
-│   ├── BottomToolbar.tsx    # Barra de ferramentas flutuante
-│   ├── FloatingModal.tsx    # Modal de chat rápido
-│   └── ModalConfiguracoes.tsx # Painel de configurações
+│   ├── config/               # Componentes de configuração
+│   │   ├── SettingsPanel.tsx # COMPONENTE UNIFICADO de configurações
+│   │   ├── VoiceSettings.tsx # Configurações de transcrição
+│   │   └── ModalConfiguracoes.tsx # Wrapper modal para SettingsPanel
+│   ├── windows/
+│   │   ├── chat/             # ChatWindow e assistentes
+│   │   │   ├── ChatWindow.tsx
+│   │   │   ├── AssistantsPanel.tsx
+│   │   │   └── AssistantEditor.tsx
+│   │   └── grammar/
+│   │       └── GrammarWindow.tsx
+│   ├── modals/
+│   │   └── FloatingModal.tsx
+│   └── toolbar/
+│       └── BottomToolbar.tsx
 ├── hooks/
-│   ├── useAI.ts              # Hook para serviço de IA
+│   ├── useAppConfig.ts       # HOOK CENTRALIZADO - todas as configurações
+│   ├── useAI.ts              # Serviço de IA (agora integrado em useAppConfig)
+│   ├── useVoiceInput.ts      # Entrada de voz e transcrição
+│   ├── useAssistants.ts      # Gerenciamento de assistentes
 │   ├── useCrossChatContext.ts # Contexto entre conversas
 │   └── useMemoryAutopilot.ts  # Memória automática
 ├── services/
 │   ├── AIService.ts          # Abstração de provedores de IA
 │   ├── ai/providers/         # OpenAI, Gemini, OpenRouter, LMStudio
+│   ├── transcription/        # Serviços de transcrição
 │   ├── crosschat/            # Sistema de busca semântica
 │   └── memory/               # Sistema de memória automática
-└── windows/
-    └── GrammarWindow.tsx     # Janela do assistente gramatical
+└── utils/
+    └── assistentesPadrao.ts  # Assistentes padrão e tipos
 ```
 
 ---
@@ -44,24 +60,61 @@ src/
 A janela do Electron ocupa a tela inteira, mas é transparente.
 
 **Como funciona:**
+
 1. O `electron/main.ts` faz polling da posição do mouse a 10Hz (`checarCursor`)
 2. O `App.tsx` recebe as coordenadas via `window.electronAPI.onCheckHover`
 3. Se o mouse estiver sobre um widget (`.pointer-events-auto`), ativamos a interação
 4. Se estiver no vazio, desativamos (`setIgnoreMouseEvents(true, { forward: true })`)
 
 **Regras:**
+
 - ❌ Nunca remova a classe `pointer-events-none` do container raiz em `App.tsx` ou `index.css`
 - ✅ Widgets interativos **DEVEM** ter `pointer-events-auto`
 - ❌ Não reverta a lógica de **Polling** para `mousemove` event listeners (falham em janelas transparentes no Windows)
 - ✅ Use `ref` com `getBoundingClientRect()` para verificar se o mouse está sobre um widget
 
-### 2. Gerenciamento de Estado e IPC
+### 2. Use o Hook Centralizado `useAppConfig`
+
+**IMPORTANTE**: A partir da v0.2.0, todas as configurações são gerenciadas pelo hook `useAppConfig`.
+
+```typescript
+// ✅ BOM: Use useAppConfig
+const {
+  apiKey,
+  setApiKey,
+  profile,
+  setProfile,
+  memories,
+  addMemory,
+  voiceInput,
+  // ...etc
+} = useAppConfig();
+
+// ❌ RUIM: Não use hooks individuais diretamente em componentes de UI
+const { apiKey } = useAI(); // Isto está encapsulado em useAppConfig
+```
+
+### 3. SettingsPanel é o Único Componente de Configurações
+
+O `SettingsPanel` em `src/components/config/SettingsPanel.tsx` é o **único** componente de UI para configurações. Ele pode ser usado de duas formas:
+
+```typescript
+// No Modal (App.tsx)
+<SettingsPanel variant="modal" onClose={...} {...props} />
+
+// Inline no ChatWindow
+<SettingsPanel variant="inline" onClose={...} {...props} />
+```
+
+**Nunca** crie componentes de configuração duplicados.
+
+### 4. Gerenciamento de Estado e IPC
 
 - Evite "spam" de IPC. Só envie mensagens para o processo principal (`setIgnoreMouseEvents`) se o estado de interação **mudou** (diffing).
 - O estado `debugInteractive` em `App.tsx` é usado para forçar a janela a ser clicável para fins de desenvolvimento (F9). Respeite essa flag.
 - Janelas separadas (ChatWindow, GrammarWindow) usam parâmetros de URL (`?window=chat`, `?window=grammar`) para roteamento em `main.tsx`.
 
-### 3. Persistência de Dados
+### 5. Persistência de Dados
 
 - ❌ Não hardcode chaves de API
 - ✅ Use `localStorage` para persistir configurações do usuário:
@@ -69,9 +122,10 @@ A janela do Electron ocupa a tela inteira, mas é transparente.
   - Preferências: `systemPrompt`, `assistentes`, `provedorAtivo`
   - Perfil: `userProfile`, `memories`, `autoMemories`
   - Flags: `crossChatEnabled`, `memoryAutopilotEnabled`
-- O `App.tsx` e `ChatWindow.tsx` carregam esses dados na inicialização.
+  - Voice: `voiceProvider`, `whisperModel`
+- O hook `useAppConfig` centraliza toda a lógica de persistência.
 
-### 4. Estilização (TailwindCSS)
+### 6. Estilização (TailwindCSS)
 
 - ✅ Use Tailwind para tudo
 - ✅ Mantenha o tema "Dark Mode / Glassmorphism":
@@ -82,16 +136,18 @@ A janela do Electron ocupa a tela inteira, mas é transparente.
 - ✅ Use `framer-motion` para animações (AnimatePresence para entradas/saídas)
 - ✅ Componentes arrastáveis usam `drag` do Framer Motion
 
-### 5. Sistema de Memória
+### 7. Sistema de Memória
 
 O projeto possui dois sistemas de memória independentes (veja `docs/MEMORY_ARCHITECTURE.md`):
 
 **Cross-Chat Context:**
+
 - Recupera trechos de conversas anteriores via busca semântica
 - Arquivos: `services/crosschat/`
 - NUNCA grava memória permanente, apenas indexa
 
 **Memory Autopilot:**
+
 - Extrai preferências automaticamente das conversas
 - Arquivos: `services/memory/`
 - Grava em `localStorage` com validação e deduplicação
@@ -106,9 +162,16 @@ Ambos são opcionais e controlados por toggles nas configurações.
 
 1. Crie o provider em `src/services/ai/providers/NovoProvider.ts` implementando `AIProvider`
 2. Registre em `AIService.ts` no construtor e na detecção auto
-3. Adicione campos de configuração em `ModalConfiguracoes.tsx` / `ChatWindow.tsx`
-4. Adicione estado e persistência no componente que usa o AIService
+3. Adicione campos de configuração no `SettingsPanel.tsx`
+4. Atualize o hook `useAppConfig` para incluir novas chaves/modelos
 5. Atualize o tipo `ProvedorID` em `services/ai/types.ts`
+
+### Adicionar Nova Aba de Configurações
+
+1. Adicione o ID da aba em `SettingsTab` no `SettingsPanel.tsx`
+2. Adicione entrada no array `allTabs` com ícone e condição de visibilidade
+3. Adicione a seção de conteúdo no JSX com `{activeTab === 'nova-aba' && (...)}`
+4. Se necessário, adicione props ao `SettingsPanelProps`
 
 ### Registrar Novo Atalho Global
 
@@ -116,11 +179,12 @@ Ambos são opcionais e controlados por toggles nas configurações.
 2. Crie a função de registro (ex: `registrarAtalhoX`)
 3. Envie evento IPC para o renderer
 4. Exponha em `preload.ts` via `contextBridge`
-5. Adicione input configurável em `ModalConfiguracoes.tsx`
+5. Adicione input configurável na aba "Atalhos" do `SettingsPanel`
+6. Atualize `useAppConfig` com estado e persistência
 
 ### Criar Nova Janela
 
-1. Crie o componente em `src/windows/NovaWindow.tsx`
+1. Crie o componente em `src/components/windows/nova/NovaWindow.tsx`
 2. Adicione rota em `src/main.tsx` checando parâmetro de URL
 3. Crie função `createNovaWindow()` em `electron/main.ts`
 4. Exponha abertura via IPC em `preload.ts`
@@ -128,10 +192,12 @@ Ambos são opcionais e controlados por toggles nas configurações.
 ### Melhorar a Detecção de Mouse
 
 A lógica está em:
+
 - `electron/main.ts`: `checarCursor()` e `iniciarTracker()`
 - `src/App.tsx`: `handleCheckHover()`
 
 Se precisar otimizar, faça com **cuidado extremo** e teste a interatividade em:
+
 - Overlay (widgets)
 - ChatWindow (janela separada)
 - GrammarWindow (janela separada)
@@ -141,20 +207,29 @@ Se precisar otimizar, faça com **cuidado extremo** e teste a interatividade em:
 ## 🐛 Debugging
 
 ### "Não consigo clicar"
+
 1. Pressione **F9** para ativar Debug Mode
 2. Se overlay vermelho aparecer, o click-through está funcionando
 3. Verifique se o widget tem `pointer-events-auto`
 4. Verifique logs do console (`Ctrl+Shift+I`)
 
 ### "Janela não abre"
+
 1. Verifique logs do processo principal (terminal onde rodou `npm run dev`)
 2. Confirme que o preload está correto (`dist-electron/preload.cjs`)
 3. Verifique erros de IPC no console do renderer
 
 ### "Configurações não persistem"
+
 1. Verifique erros de `localStorage` no console
-2. Confirme que o `useEffect` de persistência está rodando
+2. Confirme que `useAppConfig` está sendo usado corretamente
 3. Limpe `localStorage` e teste novamente
+
+### "Transcrição não funciona"
+
+1. Verifique se a API key está configurada (para nuvem)
+2. Para local, verifique se o modelo foi baixado
+3. Verifique logs do console para erros de Whisper
 
 ---
 
@@ -171,4 +246,4 @@ Se precisar otimizar, faça com **cuidado extremo** e teste a interatividade em:
 
 ---
 
-*Bom trabalho, Agente. Mantenha o código limpo e o futuro transparente.*
+_Bom trabalho, Agente. Mantenha o código limpo e o futuro transparente._

@@ -14,7 +14,7 @@ Seja gentil e respeitoso. Este é um projeto focado em produtividade e aprendiza
 
 ### Pré-requisitos
 
-- Node.js (v18 ou superior)
+- Node.js (v20 ou superior)
 - npm ou yarn
 
 ### Passos
@@ -86,7 +86,7 @@ Seja gentil e respeitoso. Este é um projeto focado em produtividade e aprendiza
 
 Use a aba "Issues" do GitHub. Inclua:
 
-- Versão do Windows/OS.
+- Versão do Windows/macOS/Linux.
 - Passos para reproduzir.
 - Comportamento esperado vs real.
 - Logs do console (Ctrl+Shift+I na janela do Electron) se possível.
@@ -114,23 +114,28 @@ Selene/
 ├── electron/                  # Código do processo main do Electron
 │   ├── main.ts               # Entry point - gerencia janelas, atalhos globais, mouse polling
 │   ├── preload.ts            # Script de preload (contextBridge para API segura)
-│   └── updater.ts            # Módulo de auto-update
+│   ├── updater.ts            # Módulo de auto-update
+│   └── whisper.ts            # Serviço de transcrição local
 ├── src/                       # Código do React (renderer process)
 │   ├── App.tsx               # Componente raiz do overlay
 │   ├── main.tsx              # Entry point do React
 │   ├── components/           # Componentes React organizados por categoria
 │   │   ├── index.ts          # Re-exports centralizados
+│   │   ├── config/           # Componentes de configuração
+│   │   │   ├── SettingsPanel.tsx    # Painel de configurações unificado
+│   │   │   ├── VoiceSettings.tsx    # Configurações de transcrição
+│   │   │   └── ModalConfiguracoes.tsx # Modal wrapper
 │   │   ├── windows/          # Janelas standalone do Electron
 │   │   │   ├── chat/         # ChatWindow - janela principal de chat
 │   │   │   │   ├── ChatWindow.tsx
+│   │   │   │   ├── AssistantsPanel.tsx
+│   │   │   │   ├── AssistantEditor.tsx
 │   │   │   │   └── index.ts
 │   │   │   └── grammar/      # GrammarWindow - assistente gramatical
 │   │   │       ├── GrammarWindow.tsx
 │   │   │       └── index.ts
 │   │   ├── modals/           # Modais overlay
-│   │   │   ├── AssistentesModal.tsx  # Modal de gerenciamento de assistentes
 │   │   │   ├── FloatingModal.tsx     # Modal de chat flutuante
-│   │   │   ├── ModalConfiguracoes.tsx # Painel de configurações
 │   │   │   └── index.ts
 │   │   ├── toolbar/          # Barra de ferramentas
 │   │   │   ├── BottomToolbar.tsx     # Barra de ferramentas flutuante
@@ -140,14 +145,16 @@ Selene/
 │   │       ├── DiffVisual.tsx        # Visualização de diff de texto
 │   │       └── index.ts
 │   ├── hooks/                # Custom hooks
+│   │   ├── useAppConfig.ts   # Hook centralizado de configuração
 │   │   ├── useAI.ts          # Hook para serviço de IA
-│   │   ├── useAudio.ts       # Hook para gravação de áudio
+│   │   ├── useVoiceInput.ts  # Hook para entrada de voz
 │   │   ├── useCrossChatContext.ts # Hook para contexto entre conversas
 │   │   └── useMemoryAutopilot.ts  # Hook para memória automática
 │   ├── services/             # Serviços e lógica de negócio
 │   │   ├── AIService.ts      # Camada de abstração para provedores de IA
 │   │   ├── ai/               # Implementações de provedores (OpenAI, Gemini, etc.)
 │   │   ├── memory/           # Sistema de memória automática
+│   │   ├── transcription/    # Serviços de transcrição de áudio
 │   │   ├── crosschat/        # Sistema de contexto entre conversas
 │   │   └── PromptPipeline.ts # Composição de prompts
 │   └── types/                # Definições de tipos TypeScript
@@ -162,6 +169,7 @@ Selene/
 ├── dist/                     # Build do Vite (gerado)
 ├── dist-electron/            # Build do Electron (gerado)
 ├── release/                  # Instaladores (gerado)
+├── CHANGELOG.md              # Histórico de mudanças
 └── package.json              # Configuração e scripts
 ```
 
@@ -187,27 +195,30 @@ O projeto segue [Semantic Versioning](https://semver.org/):
    npm version major  # 0.2.0 -> 1.0.0
    ```
 
-2. **Commit das mudanças:**
+2. **Atualize o CHANGELOG.md** com as mudanças da versão
+
+3. **Commit das mudanças:**
 
    ```bash
    git add .
-   git commit -m "chore: bump version to X.Y.Z"
+   git commit -m "chore: release v0.2.0"
    ```
 
-3. **Crie e push a tag:**
+4. **Crie e push a tag:**
 
    ```bash
    git tag -a v0.2.0 -m "Release v0.2.0: Nova funcionalidade XYZ"
+   git push origin main
    git push origin v0.2.0
    ```
 
-4. **Aguarde o GitHub Actions:**
+5. **Aguarde o GitHub Actions:**
 
    - O workflow `release.yml` será disparado automaticamente
-   - Builds para Windows e macOS serão criados
+   - Builds para Windows, macOS e Linux serão criados
    - Um Release será publicado com todos os assets
 
-5. **Verifique o Release:**
+6. **Verifique o Release:**
    - Acesse [Releases](https://github.com/levigarciia/Selene/releases)
    - Confirme que todos os arquivos estão presentes
 

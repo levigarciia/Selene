@@ -1,8 +1,17 @@
 import { forwardRef, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Plus, Save, Check, X, Sparkles, Wand2, Trash } from 'lucide-react'
-import { ASSISTENTES_PADRAO, criarAssistenteVazio } from '../../utils/assistentesPadrao'
-import type { AssistenteConfig } from '../../utils/assistentesPadrao'
+import { Plus, Save, Check, X, Sparkles, Wand2, Trash, ChevronDown, Brain, Image, Mic, MessageSquare } from 'lucide-react'
+import { 
+    ASSISTENTES_PADRAO, 
+    criarAssistenteVazio,
+    type AssistenteConfig,
+    type AssistantPermission,
+    type AssistantBehavior,
+    type AssistantTone,
+    DEFAULT_PERMISSIONS,
+    DEFAULT_BEHAVIORS,
+    DEFAULT_TONE
+} from '../../utils/assistentesPadrao'
 
 type AssistentesModalProps = {
     aberto: boolean
@@ -15,6 +24,15 @@ type AssistentesModalProps = {
     aoAplicar: (assistente: AssistenteConfig) => void
     aoRestaurarPadrao: () => void
     aoRemover: (id: string) => void
+}
+
+// Metadados de permissões
+const PERMISSION_INFO: Record<AssistantPermission, { label: string; icon: React.ElementType; desc: string }> = {
+    memory_read: { label: 'Ler Memórias', icon: Brain, desc: 'Acessa memórias do usuário' },
+    memory_write: { label: 'Criar Memórias', icon: Brain, desc: 'Pode salvar novas memórias' },
+    cross_chat: { label: 'Contexto Cruzado', icon: MessageSquare, desc: 'Busca em conversas anteriores' },
+    image_analysis: { label: 'Analisar Imagens', icon: Image, desc: 'Processa screenshots' },
+    voice_input: { label: 'Entrada de Voz', icon: Mic, desc: 'Recebe comandos por áudio' }
 }
 
 const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
@@ -35,6 +53,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
     )
 
     const [rascunho, setRascunho] = useState<AssistenteConfig>(assistenteAtual)
+    const [showAdvanced, setShowAdvanced] = useState(false)
 
     useEffect(() => {
         if (assistenteAtual) {
@@ -65,6 +84,30 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
         aoSelecionar(novo.id)
         setRascunho(novo)
     }
+    
+    const togglePermission = (perm: AssistantPermission) => {
+        const permissions = rascunho.permissions || [...DEFAULT_PERMISSIONS]
+        const updated = permissions.includes(perm)
+            ? permissions.filter(p => p !== perm)
+            : [...permissions, perm]
+        setRascunho({ ...rascunho, permissions: updated })
+    }
+    
+    const toggleBehavior = (behavior: AssistantBehavior) => {
+        const behaviors = rascunho.behaviors || [...DEFAULT_BEHAVIORS]
+        const updated = behaviors.includes(behavior)
+            ? behaviors.filter(b => b !== behavior)
+            : [...behaviors, behavior]
+        setRascunho({ ...rascunho, behaviors: updated })
+    }
+    
+    const setTone = (tone: AssistantTone) => {
+        setRascunho({ ...rascunho, tone })
+    }
+
+    // Cores e ícones disponíveis
+    const ICON_PRESETS = ['✨', '🌙', '💻', '📚', '✍️', '🎨', '💼', '📝', '🎯', '🚀']
+    const COLOR_PRESETS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#ef4444', '#06b6d4', '#84cc16']
 
     return (
         <AnimatePresence>
@@ -85,7 +128,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.97, opacity: 0 }}
                         transition={{ type: 'spring', stiffness: 140, damping: 18 }}
-                        className="relative w-full max-w-5xl h-[70vh] bg-neutral-900/95 border border-white/10 rounded-3xl shadow-2xl overflow-hidden"
+                        className="relative w-full max-w-5xl h-[80vh] bg-neutral-900/95 border border-white/10 rounded-3xl shadow-2xl overflow-hidden"
                     >
                         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                             <div className="flex items-center gap-3">
@@ -106,7 +149,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-[260px_1fr] h-[calc(70vh-70px)]">
+                        <div className="grid grid-cols-[260px_1fr] h-[calc(80vh-70px)]">
                             <div className="border-r border-white/10 bg-black/30 backdrop-blur-sm overflow-y-auto">
                                 <div className="p-3 space-y-2">
                                     {assistentes.map((assistente) => {
@@ -124,7 +167,10 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                                     className="w-full text-left"
                                                 >
                                                     <div className="flex items-center justify-between pr-8">
-                                                        <span className="text-sm font-medium">{assistente.nome}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            {assistente.icon && <span className="text-lg">{assistente.icon}</span>}
+                                                            <span className="text-sm font-medium">{assistente.nome}</span>
+                                                        </div>
                                                         {assistente.origem === 'personalizado' ? (
                                                             <span className="text-[10px] uppercase tracking-wide text-amber-300 font-semibold">Custom</span>
                                                         ) : (
@@ -164,6 +210,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                             </div>
 
                             <div className="p-6 flex flex-col gap-4 overflow-y-auto">
+                                {/* Campos básicos */}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="flex flex-col gap-1">
                                         <label className="text-[11px] uppercase text-white/50 font-semibold">Nome</label>
@@ -185,6 +232,43 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                     </div>
                                 </div>
 
+                                {/* Ícone e Cor */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[11px] uppercase text-white/50 font-semibold">Ícone</label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {ICON_PRESETS.map(icon => (
+                                                <button
+                                                    key={icon}
+                                                    onClick={() => setRascunho({ ...rascunho, icon })}
+                                                    className={`w-10 h-10 flex items-center justify-center rounded-lg text-lg transition-all ${
+                                                        rascunho.icon === icon
+                                                            ? 'bg-purple-500/20 border-2 border-purple-500/50'
+                                                            : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                                                    }`}
+                                                >
+                                                    {icon}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <label className="text-[11px] uppercase text-white/50 font-semibold">Cor</label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {COLOR_PRESETS.map(color => (
+                                                <button
+                                                    key={color}
+                                                    onClick={() => setRascunho({ ...rascunho, color })}
+                                                    className={`w-10 h-10 rounded-lg transition-all ${
+                                                        rascunho.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-neutral-900' : ''
+                                                    }`}
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="flex flex-col gap-2">
                                     <div className="flex items-center justify-between">
                                         <label className="text-[11px] uppercase text-white/50 font-semibold">System Prompt</label>
@@ -196,12 +280,102 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                     <textarea
                                         value={rascunho.prompt}
                                         onChange={(e) => setRascunho({ ...rascunho, prompt: e.target.value })}
-                                        className="min-h-[280px] w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-purple-400/70 resize-none leading-relaxed scrollbar-thin scrollbar-thumb-white/15 scrollbar-track-transparent"
+                                        className="min-h-[200px] w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-purple-400/70 resize-none leading-relaxed scrollbar-thin scrollbar-thumb-white/15 scrollbar-track-transparent"
                                         placeholder="Descreva como o assistente deve se comportar..."
                                     />
                                 </div>
 
-                                <div className="flex items-center justify-between gap-3">
+                                {/* Configurações Avançadas (expansível) */}
+                                <div className="border-t border-white/5 pt-4">
+                                    <button
+                                        onClick={() => setShowAdvanced(!showAdvanced)}
+                                        className="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors"
+                                    >
+                                        <ChevronDown size={16} className={`transition-transform ${showAdvanced ? 'rotate-180' : ''}`} />
+                                        Configurações Avançadas
+                                    </button>
+                                    
+                                    {showAdvanced && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: 'auto' }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            className="mt-4 space-y-4"
+                                        >
+                                            {/* Permissões */}
+                                            <div>
+                                                <label className="text-[11px] uppercase text-white/50 font-semibold mb-2 block">Permissões</label>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {(Object.entries(PERMISSION_INFO) as [AssistantPermission, typeof PERMISSION_INFO[AssistantPermission]][]).map(([key, info]) => {
+                                                        const hasPermission = (rascunho.permissions || DEFAULT_PERMISSIONS).includes(key)
+                                                        return (
+                                                            <button
+                                                                key={key}
+                                                                onClick={() => togglePermission(key)}
+                                                                className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-colors ${
+                                                                    hasPermission
+                                                                        ? 'bg-purple-500/15 border-purple-500/30'
+                                                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                                                }`}
+                                                            >
+                                                                <info.icon size={14} className={hasPermission ? 'text-purple-400' : 'text-white/40'} />
+                                                                <span className="text-xs text-white/80">{info.label}</span>
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            {/* Comportamentos */}
+                                            <div>
+                                                <label className="text-[11px] uppercase text-white/50 font-semibold mb-2 block">Comportamentos</label>
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {(['concise', 'detailed', 'conversational', 'professional', 'educational', 'creative'] as AssistantBehavior[]).map(behavior => {
+                                                        const hasBehavior = (rascunho.behaviors || DEFAULT_BEHAVIORS).includes(behavior)
+                                                        return (
+                                                            <button
+                                                                key={behavior}
+                                                                onClick={() => toggleBehavior(behavior)}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                                                    hasBehavior
+                                                                        ? 'bg-purple-500/20 text-purple-200 border border-purple-500/30'
+                                                                        : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
+                                                                }`}
+                                                            >
+                                                                {behavior}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            {/* Tom */}
+                                            <div>
+                                                <label className="text-[11px] uppercase text-white/50 font-semibold mb-2 block">Tom</label>
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {(['neutral', 'friendly', 'formal', 'casual', 'empathetic', 'assertive', 'professional'] as AssistantTone[]).map(tone => {
+                                                        const selected = (rascunho.tone || DEFAULT_TONE) === tone
+                                                        return (
+                                                            <button
+                                                                key={tone}
+                                                                onClick={() => setTone(tone)}
+                                                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                                                    selected
+                                                                        ? 'bg-purple-500/20 text-purple-200 border border-purple-500/30'
+                                                                        : 'bg-white/5 text-white/60 border border-white/10 hover:bg-white/10'
+                                                                }`}
+                                                            >
+                                                                {tone}
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center justify-between gap-3 pt-4 border-t border-white/5">
                                     <div className="text-xs text-white/50">
                                         Sincronizado localmente. Use "Aplicar" para ativar na sessão.
                                     </div>

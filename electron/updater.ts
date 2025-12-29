@@ -318,6 +318,11 @@ const setupIpcHandlers = () => {
     ipcMain.handle('get-app-version', () => {
         return app.getVersion()
     })
+
+    // Get user data path for Whisper models
+    ipcMain.handle('get-user-data-path', () => {
+        return app.getPath('userData')
+    })
 }
 
 /**

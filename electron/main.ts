@@ -4,6 +4,9 @@ import { fileURLToPath } from 'url'
 import fs from 'fs'
 import robot from 'robotjs'
 import { initAutoUpdater, cleanupAutoUpdater } from './updater.js'
+import { setupWhisperIPC } from './whisper.js'
+import { setupWebSearchIPC } from './web-search.js'
+import { setupLocalWhisperIPC } from './local-whisper/LocalWhisperService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -667,6 +670,17 @@ app.on('activate', () => {
 app.whenReady().then(() => {
     createWindow()
     registrarAtalhoGramatical('Control+Alt+X')
+
+    // Initialize Whisper IPC handlers
+    setupWhisperIPC()
+
+    // Initialize Web Search IPC handlers
+    setupWebSearchIPC()
+
+    // Initialize Local Whisper Streaming IPC handlers
+    if (win) {
+        setupLocalWhisperIPC(win)
+    }
 
     // Initialize auto-updater (respects user preference)
     initAutoUpdater(win)

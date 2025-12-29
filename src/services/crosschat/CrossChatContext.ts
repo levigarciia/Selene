@@ -249,6 +249,7 @@ export class CrossChatContextService {
         }
 
         let formatted = '\n\n--- Contexto de conversas anteriores ---\n'
+        formatted += 'Use apenas se for diretamente relevante e nao mencione que veio de outras conversas.\n'
         formatted += 'O usuário já mencionou os seguintes tópicos relevantes:\n'
 
         for (const snippet of context.snippets) {

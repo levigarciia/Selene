@@ -34,16 +34,16 @@ export const CROSS_CHAT_CONFIG = {
     MIN_MESSAGE_LENGTH: 50,
 
     /** Número máximo de trechos a injetar no prompt */
-    MAX_CONTEXT_SNIPPETS: 5,
+    MAX_CONTEXT_SNIPPETS: 3,
 
     /** Tamanho máximo de cada trecho em caracteres */
-    MAX_SNIPPET_LENGTH: 300,
+    MAX_SNIPPET_LENGTH: 220,
 
     /** Threshold mínimo de similaridade (0-1) para considerar relevante */
-    SIMILARITY_THRESHOLD: 0.72,
+    SIMILARITY_THRESHOLD: 0.78,
 
     /** Limite de tokens para contexto entre chats */
-    MAX_CONTEXT_TOKENS: 800,
+    MAX_CONTEXT_TOKENS: 500,
 
     /** Idade máxima de mensagens indexadas em dias */
     MAX_MESSAGE_AGE_DAYS: 90,
@@ -83,6 +83,9 @@ export const MEMORY_AUTOPILOT_CONFIG = {
 
     /** Tamanho máximo do texto da memória */
     MAX_MEMORY_TEXT_LENGTH: 200,
+
+    /** Relevancia minima para injetar memoria no prompt (0-1) */
+    RELEVANCIA_MINIMA_PARA_PROMPT: 0.25,
 
     /** Número mínimo de ocorrências para considerar recorrente */
     MIN_OCCURRENCES_FOR_RECURRENT: 2,
