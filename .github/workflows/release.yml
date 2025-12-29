@@ -204,13 +204,13 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      - name: Install dependencies
-        run: npm ci
-
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libx11-dev libxtst-dev libpng-dev
+          sudo apt-get install -y libx11-dev libxtst-dev libpng-dev libxkbfile-dev
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Rebuild native modules for Electron
         run: npx electron-rebuild
