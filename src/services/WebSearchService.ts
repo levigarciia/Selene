@@ -18,8 +18,51 @@ export interface WebSearchResponse {
     timestamp: number
 }
 
+type RespostaBuscaIpc = { success: boolean; data?: WebSearchResponse; error?: string }
+type RespostaPaginaIpc = { success: boolean; content?: string; error?: string }
+
 // DuckDuckGo HTML search endpoint
 const DDG_SEARCH_URL = 'https://html.duckduckgo.com/html/'
+
+async function buscarNaWebViaIpc(query: string, maxResults: number): Promise<WebSearchResponse | null> {
+    if (typeof window === 'undefined') return null
+    const api = window.electronAPI?.webSearch
+    if (!api) return null
+
+    try {
+        const resposta = await api(query, maxResults) as RespostaBuscaIpc
+        if (resposta?.success && resposta.data) {
+            return resposta.data
+        }
+        if (resposta?.error) {
+            console.warn('[WebSearch] IPC error:', resposta.error)
+        }
+    } catch (error: any) {
+        console.warn('[WebSearch] IPC error:', error)
+    }
+
+    return null
+}
+
+async function buscarConteudoViaIpc(url: string): Promise<string | null> {
+    if (typeof window === 'undefined') return null
+    const api = window.electronAPI?.webFetchPage
+    if (!api) return null
+
+    try {
+        const resposta = await api(url) as RespostaPaginaIpc
+        if (resposta?.success) {
+            return resposta.content || ''
+        }
+        if (resposta?.error) {
+            return `[Erro ao buscar conteudo: ${resposta.error}]`
+        }
+    } catch (error: any) {
+        return `[Erro ao buscar conteudo: ${error.message}]`
+    }
+
+    return null
+}
 
 /**
  * Search the web using DuckDuckGo
@@ -30,6 +73,12 @@ export async function searchWeb(query: string, maxResults = 5): Promise<WebSearc
     console.log(`[WebSearch] Searching: "${query}"`)
     
     try {
+        const respostaIpc = await buscarNaWebViaIpc(query, maxResults)
+        if (respostaIpc) {
+            console.log(`[WebSearch] IPC results: ${respostaIpc.results.length}`)
+            return respostaIpc
+        }
+
         // Use POST with form data for DuckDuckGo
         const formData = new URLSearchParams()
         formData.append('q', query)
@@ -150,6 +199,14 @@ export async function fetchUrlContent(url: string, maxLength = 2000): Promise<st
     console.log(`[WebSearch] Fetching: ${url}`)
     
     try {
+        const conteudoIpc = await buscarConteudoViaIpc(url)
+        if (conteudoIpc !== null) {
+            if (conteudoIpc.length > maxLength) {
+                return conteudoIpc.substring(0, maxLength) + '...'
+            }
+            return conteudoIpc
+        }
+
         const response = await fetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'

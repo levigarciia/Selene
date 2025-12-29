@@ -114,6 +114,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     // Web search
     webSearch: (query: string, maxResults?: number) => ipcRenderer.invoke('web-search', query, maxResults),
+    // Conteudo de pagina via main
+    webFetchPage: (url: string) => ipcRenderer.invoke('web-fetch-page', url),
     // Open URL in external browser
     openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
     

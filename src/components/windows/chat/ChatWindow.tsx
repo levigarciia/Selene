@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
     Sparkles, Send, Minus, Square, X, Terminal,
     MessageSquare, Plus, Settings, ChevronLeft, ChevronRight,
-    Copy, RefreshCw, StopCircle, Check, Trash2, Bot
+    Copy, RefreshCw, StopCircle, Check, Trash2, Bot, Globe, Image, ChevronDown, ExternalLink
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { v4 as uuidv4 } from 'uuid'
@@ -21,6 +21,7 @@ import { useAssistants } from '../../../hooks/useAssistants'
 import { AssistantsPanel } from './AssistantsPanel'
 import { AssistantEditor } from './AssistantEditor'
 import type { AssistantConfig } from '../../../utils/assistentesPadrao'
+import { searchWeb, formatSearchResultsForAI, fetchUrlContent, extractSearchQuery } from '../../../services/WebSearchService'
 
 // Types
 interface Conversation {
@@ -29,6 +30,137 @@ interface Conversation {
     messages: ChatMessage[]
     createdAt: number
     updatedAt: number
+}
+
+interface WebSource {
+    url: string
+    title: string
+    favicon?: string
+    resumo?: string
+    nomeFonte?: string
+    dominio?: string
+}
+
+const obterNomeFonte = (url: string, titulo: string): string => {
+    try {
+        const hostname = new URL(url).hostname.replace('www.', '')
+        const base = hostname.split('.')[0] || ''
+        if (base) return base.charAt(0).toUpperCase() + base.slice(1)
+    } catch {
+        // Ignora erro e usa fallback
+    }
+    return titulo.substring(0, 20)
+}
+
+const normalizarNomeFonte = (nome: string): string => nome.trim().toLowerCase()
+
+const encontrarFonte = (rotulo: string, fontes: WebSource[]): WebSource | undefined => {
+    const alvo = normalizarNomeFonte(rotulo)
+    return fontes.find((fonte) => {
+        const nomeFonte = fonte.nomeFonte ? normalizarNomeFonte(fonte.nomeFonte) : ''
+        const dominio = fonte.dominio ? normalizarNomeFonte(fonte.dominio) : ''
+        const titulo = fonte.title ? normalizarNomeFonte(fonte.title) : ''
+        return nomeFonte === alvo || dominio === alvo || titulo === alvo
+    })
+}
+
+const FontePill: React.FC<{ rotulo: string; fonte?: WebSource }> = ({ rotulo, fonte }) => {
+    const resumoBase = fonte?.resumo?.replace(/\s+/g, ' ').trim() || ''
+    const resumoCurto = resumoBase.length > 160 ? `${resumoBase.slice(0, 160)}...` : resumoBase
+    return (
+        <span className="relative inline-flex group/fonte align-middle">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-neutral-900/70 border border-white/10 text-[10px] text-neutral-200">
+                {fonte?.favicon ? (
+                    <img
+                        src={fonte.favicon}
+                        alt=""
+                        className="w-3 h-3 rounded-full"
+                        onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"%23888\"%3E%3Ccircle cx=\"12\" cy=\"12\" r=\"10\"/%3E%3C/svg%3E'
+                        }}
+                    />
+                ) : (
+                    <span className="w-2.5 h-2.5 rounded-full bg-neutral-500" />
+                )}
+                <span className="text-[10px] font-medium">{rotulo}</span>
+            </span>
+            {fonte && (
+                <div className="absolute left-0 top-full mt-2 w-64 z-50 opacity-0 pointer-events-none translate-y-1 group-hover/fonte:opacity-100 group-hover/fonte:pointer-events-auto group-hover/fonte:translate-y-0 transition-all">
+                    <a
+                        href={fonte.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block rounded-xl bg-neutral-900 border border-white/10 shadow-xl overflow-hidden"
+                    >
+                        <div className="p-3 space-y-1.5">
+                            <div className="flex items-center gap-2">
+                                <img
+                                    src={fonte.favicon || `https://www.google.com/s2/favicons?domain=${new URL(fonte.url).hostname}&sz=32`}
+                                    alt=""
+                                    className="w-4 h-4 rounded"
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"%23888\"%3E%3Ccircle cx=\"12\" cy=\"12\" r=\"10\"/%3E%3C/svg%3E'
+                                    }}
+                                />
+                                <span className="text-[10px] text-neutral-400 truncate">{fonte.dominio || new URL(fonte.url).hostname}</span>
+                            </div>
+                            <div className="text-xs text-neutral-200 font-semibold leading-snug">
+                                {fonte.title}
+                            </div>
+                            {resumoCurto && (
+                                <div className="text-[11px] text-neutral-400 leading-snug">
+                                    {resumoCurto}
+                                </div>
+                            )}
+                        </div>
+                    </a>
+                </div>
+            )}
+        </span>
+    )
+}
+
+const transformarTextoComFontes = (texto: string, fontes: WebSource[]) => {
+    const regex = /\[\[(fonte|fontes)\s*:\s*([^\]]+)\]\]/gi
+    const partes: React.ReactNode[] = []
+    let ultimoIndice = 0
+    let match: RegExpExecArray | null
+
+    while ((match = regex.exec(texto)) !== null) {
+        if (match.index > ultimoIndice) {
+            partes.push(texto.slice(ultimoIndice, match.index))
+        }
+
+        const nomes = match[2].split(',').map((item) => item.trim()).filter(Boolean)
+        nomes.forEach((nome, idx) => {
+            const fonte = encontrarFonte(nome, fontes)
+            partes.push(<FontePill key={`${match?.index}-${idx}-${nome}`} rotulo={nome} fonte={fonte} />)
+            if (idx < nomes.length - 1) {
+                partes.push(' ')
+            }
+        })
+
+        ultimoIndice = match.index + match[0].length
+    }
+
+    if (ultimoIndice < texto.length) {
+        partes.push(texto.slice(ultimoIndice))
+    }
+
+    return partes
+}
+
+const renderizarNosComFontes = (nos: React.ReactNode, fontes: WebSource[]): React.ReactNode => {
+    return React.Children.map(nos, (no) => {
+        if (typeof no === 'string') {
+            return transformarTextoComFontes(no, fontes)
+        }
+        if (React.isValidElement(no) && no.props?.children) {
+            const filhos = renderizarNosComFontes(no.props.children, fontes)
+            return React.cloneElement(no, { ...no.props, children: filhos })
+        }
+        return no
+    })
 }
 
 // Sidebar Item Component
@@ -74,7 +206,10 @@ const MessageActions: React.FC<{
     onRegenerate: () => void
     copied: boolean
     canRegenerate: boolean
-}> = ({ onCopy, onRegenerate, copied, canRegenerate }) => (
+    sources?: WebSource[]
+    sourcesExpanded?: boolean
+    onToggleSources?: () => void
+}> = ({ onCopy, onRegenerate, copied, canRegenerate, sources, sourcesExpanded, onToggleSources }) => (
     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <button
             onClick={onCopy}
@@ -91,6 +226,65 @@ const MessageActions: React.FC<{
             >
                 <RefreshCw size={14} />
             </button>
+        )}
+        {sources && sources.length > 0 && (
+            <div className="relative">
+                <button
+                    onClick={onToggleSources}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-neutral-800 hover:bg-neutral-700 border border-white/10 transition-colors"
+                    title="Ver fontes"
+                >
+                    <div className="flex -space-x-1">
+                        {sources.slice(0, 3).map((source, idx) => (
+                            <img
+                                key={idx}
+                                src={source.favicon || `https://www.google.com/s2/favicons?domain=${new URL(source.url).hostname}&sz=16`}
+                                alt=""
+                                className="w-4 h-4 rounded-full bg-neutral-700 border border-neutral-600"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23888"%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E'
+                                }}
+                            />
+                        ))}
+                    </div>
+                    <span className="text-xs text-neutral-300">Fontes</span>
+                    <ChevronDown size={12} className={`text-neutral-400 transition-transform ${sourcesExpanded ? 'rotate-180' : ''}`} />
+                </button>
+                
+                <AnimatePresence>
+                    {sourcesExpanded && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -5 }}
+                            className="absolute bottom-full left-0 mb-2 w-64 bg-neutral-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50"
+                        >
+                            <div className="p-2 space-y-1 max-h-48 overflow-y-auto">
+                                {sources.map((source, idx) => (
+                                    <a
+                                        key={idx}
+                                        href={source.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 transition-colors group/source"
+                                    >
+                                        <img
+                                            src={source.favicon || `https://www.google.com/s2/favicons?domain=${new URL(source.url).hostname}&sz=16`}
+                                            alt=""
+                                            className="w-4 h-4 rounded"
+                                            onError={(e) => {
+                                                (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23888"%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E'
+                                            }}
+                                        />
+                                        <span className="text-xs text-neutral-300 truncate flex-1">{source.title || new URL(source.url).hostname}</span>
+                                        <ExternalLink size={12} className="text-neutral-500 opacity-0 group-hover/source:opacity-100 transition-opacity" />
+                                    </a>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
         )}
     </div>
 )
@@ -151,6 +345,10 @@ const ChatWindow: React.FC = () => {
     const [isGenerating, setIsGenerating] = useState(false)
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
     const [pendingScreenshots, setPendingScreenshots] = useState<string[]>([])
+    const [webSearchEnabled, setWebSearchEnabled] = useState(false)
+    const [inputMenuOpen, setInputMenuOpen] = useState(false)
+    const [messageSources, setMessageSources] = useState<Record<string, WebSource[]>>({})
+    const [expandedSources, setExpandedSources] = useState<string | null>(null)
 
     // Assistants hook
     const assistants = useAssistants()
@@ -326,12 +524,72 @@ const ChatWindow: React.FC = () => {
                     return c
                 }))
             } else {
+                // Perform web search if enabled
+                let webSearchContext = ''
+                let searchSources: WebSource[] = []
+                
+                if (webSearchEnabled) {
+                    try {
+                        const query = extractSearchQuery(userMsg.content)
+                        console.log('[ChatWindow] Web search query:', query)
+                        
+                        const searchResponse = await searchWeb(query, 5)
+                        
+                        if (searchResponse.results.length > 0) {
+                            // Fetch content from top results
+                            const enrichedResults = await Promise.all(
+                                searchResponse.results.slice(0, 3).map(async (result) => {
+                                    try {
+                                        if (result.content && result.content.length > 0) {
+                                            return result
+                                        }
+                                        const content = await fetchUrlContent(result.url, 1500)
+                                        return { ...result, content }
+                                    } catch {
+                                        return result
+                                    }
+                                })
+                            )
+                            searchResponse.results = enrichedResults
+                            
+                            webSearchContext = formatSearchResultsForAI(searchResponse)
+                            
+                            // Extract sources for UI
+                            searchSources = searchResponse.results.map(r => {
+                                let dominio = ''
+                                try {
+                                    dominio = new URL(r.url).hostname.replace('www.', '')
+                                } catch {
+                                    dominio = ''
+                                }
+                                return {
+                                    url: r.url,
+                                    title: r.title,
+                                    favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`,
+                                    resumo: r.content && r.content.length > 0 ? r.content : r.snippet,
+                                    nomeFonte: obterNomeFonte(r.url, r.title),
+                                    dominio
+                                }
+                            })
+                            
+                            console.log('[ChatWindow] Web search found', searchSources.length, 'sources')
+                        }
+                    } catch (err) {
+                        console.warn('[ChatWindow] Web search failed:', err)
+                    }
+                }
+                
                 const { systemPrompt: composedPrompt } = await composePrompt({
                     systemPrompt,
                     userProfileContext: getProfileContext(),
                     currentConversationId: convId,
                     currentUserMessage: userMsg.content
                 })
+                
+                // Append web search context to the prompt if available
+                const finalPrompt = webSearchContext 
+                    ? composedPrompt + webSearchContext 
+                    : composedPrompt
 
                 await servico.streamChat(
                     userMsg.content,
@@ -349,9 +607,17 @@ const ChatWindow: React.FC = () => {
                             return c
                         }))
                     },
-                    composedPrompt,
+                    finalPrompt,
                     messages
                 )
+                
+                // Store sources for this message
+                if (searchSources.length > 0) {
+                    setMessageSources(prev => ({
+                        ...prev,
+                        [aiMsgId]: searchSources
+                    }))
+                }
             }
 
             processUserMessageForMemory(
@@ -684,14 +950,16 @@ const ChatWindow: React.FC = () => {
                             </div>
                         </div>
                     ) : (
-                        messages.map((msg, index) => (
-                            <motion.div
-                                key={msg.id}
-                                initial={{ opacity: 0, y: 8 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                            >
+                        messages.map((msg, index) => {
+                            const fontesDaMensagem = messageSources[msg.id] || []
+                            return (
+                                <motion.div
+                                    key={msg.id}
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.2 }}
+                                    className={`flex group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                >
                                 {msg.role === 'assistant' && (
                                     <div className="w-8 h-8 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center shrink-0 mr-3 mt-1">
                                         <Sparkles size={14} className="text-purple-400" />
@@ -713,11 +981,23 @@ const ChatWindow: React.FC = () => {
                                         )}
                                         <ReactMarkdown
                                             components={{
-                                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                                strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+                                                p: ({ children }) => (
+                                                    <p className="mb-2 last:mb-0">
+                                                        {renderizarNosComFontes(children, fontesDaMensagem)}
+                                                    </p>
+                                                ),
+                                                strong: ({ children }) => (
+                                                    <strong className="font-semibold text-white">
+                                                        {renderizarNosComFontes(children, fontesDaMensagem)}
+                                                    </strong>
+                                                ),
                                                 ul: ({ children }) => <ul className="list-disc list-outside ml-4 mb-2 space-y-1 marker:text-purple-400">{children}</ul>,
                                                 ol: ({ children }) => <ol className="list-decimal list-outside ml-4 mb-2 space-y-1 marker:text-purple-400">{children}</ol>,
-                                                li: ({ children }) => <li className="pl-1">{children}</li>,
+                                                li: ({ children }) => (
+                                                    <li className="pl-1">
+                                                        {renderizarNosComFontes(children, fontesDaMensagem)}
+                                                    </li>
+                                                ),
                                                 code: ({ className, children, ...props }) => {
                                                     const match = /language-(\w+)/.exec(className || '')
                                                     const isInline = !match && !String(children).includes('\n')
@@ -748,7 +1028,7 @@ const ChatWindow: React.FC = () => {
                                                 ),
                                                 blockquote: ({ children }) => (
                                                     <blockquote className="border-l-2 border-purple-500/50 pl-3 py-1 my-2 bg-purple-500/5 italic text-white/70 text-sm rounded-r">
-                                                        {children}
+                                                        {renderizarNosComFontes(children, fontesDaMensagem)}
                                                     </blockquote>
                                                 ),
                                             }}
@@ -768,6 +1048,9 @@ const ChatWindow: React.FC = () => {
                                                 onRegenerate={regenerateLastResponse}
                                                 copied={copiedMessageId === msg.id}
                                                 canRegenerate={index === messages.length - 1 && !isGenerating}
+                                                sources={messageSources[msg.id]}
+                                                sourcesExpanded={expandedSources === msg.id}
+                                                onToggleSources={() => setExpandedSources(expandedSources === msg.id ? null : msg.id)}
                                             />
                                         )}
                                     </div>
@@ -778,8 +1061,9 @@ const ChatWindow: React.FC = () => {
                                         <div className="w-3 h-3 rounded-full bg-neutral-500" />
                                     </div>
                                 )}
-                            </motion.div>
-                        ))
+                                </motion.div>
+                            )
+                        })
                     )}
 
 
@@ -807,6 +1091,71 @@ const ChatWindow: React.FC = () => {
                         </div>
                     )}
                     <div className="flex items-center gap-3 bg-neutral-800/50 rounded-2xl border border-white/10 px-4 py-2 focus-within:border-purple-500/50 transition-colors">
+                        {/* Plus Button with Dropdown */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setInputMenuOpen(!inputMenuOpen)}
+                                className={`p-1.5 rounded-lg transition-colors ${inputMenuOpen ? 'bg-white/10 text-white' : 'text-neutral-500 hover:text-white hover:bg-white/10'}`}
+                                title="Opções"
+                            >
+                                <Plus size={18} className={`transition-transform ${inputMenuOpen ? 'rotate-45' : ''}`} />
+                            </button>
+                            
+                            <AnimatePresence>
+                                {inputMenuOpen && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 5 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: 5 }}
+                                        className="absolute bottom-full left-0 mb-2 w-52 bg-neutral-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50"
+                                    >
+                                        <div className="p-1">
+                                            {/* Attach Image */}
+                                            <label className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors">
+                                                <Image size={16} className="text-neutral-400" />
+                                                <span className="text-sm text-neutral-300">Anexar imagem</span>
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    multiple
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const files = Array.from(e.target.files || [])
+                                                        files.forEach(file => {
+                                                            const reader = new FileReader()
+                                                            reader.onload = (ev) => {
+                                                                const base64 = ev.target?.result as string
+                                                                setPendingScreenshots(prev => [...prev, base64])
+                                                            }
+                                                            reader.readAsDataURL(file)
+                                                        })
+                                                        setInputMenuOpen(false)
+                                                    }}
+                                                />
+                                            </label>
+                                            
+                                            {/* Web Search Toggle */}
+                                            <button
+                                                onClick={() => {
+                                                    setWebSearchEnabled(!webSearchEnabled)
+                                                    setInputMenuOpen(false)
+                                                }}
+                                                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <Globe size={16} className={webSearchEnabled ? 'text-green-400' : 'text-neutral-400'} />
+                                                    <span className="text-sm text-neutral-300">Pesquisa na internet</span>
+                                                </div>
+                                                <div className={`w-8 h-4 rounded-full transition-colors ${webSearchEnabled ? 'bg-green-500' : 'bg-neutral-700'}`}>
+                                                    <div className={`w-3 h-3 rounded-full bg-white shadow-sm transition-transform mt-0.5 ${webSearchEnabled ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                        
                         <textarea
                             value={input}
                             onChange={(e) => {
@@ -816,12 +1165,21 @@ const ChatWindow: React.FC = () => {
                                 e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
                             }}
                             onKeyDown={handleKeyDown}
-                            placeholder={pendingScreenshots.length > 0 ? 'Descreva as imagens ou deixe em branco para resumo...' : 'Envie uma mensagem...'}
+                            placeholder={pendingScreenshots.length > 0 ? 'Descreva as imagens ou deixe em branco para resumo...' : (webSearchEnabled ? 'Pergunte algo - pesquisa ativada...' : 'Pergunte alguma coisa...')}
                             disabled={isGenerating}
                             rows={1}
                             className="flex-1 bg-transparent border-none outline-none text-neutral-200 placeholder-neutral-500 text-sm resize-none overflow-y-auto leading-5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent"
                             style={{ minHeight: '20px', maxHeight: '120px' }}
                         />
+                        
+                        {/* Web Search Indicator */}
+                        {webSearchEnabled && (
+                            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/20 border border-green-500/30">
+                                <Globe size={12} className="text-green-400" />
+                                <span className="text-[10px] text-green-400 font-medium">Web</span>
+                            </div>
+                        )}
+                        
                         {isGenerating ? (
                             <button
                                 onClick={stopGeneration}

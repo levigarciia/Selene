@@ -54,6 +54,7 @@ declare global {
             onWhisperDownloadProgress?: (callback: (progress: { percent: number; downloaded: number; total: number }) => void) => (() => void) | void;
             // Web search
             webSearch?: (query: string, maxResults?: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+            webFetchPage?: (url: string) => Promise<{ success: boolean; content?: string; error?: string }>;
             // Open external URL
             openExternal?: (url: string) => Promise<{ success: boolean; error?: string }>;
             
