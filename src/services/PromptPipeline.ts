@@ -151,8 +151,20 @@ export async function composePrompt(context: PromptContext): Promise<ComposedPro
     let additionalTokens = 0
     let hasCrossChatContext = false
     let hasAutoMemories = false
-    // 1. Iniciar com system prompt base
-    let systemPrompt = context.systemPrompt
+    // 1. Iniciar com system prompt base + data atual
+    const now = new Date()
+    const dataAtual = now.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    })
+    const horaAtual = now.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+    
+    let systemPrompt = context.systemPrompt + `\n\n📅 **Data e hora atual:** ${dataAtual}, ${horaAtual}.`
 
     // 2. Adicionar contexto do perfil do usuário (memória persistente existente)
     if (context.userProfileContext && permitirMemoriaPerfil) {
@@ -221,7 +233,20 @@ export function composePromptSync(context: Omit<PromptContext, 'currentUserMessa
     const permitirMemoriasAuto = context.permitirMemoriasAuto ?? true
     const permitirContextoPessoal = context.permitirContextoPessoal ?? true
 
-    let systemPrompt = context.systemPrompt
+    // Adicionar data atual ao prompt
+    const now = new Date()
+    const dataAtual = now.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    })
+    const horaAtual = now.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+    
+    let systemPrompt = context.systemPrompt + `\n\n📅 **Data e hora atual:** ${dataAtual}, ${horaAtual}.`
 
     // Adicionar contexto do perfil
     if (context.userProfileContext && permitirMemoriaPerfil) {

@@ -18,6 +18,11 @@ export interface WebSearchResponse {
     timestamp: number
 }
 
+export interface SearchPlan {
+    query: string
+    statusMessage: string
+}
+
 type RespostaBuscaIpc = { success: boolean; data?: WebSearchResponse; error?: string }
 type RespostaPaginaIpc = { success: boolean; content?: string; error?: string }
 
@@ -388,4 +393,67 @@ export function extractSearchQuery(message: string): string {
     }
     
     return query || message
+}
+
+/**
+ * Generate optimized search query and status message using AI
+ * Now considers the full chat history for better context
+ */
+export async function generateSearchPlanWithAI(
+    userMessage: string,
+    chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+    chatFn: (prompt: string) => Promise<string>
+): Promise<SearchPlan> {
+    // Build conversation context
+    const conversationContext = chatHistory.length > 0
+        ? chatHistory.slice(-6).map(m => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content.substring(0, 200)}`).join('\n')
+        : ''
+
+    const systemPrompt = `Você é um assistente que gera queries otimizadas para busca na web.
+
+${conversationContext ? `**Contexto da conversa:**\n${conversationContext}\n\n` : ''}**Mensagem atual do usuário:** "${userMessage}"
+
+Responda EXATAMENTE no formato JSON:
+{
+  "query": "a query otimizada para buscar no DuckDuckGo em português",
+  "statusMessage": "uma frase natural explicando o que você vai buscar (sem emojis)"
+}
+
+Exemplos de statusMessage BOM:
+- "Vou buscar informações sobre as atividades recentes do presidente Lula."
+- "Deixa eu procurar as últimas cotações do Bitcoin."
+- "Vou pesquisar sobre os vencedores do Oscar 2024."
+
+Exemplos de statusMessage RUIM (não use):
+- "Pesquisando..." ❌
+- "🔍 Buscando na web..." ❌
+- "Buscando cotação atual do Bitcoin..." ❌
+
+REGRAS:
+1. A query deve ser otimizada para buscadores (palavras-chave relevantes)
+2. A statusMessage deve ser uma frase natural em primeira pessoa, como se você estivesse conversando
+3. Considere o contexto da conversa ao gerar a query
+4. Responda APENAS o JSON, nada mais`
+
+    try {
+        const response = await chatFn(systemPrompt)
+        
+        // Parse JSON from response
+        const jsonMatch = response.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]) as SearchPlan
+            return {
+                query: parsed.query || extractSearchQuery(userMessage),
+                statusMessage: parsed.statusMessage || `Vou buscar informações sobre isso.`
+            }
+        }
+    } catch (error) {
+        console.warn('[WebSearch] Failed to generate search plan with AI:', error)
+    }
+    
+    // Fallback to simple extraction
+    return {
+        query: extractSearchQuery(userMessage),
+        statusMessage: `Vou buscar informações sobre isso.`
+    }
 }

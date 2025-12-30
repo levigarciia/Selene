@@ -21,7 +21,9 @@ import { useAssistants } from '../../../hooks/useAssistants'
 import { AssistantsPanel } from './AssistantsPanel'
 import { AssistantEditor } from './AssistantEditor'
 import type { AssistantConfig } from '../../../utils/assistentesPadrao'
-import { searchWeb, formatSearchResultsForAI, fetchUrlContent, extractSearchQuery } from '../../../services/WebSearchService'
+import { searchWeb, formatSearchResultsForAI, fetchUrlContent, generateSearchPlanWithAI } from '../../../services/WebSearchService'
+import { SearchCard } from '../../chat/SearchCard'
+import type { SearchSource } from '../../chat/SearchCard'
 
 // Types
 interface Conversation {
@@ -349,12 +351,14 @@ const ChatWindow: React.FC = () => {
     const [inputMenuOpen, setInputMenuOpen] = useState(false)
     const [messageSources, setMessageSources] = useState<Record<string, WebSource[]>>({})
     const [expandedSources, setExpandedSources] = useState<string | null>(null)
+    const [messageSearchCards, setMessageSearchCards] = useState<Record<string, Array<{ query: string; resultCount: number; sources: SearchSource[]; isSearching: boolean }>>>({})
 
     // Assistants hook
     const assistants = useAssistants()
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
+    const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     // Get current conversation's messages
     const activeConversation = conversations.find(c => c.id === activeConversationId)
@@ -502,6 +506,10 @@ const ChatWindow: React.FC = () => {
         updateConversationMessages(convId, currentMessages)
         setInput('')
         setPendingScreenshots([])
+        // Reset textarea height
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto'
+        }
         setIsGenerating(true)
 
         abortControllerRef.current = new AbortController()
@@ -530,10 +538,43 @@ const ChatWindow: React.FC = () => {
                 
                 if (webSearchEnabled) {
                     try {
-                        const query = extractSearchQuery(userMsg.content)
-                        console.log('[ChatWindow] Web search query:', query)
+                        // Convert messages to chat history format
+                        const chatHistory = messages.map(m => ({
+                            role: m.role as 'user' | 'assistant',
+                            content: m.content
+                        }))
                         
-                        const searchResponse = await searchWeb(query, 5)
+                        // Use AI to generate optimized search query and status message
+                        const searchPlan = await generateSearchPlanWithAI(
+                            userMsg.content,
+                            chatHistory,
+                            async (prompt: string) => {
+                                return await servico.chat(prompt, '', [])
+                            }
+                        )
+                        
+                        console.log('[ChatWindow] AI Search Plan:', searchPlan)
+                        
+                        // Show natural status message and initialize search card
+                        setConversations(prev => prev.map(c => {
+                            if (c.id === convId) {
+                                return {
+                                    ...c,
+                                    messages: c.messages.map(m =>
+                                        m.id === aiMsgId ? { ...m, content: searchPlan.statusMessage } : m
+                                    )
+                                }
+                            }
+                            return c
+                        }))
+                        
+                        // Add search card in "searching" state
+                        setMessageSearchCards(prev => ({
+                            ...prev,
+                            [aiMsgId]: [{ query: searchPlan.query, resultCount: 0, sources: [], isSearching: true }]
+                        }))
+                        
+                        const searchResponse = await searchWeb(searchPlan.query, 5)
                         
                         if (searchResponse.results.length > 0) {
                             // Fetch content from top results
@@ -555,6 +596,13 @@ const ChatWindow: React.FC = () => {
                             webSearchContext = formatSearchResultsForAI(searchResponse)
                             
                             // Extract sources for UI
+                            const cardSources: SearchSource[] = searchResponse.results.map(r => ({
+                                url: r.url,
+                                title: r.title,
+                                favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`,
+                                snippet: r.snippet
+                            }))
+                            
                             searchSources = searchResponse.results.map(r => {
                                 let dominio = ''
                                 try {
@@ -572,8 +620,33 @@ const ChatWindow: React.FC = () => {
                                 }
                             })
                             
+                            // Update search card with results
+                            setMessageSearchCards(prev => ({
+                                ...prev,
+                                [aiMsgId]: [{ query: searchPlan.query, resultCount: searchResponse.results.length, sources: cardSources, isSearching: false }]
+                            }))
+                            
                             console.log('[ChatWindow] Web search found', searchSources.length, 'sources')
+                        } else {
+                            // Update search card to show no results
+                            setMessageSearchCards(prev => ({
+                                ...prev,
+                                [aiMsgId]: [{ query: searchPlan.query, resultCount: 0, sources: [], isSearching: false }]
+                            }))
                         }
+                        
+                        // Clear status message before streaming response
+                        setConversations(prev => prev.map(c => {
+                            if (c.id === convId) {
+                                return {
+                                    ...c,
+                                    messages: c.messages.map(m =>
+                                        m.id === aiMsgId ? { ...m, content: '' } : m
+                                    )
+                                }
+                            }
+                            return c
+                        }))
                     } catch (err) {
                         console.warn('[ChatWindow] Web search failed:', err)
                     }
@@ -966,7 +1039,17 @@ const ChatWindow: React.FC = () => {
                                     </div>
                                 )}
 
-                                <div className={`max-w-[70%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                <div className={`max-w-[70%] min-w-0 flex flex-col overflow-hidden ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                    {/* Search Cards */}
+                                    {msg.role === 'assistant' && messageSearchCards[msg.id]?.map((card, cardIdx) => (
+                                        <SearchCard
+                                            key={`search-${msg.id}-${cardIdx}`}
+                                            query={card.query}
+                                            resultCount={card.resultCount}
+                                            sources={card.sources}
+                                            isSearching={card.isSearching}
+                                        />
+                                    ))}
                                     <div
                                         className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
                                             ? 'bg-purple-600 text-white rounded-tr-sm shadow-md shadow-purple-900/30'
@@ -1002,19 +1085,19 @@ const ChatWindow: React.FC = () => {
                                                     const match = /language-(\w+)/.exec(className || '')
                                                     const isInline = !match && !String(children).includes('\n')
                                                     return isInline ? (
-                                                        <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs font-mono text-purple-200 border border-white/5" {...props}>
+                                                        <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs font-mono text-purple-200 border border-white/5 break-all" {...props}>
                                                             {children}
                                                         </code>
                                                     ) : (
-                                                        <div className="my-3 rounded-lg overflow-hidden border border-white/10 bg-[#0d1117]">
+                                                        <div className="my-3 rounded-lg overflow-hidden border border-white/10 bg-[#0d1117] max-w-full">
                                                             <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/5">
                                                                 <div className="flex items-center gap-1.5">
                                                                     <Terminal size={12} className="text-white/40" />
                                                                     <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider">{match?.[1] || 'code'}</span>
                                                                 </div>
                                                             </div>
-                                                            <div className="p-3 overflow-x-auto">
-                                                                <code className="text-xs font-mono block text-neutral-300" {...props}>
+                                                            <div className="p-3 overflow-x-auto max-w-full">
+                                                                <code className="text-xs font-mono block text-neutral-300 whitespace-pre" {...props}>
                                                                     {children}
                                                                 </code>
                                                             </div>
@@ -1157,6 +1240,7 @@ const ChatWindow: React.FC = () => {
                         </div>
                         
                         <textarea
+                            ref={textareaRef}
                             value={input}
                             onChange={(e) => {
                                 setInput(e.target.value)
