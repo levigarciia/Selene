@@ -4,16 +4,22 @@ export class AudioService {
     private mediaStream: MediaStream | null = null;
     private onDataAvailable: (blob: Blob) => void;
     private onLevel?: (nivel: number) => void;
+    private onBarras?: (barras: number[]) => void;
     private analyser: AnalyserNode | null = null;
     private animationFrame: number | null = null;
     private accSamples: Float32Array[] = [];
     private accLength = 0;
     private readonly accTargetMs = 5000; // flush a cada ~5s
     private nivelSuavizado = 0;
+    private barrasSuavizadas: number[] = [];
+    private freqData: Uint8Array | null = null;
+    private timeData: Uint8Array | null = null;
+    private readonly qtdBarras = 24;
 
-    constructor(onDataAvailable: (blob: Blob) => void, onLevel?: (nivel: number) => void) {
+    constructor(onDataAvailable: (blob: Blob) => void, onLevel?: (nivel: number) => void, onBarras?: (barras: number[]) => void) {
         this.onDataAvailable = onDataAvailable;
         this.onLevel = onLevel;
+        this.onBarras = onBarras;
     }
 
     // Converte Float32 -> PCM16 e gera um WAV pequeno por chunk
@@ -68,28 +74,114 @@ export class AudioService {
         this.accLength = 0;
     }
 
-    async start() {
+    private calcularBarrasFrequencia(dados: Uint8Array, qtd: number): number[] {
+        const barras = new Array(qtd).fill(0);
+        const tamanho = dados.length;
+        if (tamanho === 0) return barras;
+        const passo = Math.max(1, Math.floor(tamanho / qtd));
+        for (let i = 0; i < qtd; i++) {
+            const inicio = i * passo;
+            const fim = Math.min(inicio + passo, tamanho);
+            let soma = 0;
+            for (let j = inicio; j < fim; j++) {
+                soma += dados[j];
+            }
+            const media = soma / Math.max(1, fim - inicio);
+            barras[i] = Math.min(1, media / 255);
+        }
+        return barras;
+    }
+
+    private calcularNivelAudio(dados: Uint8Array): number {
+        let soma = 0;
+        for (let i = 0; i < dados.length; i++) {
+            const valor = (dados[i] - 128) / 128;
+            soma += valor * valor;
+        }
+        return Math.sqrt(soma / dados.length);
+    }
+
+    private suavizarBarras(barras: number[]): number[] {
+        if (!this.barrasSuavizadas.length) {
+            this.barrasSuavizadas = barras.slice();
+            return this.barrasSuavizadas;
+        }
+        for (let i = 0; i < barras.length; i++) {
+            this.barrasSuavizadas[i] = this.barrasSuavizadas[i] * 0.7 + barras[i] * 0.3;
+        }
+        const suavizadas = this.barrasSuavizadas.map((valor, index, lista) => {
+            const anterior = lista[index - 1] ?? valor;
+            const proximo = lista[index + 1] ?? valor;
+            return (anterior + valor + proximo) / 3;
+        });
+        this.barrasSuavizadas = suavizadas;
+        return this.barrasSuavizadas;
+    }
+
+    private iniciarAnaliseVisual() {
+        if (!this.analyser) return;
+        if (!this.freqData) {
+            this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+        }
+        if (!this.timeData) {
+            this.timeData = new Uint8Array(this.analyser.fftSize);
+        }
+
+        const analisar = () => {
+            if (!this.analyser || !this.freqData || !this.timeData) return;
+
+            if (this.onLevel) {
+                this.analyser.getByteTimeDomainData(this.timeData);
+                const rms = this.calcularNivelAudio(this.timeData);
+                this.nivelSuavizado = this.nivelSuavizado * 0.75 + rms * 0.25;
+                this.onLevel(Math.min(1, Math.max(0, this.nivelSuavizado)));
+            }
+
+            if (this.onBarras) {
+                this.analyser.getByteFrequencyData(this.freqData);
+                const barras = this.calcularBarrasFrequencia(this.freqData, this.qtdBarras);
+                this.onBarras(this.suavizarBarras(barras));
+            }
+
+            this.animationFrame = requestAnimationFrame(analisar);
+        };
+
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+        }
+        this.animationFrame = requestAnimationFrame(analisar);
+    }
+
+    async start(microfoneId?: string) {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const restricoesAudio: MediaTrackConstraints = {
+                channelCount: 1,
+                sampleRate: 16000,
+                echoCancellation: true,
+                noiseSuppression: true
+            };
+            if (microfoneId) {
+                restricoesAudio.deviceId = { exact: microfoneId };
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: restricoesAudio });
             this.mediaStream = stream;
             this.audioContext = new AudioContext({ sampleRate: 16000 });
             const source = this.audioContext.createMediaStreamSource(stream);
             this.processor = this.audioContext.createScriptProcessor(8192, 1, 1);
             this.analyser = this.audioContext.createAnalyser();
             this.analyser.fftSize = 256;
+            this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+            this.timeData = new Uint8Array(this.analyser.fftSize);
+
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+            }
 
             this.processor.onaudioprocess = (event) => {
                 const input = event.inputBuffer.getChannelData(0);
                 // Acumula áudio
                 this.accSamples.push(new Float32Array(input));
                 this.accLength += input.length;
-
-                if (this.onLevel) {
-                    const soma = input.reduce((acc, val) => acc + val * val, 0);
-                    const rms = Math.sqrt(soma / input.length);
-                    this.nivelSuavizado = this.nivelSuavizado * 0.8 + rms * 0.2;
-                    this.onLevel(Math.min(1, Math.max(0, this.nivelSuavizado)));
-                }
 
                 const accDurationMs = (this.accLength / this.audioContext!.sampleRate) * 1000;
                 if (this.accLength > 0 && accDurationMs >= this.accTargetMs) {
@@ -98,12 +190,19 @@ export class AudioService {
             };
 
             source.connect(this.analyser);
-            source.connect(this.processor);
+            this.analyser.connect(this.processor);
             this.processor.connect(this.audioContext.destination);
+            this.iniciarAnaliseVisual();
             console.log('Recording started (ScriptProcessor)');
         } catch (error) {
             console.error('Error accessing microphone:', error);
             throw error;
+        }
+    }
+
+    async resumeIfNeeded() {
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            await this.audioContext.resume();
         }
     }
 
@@ -135,6 +234,12 @@ export class AudioService {
         if (this.onLevel) {
             this.onLevel(0);
         }
+        if (this.onBarras) {
+            this.onBarras(new Array(this.qtdBarras).fill(0));
+        }
+        this.barrasSuavizadas = [];
+        this.freqData = null;
+        this.timeData = null;
         console.log('Recording stopped');
     }
 }

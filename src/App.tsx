@@ -34,13 +34,14 @@ function App() {
   const [showPreview, setShowPreview] = useState(true)
   const [mostrarAssistentes, setMostrarAssistentes] = useState(false)
   const [mostrarConfiguracoes, setMostrarConfiguracoes] = useState(false)
-  const [toast, setToast] = useState<{ mensagem: string; tipo?: 'info' | 'erro' } | null>(null)
+  const [toast, setToast] = useState<{ mensagem: string; tipo?: 'info' | 'erro'; posicao?: 'padrao' | 'toolbar' } | null>(null)
   const [debugInteractive, setDebugInteractive] = useState(false)
 
   const [toolbarCollapsed, setToolbarCollapsed] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [chatAberto, setChatAberto] = useState(false)
   const toastTimeoutRef = useRef<number | null>(null)
+  const ultimoErroWhisperRef = useRef<string | null>(null)
 
   const [assistentes, setAssistentes] = useState<AssistenteConfig[]>(() => {
     const salvo = localStorage.getItem('selene_assistentes')
@@ -58,11 +59,11 @@ function App() {
     () => localStorage.getItem('selene_assistente_ativo') || ASSISTENTES_PADRAO[0].id
   )
 
-  const exibirToast = useCallback((mensagem: string, tipo: 'info' | 'erro' = 'info') => {
+  const exibirToast = useCallback((mensagem: string, tipo: 'info' | 'erro' = 'info', posicao: 'padrao' | 'toolbar' = 'padrao') => {
     if (toastTimeoutRef.current) {
       window.clearTimeout(toastTimeoutRef.current)
     }
-    setToast({ mensagem, tipo })
+    setToast({ mensagem, tipo, posicao })
     toastTimeoutRef.current = window.setTimeout(() => setToast(null), 2400)
   }, [])
 
@@ -142,6 +143,17 @@ function App() {
     voiceInput,
     isRecording, transcription, setTranscription, toggleRecording,
   } = appConfig
+
+  useEffect(() => {
+    if (!voiceInput.error) {
+      ultimoErroWhisperRef.current = null
+      return
+    }
+    if (voiceInput.error !== ultimoErroWhisperRef.current) {
+      ultimoErroWhisperRef.current = voiceInput.error
+      exibirToast(voiceInput.error, 'erro', 'toolbar')
+    }
+  }, [voiceInput.error, exibirToast])
 
   const adicionarMensagem = (role: 'user' | 'assistant', content: string) => {
     setMessages(prev => [...prev, {
@@ -531,6 +543,8 @@ function App() {
           menuDropdownRef={menuDropdownRef}
           initialCollapsed={toolbarCollapsed}
           forceCollapse={toolbarCollapsed}
+          nivelAudio={voiceInput.nivelAudio}
+          barrasAudio={voiceInput.barrasAudio}
         />
       )}
 
@@ -579,7 +593,7 @@ function App() {
       />
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80]">
+        <div className={`fixed ${toast.posicao === 'toolbar' ? 'bottom-24' : 'bottom-6'} left-1/2 -translate-x-1/2 z-[90]`}>
           <Toast mensagem={toast.mensagem} tipo={toast.tipo} />
         </div>
       )}

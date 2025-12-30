@@ -689,6 +689,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         onInitialize={voiceInput.initializeWhisper}
                         isRecording={voiceInput.isRecording}
                         error={voiceInput.error}
+                        microfoneId={voiceInput.microfoneId}
+                        onMicrofoneChange={voiceInput.setMicrofoneId}
                     />
                 )}
                 

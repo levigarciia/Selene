@@ -17,6 +17,7 @@ export interface VoiceInputConfig {
     whisperModel?: WhisperModelSize
     language?: string
     whisperBinaryPath?: string
+    microfoneId?: string
 }
 
 export interface UseVoiceInputReturn {
@@ -41,6 +42,10 @@ export interface UseVoiceInputReturn {
     setWhisperBinaryPath: (path: string) => void
     isWhisperReady: boolean
     initializeWhisper: () => Promise<void>
+    microfoneId: string
+    setMicrofoneId: (microfoneId: string) => void
+    nivelAudio: number
+    barrasAudio: number[]
     
     // Errors
     error: string | null
@@ -48,6 +53,7 @@ export interface UseVoiceInputReturn {
 }
 
 const STORAGE_KEY = 'selene_voice_input_config'
+const QTD_BARRAS_AUDIO = 24
 
 export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn {
     const [isRecording, setIsRecording] = useState(false)
@@ -55,6 +61,10 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
     const [transcription, setTranscription] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [isWhisperReady, setIsWhisperReady] = useState(false)
+    const [nivelAudio, setNivelAudio] = useState(0)
+    const [barrasAudio, setBarrasAudio] = useState<number[]>(
+        () => new Array(QTD_BARRAS_AUDIO).fill(0)
+    )
     
     // Load config from storage
     const [config, setConfig] = useState<VoiceInputConfig>(() => {
@@ -70,7 +80,8 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             provider: 'cloud',
             whisperModel: 'base',
             language: 'pt',
-            whisperBinaryPath: ''
+            whisperBinaryPath: '',
+            microfoneId: ''
         }
     })
     
@@ -84,8 +95,14 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
     const mediaStreamRef = useRef<MediaStream | null>(null)
     const audioContextRef = useRef<AudioContext | null>(null)
     const processorRef = useRef<ScriptProcessorNode | null>(null)
+    const analyserRef = useRef<AnalyserNode | null>(null)
+    const freqDataRef = useRef<Uint8Array | null>(null)
+    const timeDataRef = useRef<Uint8Array | null>(null)
+    const rafAudioRef = useRef<number | null>(null)
     const cleanupListenersRef = useRef<(() => void)[]>([])
     const accumulatedTextRef = useRef<string>('') // Keeps confirmed transcriptions
+    const nivelSuavizadoRef = useRef(0)
+    const barrasSuavizadasRef = useRef<number[]>([])
     
     // Update AI service ref
     useEffect(() => {
@@ -219,9 +236,48 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             audioServiceRef.current = new AudioService((blob: Blob) => {
                 chunksRef.current.push(blob)
                 void handleCloudTranscription(blob)
-            })
+            }, (nivel) => setNivelAudio(nivel), (barras) => setBarrasAudio(barras))
         }
     }, [config.provider, handleCloudTranscription])
+
+    const calcularBarrasFrequencia = useCallback((dados: Uint8Array, qtd: number): number[] => {
+        const barras = new Array(qtd).fill(0)
+        const tamanho = dados.length
+        if (!tamanho) return barras
+        const passo = Math.max(1, Math.floor(tamanho / qtd))
+        for (let i = 0; i < qtd; i++) {
+            const inicio = i * passo
+            const fim = Math.min(inicio + passo, tamanho)
+            let soma = 0
+            for (let j = inicio; j < fim; j++) {
+                soma += dados[j]
+            }
+            const media = soma / Math.max(1, fim - inicio)
+            barras[i] = Math.min(1, media / 255)
+        }
+        return barras
+    }, [])
+
+    const suavizarBarras = useCallback((barras: number[]): number[] => {
+        if (!barrasSuavizadasRef.current.length) {
+            barrasSuavizadasRef.current = barras.slice()
+            return barrasSuavizadasRef.current
+        }
+        barrasSuavizadasRef.current = barrasSuavizadasRef.current.map((valor, index) =>
+            valor * 0.7 + (barras[index] || 0) * 0.3
+        )
+        barrasSuavizadasRef.current = barrasSuavizadasRef.current.map((valor, index, lista) => {
+            const anterior = lista[index - 1] ?? valor
+            const proximo = lista[index + 1] ?? valor
+            return (anterior + valor + proximo) / 3
+        })
+        return barrasSuavizadasRef.current
+    }, [])
+
+    const limparBarrasAudio = useCallback(() => {
+        barrasSuavizadasRef.current = []
+        setBarrasAudio(new Array(QTD_BARRAS_AUDIO).fill(0))
+    }, [])
     
     // Start local streaming recording
     const startLocalStreaming = useCallback(async () => {
@@ -241,7 +297,8 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                     channelCount: 1,
                     sampleRate: 16000,
                     echoCancellation: true,
-                    noiseSuppression: true
+                    noiseSuppression: true,
+                    ...(config.microfoneId ? { deviceId: { exact: config.microfoneId } } : {})
                 }
             })
             mediaStreamRef.current = stream
@@ -262,10 +319,19 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             // Create audio context
             audioContextRef.current = new AudioContext({ sampleRate: 16000 })
             const source = audioContextRef.current.createMediaStreamSource(stream)
-            
+            const analyser = audioContextRef.current.createAnalyser()
+            analyser.fftSize = 256
+            analyserRef.current = analyser
+            freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
+            timeDataRef.current = new Uint8Array(analyser.fftSize)
+
             // Create processor to capture audio data
             const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1)
             processorRef.current = processor
+
+            if (audioContextRef.current.state === 'suspended') {
+                await audioContextRef.current.resume()
+            }
             
             processor.onaudioprocess = (e) => {
                 if (!sessionIdRef.current) return
@@ -288,8 +354,34 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 })
             }
             
-            source.connect(processor)
+            source.connect(analyser)
+            analyser.connect(processor)
             processor.connect(audioContextRef.current.destination)
+
+            const atualizarVisual = () => {
+                if (!analyserRef.current || !freqDataRef.current || !timeDataRef.current) return
+
+                analyserRef.current.getByteTimeDomainData(timeDataRef.current)
+                let soma = 0
+                for (let i = 0; i < timeDataRef.current.length; i++) {
+                    const valor = (timeDataRef.current[i] - 128) / 128
+                    soma += valor * valor
+                }
+                const rms = Math.sqrt(soma / timeDataRef.current.length)
+                nivelSuavizadoRef.current = nivelSuavizadoRef.current * 0.75 + rms * 0.25
+                setNivelAudio(Math.min(1, Math.max(0, nivelSuavizadoRef.current)))
+
+                analyserRef.current.getByteFrequencyData(freqDataRef.current)
+                const barras = calcularBarrasFrequencia(freqDataRef.current, QTD_BARRAS_AUDIO)
+                setBarrasAudio(suavizarBarras(barras))
+
+                rafAudioRef.current = requestAnimationFrame(atualizarVisual)
+            }
+
+            if (rafAudioRef.current) {
+                cancelAnimationFrame(rafAudioRef.current)
+            }
+            rafAudioRef.current = requestAnimationFrame(atualizarVisual)
             
             setIsRecording(true)
             console.log('[useVoiceInput] Local streaming started, session:', sessionResult.sessionId)
@@ -303,9 +395,15 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 mediaStreamRef.current.getTracks().forEach(track => track.stop())
                 mediaStreamRef.current = null
             }
+            setNivelAudio(0)
+            limparBarrasAudio()
+            if (rafAudioRef.current) {
+                cancelAnimationFrame(rafAudioRef.current)
+                rafAudioRef.current = null
+            }
             throw e
         }
-    }, [config.whisperModel, config.language])
+    }, [config.whisperModel, config.language, config.microfoneId, calcularBarrasFrequencia, suavizarBarras, limparBarrasAudio])
     
     // Stop local streaming recording
     const stopLocalStreaming = useCallback(async () => {
@@ -320,6 +418,9 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 await audioContextRef.current.close()
                 audioContextRef.current = null
             }
+            analyserRef.current = null
+            freqDataRef.current = null
+            timeDataRef.current = null
             
             // Stop media stream
             if (mediaStreamRef.current) {
@@ -334,6 +435,12 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             
             sessionIdRef.current = null
             setIsRecording(false)
+            setNivelAudio(0)
+            limparBarrasAudio()
+            if (rafAudioRef.current) {
+                cancelAnimationFrame(rafAudioRef.current)
+                rafAudioRef.current = null
+            }
             
             console.log('[useVoiceInput] Local streaming stopped')
             
@@ -341,8 +448,14 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             console.error('[useVoiceInput] Failed to stop local streaming:', e)
             setError(e.message || 'Falha ao parar gravação')
             setIsRecording(false)
+            setNivelAudio(0)
+            limparBarrasAudio()
+            if (rafAudioRef.current) {
+                cancelAnimationFrame(rafAudioRef.current)
+                rafAudioRef.current = null
+            }
         }
-    }, [])
+    }, [limparBarrasAudio])
     
     // Toggle recording
     const toggleRecording = useCallback(async () => {
@@ -358,7 +471,7 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             } else {
                 // Use cloud mode
                 try {
-                    await audioServiceRef.current?.start()
+                    await audioServiceRef.current?.start(config.microfoneId)
                     setIsRecording(true)
                 } catch (e: any) {
                     console.error('[useVoiceInput] Failed to start recording:', e)
@@ -372,15 +485,19 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             } else {
                 audioServiceRef.current?.stop()
                 setIsRecording(false)
+                setNivelAudio(0)
+                limparBarrasAudio()
             }
         }
-    }, [isRecording, config.provider, startLocalStreaming, stopLocalStreaming])
+    }, [isRecording, config.provider, config.microfoneId, startLocalStreaming, stopLocalStreaming, limparBarrasAudio])
     
     // Set provider
     const setProvider = useCallback((provider: TranscriptionProvider) => {
         setConfig(prev => ({ ...prev, provider }))
         setIsRecording(false)
-    }, [])
+        setNivelAudio(0)
+        limparBarrasAudio()
+    }, [limparBarrasAudio])
     
     // Set Whisper model
     const setWhisperModel = useCallback((model: WhisperModelSize) => {
@@ -390,6 +507,10 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
     // Set binary path
     const setWhisperBinaryPath = useCallback((path: string) => {
         setConfig(prev => ({ ...prev, whisperBinaryPath: path }))
+    }, [])
+
+    const setMicrofoneId = useCallback((microfoneId: string) => {
+        setConfig(prev => ({ ...prev, microfoneId }))
     }, [])
     
     // Clear error
@@ -410,8 +531,26 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             if (audioContextRef.current) {
                 audioContextRef.current.close()
             }
+            if (rafAudioRef.current) {
+                cancelAnimationFrame(rafAudioRef.current)
+                rafAudioRef.current = null
+            }
         }
     }, [])
+
+    useEffect(() => {
+        if (!isRecording) return
+        const intervalo = window.setInterval(() => {
+            if (config.provider === 'cloud') {
+                void audioServiceRef.current?.resumeIfNeeded?.()
+                return
+            }
+            if (audioContextRef.current?.state === 'suspended') {
+                void audioContextRef.current.resume()
+            }
+        }, 1200)
+        return () => window.clearInterval(intervalo)
+    }, [isRecording, config.provider])
     
     return {
         isRecording,
@@ -431,6 +570,10 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         setWhisperBinaryPath,
         isWhisperReady,
         initializeWhisper,
+        microfoneId: config.microfoneId || '',
+        setMicrofoneId,
+        nivelAudio,
+        barrasAudio,
         error,
         clearError
     }

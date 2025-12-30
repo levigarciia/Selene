@@ -6,7 +6,7 @@
 
 import { Buffer } from 'buffer'
 
-export type WhisperModelSize = 'tiny' | 'base' | 'small' | 'medium' | 'large'
+export type WhisperModelSize = 'tiny' | 'base' | 'base-q5' | 'turbo' | 'small' | 'small-q5' | 'medium' | 'medium-q5' | 'large'
 
 export interface WhisperConfig {
     modelSize: WhisperModelSize
@@ -15,12 +15,16 @@ export interface WhisperConfig {
     binaryPath?: string
 }
 
-// Model info for UI
-const MODEL_INFO = {
+// Informacoes do modelo para UI
+const MODEL_INFO: Record<WhisperModelSize, { size: string; desc: string }> = {
     tiny: { size: '~75 MB', desc: 'Fastest, lower accuracy' },
     base: { size: '~145 MB', desc: 'Good balance' },
+    'base-q5': { size: '~57 MB', desc: '⚡ 2x faster than Base' },
+    turbo: { size: '~550 MB', desc: 'High accuracy, faster inference' },
     small: { size: '~480 MB', desc: 'Better accuracy' },
+    'small-q5': { size: '~182 MB', desc: '⚡ 2x faster than Small' },
     medium: { size: '~1.5 GB', desc: 'High accuracy' },
+    'medium-q5': { size: '~514 MB', desc: '⚡ 2x faster than Medium' },
     large: { size: '~3 GB', desc: 'Best accuracy, slowest' }
 }
 

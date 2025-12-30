@@ -17,7 +17,7 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-type WhisperModelSize = 'tiny' | 'base' | 'small' | 'medium' | 'large'
+type WhisperModelSize = 'tiny' | 'base' | 'turbo' | 'small' | 'medium' | 'large'
 
 interface WhisperConfig {
     modelSize: WhisperModelSize
@@ -78,6 +78,7 @@ async function validarBinarioWhisper(caminhoBinario: string): Promise<void> {
 const MODELS: Record<WhisperModelSize, {
     name: string
     url: string
+    fileName: string
     size: number
     sha256: string
     description: string
@@ -85,6 +86,7 @@ const MODELS: Record<WhisperModelSize, {
     tiny: {
         name: 'tiny',
         url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin',
+        fileName: 'ggml-tiny.bin',
         size: 77704715,
         sha256: 'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21',
         description: 'Fastest, lowest accuracy (~75 MB)'
@@ -92,13 +94,23 @@ const MODELS: Record<WhisperModelSize, {
     base: {
         name: 'base',
         url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
+        fileName: 'ggml-base.bin',
         size: 147951465,
         sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe',
         description: 'Good balance (~145 MB)'
     },
+    turbo: {
+        name: 'turbo',
+        url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin',
+        fileName: 'ggml-large-v3-turbo-q5_0.bin',
+        size: 574041195,
+        sha256: '9c7b9c6bf60cf555f34fe7d81e8643764ff03d2f60b6fa550f5630be52eef830',
+        description: 'High accuracy, faster inference (~550 MB)'
+    },
     small: {
         name: 'small',
         url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
+        fileName: 'ggml-small.bin',
         size: 488242353,
         sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b',
         description: 'Higher accuracy (~480 MB)'
@@ -106,6 +118,7 @@ const MODELS: Record<WhisperModelSize, {
     medium: {
         name: 'medium',
         url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
+        fileName: 'ggml-medium.bin',
         size: 1533774781,
         sha256: '6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208',
         description: 'High accuracy (~1.5 GB)'
@@ -113,6 +126,7 @@ const MODELS: Record<WhisperModelSize, {
     large: {
         name: 'large',
         url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin',
+        fileName: 'ggml-large-v3.bin',
         size: 3095033483,
         sha256: '',
         description: 'Best accuracy (~3 GB)'
@@ -150,7 +164,7 @@ function initializePaths(): void {
  */
 function getModelPath(modelSize: WhisperModelSize): string {
     if (!modelsPath) initializePaths()
-    return path.join(modelsPath!, `ggml-${modelSize}.bin`)
+    return path.join(modelsPath!, MODELS[modelSize].fileName)
 }
 
 /**
@@ -181,29 +195,34 @@ function getWhisperBinaryPath(customBinaryPath?: string): string | null {
 
     const platform = process.platform
     const arch = process.arch
-    const binaryName = platform === 'win32' ? 'main.exe' : 'main'
+    const binaryNames = platform === 'win32' ? ['whisper.exe', 'main.exe'] : ['whisper-cli', 'main']
 
     // Possible locations
     const possiblePaths: string[] = []
 
     // In packaged app
     if (app.isPackaged) {
-        possiblePaths.push(
-            path.join(process.resourcesPath, 'whisper-bin', binaryName),
-            path.join(process.resourcesPath, 'app.asar.unpacked', 'native', 'whisper', 'bin', `${platform}-${arch}`, binaryName)
-        )
+        for (const binaryName of binaryNames) {
+            possiblePaths.push(
+                path.join(process.resourcesPath, 'whisper-bin', binaryName),
+                path.join(process.resourcesPath, 'whisper-bin', `${platform}-${arch}`, binaryName),
+                path.join(process.resourcesPath, 'app.asar.unpacked', 'native', 'whisper', 'bin', `${platform}-${arch}`, binaryName)
+            )
+        }
     }
 
     // In development - check node_modules/whisper-node
     const raizWhisperNode = path.join(__dirname, '..', 'node_modules', 'whisper-node')
     const caminhoWhisperNode = path.join(raizWhisperNode, 'lib', 'whisper.cpp')
-    possiblePaths.push(
-        path.join(raizWhisperNode, 'dist', binaryName),
-        path.join(caminhoWhisperNode, 'main'),
-        path.join(caminhoWhisperNode, 'main.exe'),
-        path.join(caminhoWhisperNode, 'out', 'build', 'x64-Release', 'bin', binaryName),
-        path.join(__dirname, '..', 'native', 'whisper', 'bin', `${platform}-${arch}`, binaryName)
-    )
+    for (const binaryName of binaryNames) {
+        possiblePaths.push(
+            path.join(raizWhisperNode, 'dist', binaryName),
+            path.join(caminhoWhisperNode, 'main'),
+            path.join(caminhoWhisperNode, 'main.exe'),
+            path.join(caminhoWhisperNode, 'out', 'build', 'x64-Release', 'bin', binaryName),
+            path.join(__dirname, '..', 'native', 'whisper', 'bin', `${platform}-${arch}`, binaryName)
+        )
+    }
 
     for (const binaryPath of possiblePaths) {
         if (fs.existsSync(binaryPath)) {

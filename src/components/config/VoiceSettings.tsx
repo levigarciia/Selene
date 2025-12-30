@@ -5,7 +5,7 @@
  * supporting cloud and local Whisper transcription with streaming.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     MicOff, Cloud, HardDrive, Check, Loader2,
@@ -43,21 +43,49 @@ interface VoiceSettingsProps {
     onInitialize: () => Promise<void>
     isRecording?: boolean
     error?: string | null
+    microfoneId: string
+    onMicrofoneChange: (microfoneId: string) => void
 }
 
-// Model info with sizes and capabilities
+// Informacoes dos modelos com tamanhos e capacidades
 const MODEL_INFO: Record<WhisperModelSize, { label: string; size: string; quality: string; speed: string }> = {
-    tiny: {
-        label: 'Tiny',
-        size: '~75 MB',
-        quality: 'Básica',
-        speed: 'Muito Rápido'
+    // Quantized models (faster)
+    'base-q5': {
+        label: 'Base Q5 ⚡',
+        size: '~57 MB',
+        quality: 'Boa',
+        speed: '2x Mais Rapido'
     },
+    'small-q5': {
+        label: 'Small Q5 ⚡',
+        size: '~182 MB',
+        quality: 'Muito Boa',
+        speed: '2x Mais Rapido'
+    },
+    'medium-q5': {
+        label: 'Medium Q5 ⚡',
+        size: '~514 MB',
+        quality: 'Excelente',
+        speed: '2x Mais Rapido'
+    },
+    // Standard models
     base: {
         label: 'Base',
         size: '~145 MB',
         quality: 'Boa',
-        speed: 'Rápido'
+        speed: 'Rapido'
+    },
+    turbo: {
+        label: 'Turbo',
+        size: '~550 MB',
+        quality: 'Muito Alta',
+        speed: 'Rapido'
+    },
+    tiny: {
+        label: 'Tiny',
+        size: '~75 MB',
+        quality: 'Basica',
+        speed: 'Muito Rapido'
     },
     small: {
         label: 'Small',
@@ -79,6 +107,10 @@ const MODEL_INFO: Record<WhisperModelSize, { label: string; size: string; qualit
     }
 }
 
+// Ordem de exibição: modelos quantizados primeiro (mais rápidos)
+const ORDEM_MODELOS: WhisperModelSize[] = ['base-q5', 'base', 'turbo', 'small-q5', 'tiny', 'small', 'medium-q5', 'medium', 'large']
+const MODELOS_RECOMENDADOS = new Set<WhisperModelSize>(['base-q5', 'base', 'turbo'])
+
 export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
     provider,
     onProviderChange,
@@ -89,10 +121,15 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
     isWhisperReady,
     onInitialize,
     isRecording,
-    error
+    error,
+    microfoneId,
+    onMicrofoneChange
 }) => {
     const [isInitializing, setIsInitializing] = useState(false)
     const [showModelDropdown, setShowModelDropdown] = useState(false)
+    const [microfones, setMicrofones] = useState<MediaDeviceInfo[]>([])
+    const [carregandoMicrofones, setCarregandoMicrofones] = useState(false)
+    const [erroMicrofones, setErroMicrofones] = useState<string | null>(null)
     
     // Local Whisper Streaming state
     const [models, setModels] = useState<WhisperModel[]>([])
@@ -132,6 +169,30 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
             unsubError()
         }
     }, [])
+
+    const carregarMicrofones = useCallback(async () => {
+        if (!navigator.mediaDevices?.enumerateDevices) return
+        setCarregandoMicrofones(true)
+        setErroMicrofones(null)
+        try {
+            const dispositivos = await navigator.mediaDevices.enumerateDevices()
+            const entradasAudio = dispositivos.filter((dispositivo) => dispositivo.kind === 'audioinput')
+            setMicrofones(entradasAudio)
+        } catch (err) {
+            console.error('[VoiceSettings] Falha ao listar microfones:', err)
+            setErroMicrofones('Não foi possível listar os microfones disponíveis.')
+        } finally {
+            setCarregandoMicrofones(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        carregarMicrofones()
+        navigator.mediaDevices?.addEventListener?.('devicechange', carregarMicrofones)
+        return () => {
+            navigator.mediaDevices?.removeEventListener?.('devicechange', carregarMicrofones)
+        }
+    }, [carregarMicrofones])
     
     const loadLocalWhisperStatus = async () => {
         try {
@@ -195,9 +256,71 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
     
     const currentModelInfo = MODEL_INFO[whisperModel]
     const isLocalStreamingAvailable = localAvailability?.available
+    const modelosOrdenados = [...models].sort((a, b) => {
+        const indiceA = ORDEM_MODELOS.indexOf(a.name as WhisperModelSize)
+        const indiceB = ORDEM_MODELOS.indexOf(b.name as WhisperModelSize)
+        const ordemA = indiceA === -1 ? Number.POSITIVE_INFINITY : indiceA
+        const ordemB = indiceB === -1 ? Number.POSITIVE_INFINITY : indiceB
+        return ordemA - ordemB
+    })
+    const modeloSelecionado = modelosOrdenados.find((model) => model.name === whisperModel)
+    const modeloSelecionadoResolvido = modeloSelecionado || {
+        name: whisperModel,
+        displayName: currentModelInfo.label,
+        size: 0,
+        description: '',
+        ramRequired: '',
+        downloaded: false,
+        downloading: false
+    }
+    const tamanhoModeloSelecionado = modeloSelecionadoResolvido.size > 0
+        ? formatBytes(modeloSelecionadoResolvido.size)
+        : currentModelInfo.size
+    const downloadSelecionado = downloadProgress?.modelName === modeloSelecionadoResolvido.name
+        ? downloadProgress
+        : null
+    const temMicrofones = microfones.length > 0
     
     return (
         <div className="space-y-4">
+            <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase text-neutral-500">
+                    Microfone
+                </label>
+                <div className="flex items-center gap-2">
+                    <select
+                        value={microfoneId}
+                        onChange={(e) => onMicrofoneChange(e.target.value)}
+                        disabled={isRecording || carregandoMicrofones}
+                        className="flex-1 bg-neutral-900/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-purple-400 transition-colors disabled:opacity-60"
+                    >
+                        <option value="">Microfone padrão</option>
+                        {microfones.map((microfone, index) => (
+                            <option key={microfone.deviceId} value={microfone.deviceId}>
+                                {microfone.label || `Microfone ${index + 1}`}
+                            </option>
+                        ))}
+                        {!temMicrofones && (
+                            <option value="" disabled>
+                                Nenhum microfone encontrado
+                            </option>
+                        )}
+                    </select>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            void carregarMicrofones()
+                        }}
+                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-neutral-300 transition-colors"
+                        disabled={carregandoMicrofones}
+                    >
+                        {carregandoMicrofones ? 'Atualizando...' : 'Atualizar'}
+                    </button>
+                </div>
+                {erroMicrofones && (
+                    <p className="text-xs text-amber-300">{erroMicrofones}</p>
+                )}
+            </div>
             {/* Provider Selection */}
             <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase text-neutral-500">
@@ -266,7 +389,7 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
+                        className={showModelDropdown ? 'overflow-visible' : 'overflow-hidden'}
                     >
                         <div className="space-y-3 pt-2">
                             {/* Header */}
@@ -296,104 +419,170 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
                                     </div>
                                 </div>
                             )}
-                            
-                            {/* Models list */}
-                            <div className="space-y-2">
-                                {models.slice(0, 4).map((model) => {
-                                    const isDownloading = downloadProgress?.modelName === model.name
-                                    const isSelected = whisperModel === model.name
-                                    
-                                    return (
-                                        <div
-                                            key={model.name}
-                                            onClick={() => {
-                                                if (model.downloaded && !isRecording) {
-                                                    onModelChange(model.name as WhisperModelSize)
-                                                }
-                                            }}
-                                            className={`p-3 rounded-xl border transition-colors cursor-pointer ${
-                                                isSelected && model.downloaded
-                                                    ? 'bg-purple-500/15 border-purple-500/40 ring-1 ring-purple-500/30'
-                                                    : model.downloaded
-                                                        ? 'bg-green-500/10 border-green-500/30 hover:border-purple-500/30'
-                                                        : 'bg-neutral-800/50 border-white/10'
-                                            } ${!model.downloaded ? 'cursor-not-allowed' : ''}`}
-                                        >
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm font-medium text-white">{model.displayName}</span>
-                                                        {isSelected && model.downloaded && (
-                                                            <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[10px] font-semibold">
-                                                                ATIVO
-                                                            </span>
-                                                        )}
-                                                        {!isSelected && model.downloaded && (
-                                                            <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 text-[10px]">
-                                                                Pronto
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-xs text-neutral-500 mt-0.5">
-                                                        {formatBytes(model.size)} • RAM: {model.ramRequired}
-                                                    </p>
-                                                </div>
-
-                                                <div className="flex items-center gap-2">
-                                                    {isDownloading ? (
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-16 h-1.5 bg-neutral-700 rounded-full overflow-hidden">
-                                                                <motion.div
-                                                                    className="h-full bg-purple-500"
-                                                                    initial={{ width: 0 }}
-                                                                    animate={{ width: `${downloadProgress.percent}%` }}
-                                                                />
-                                                            </div>
-                                                            <span className="text-[10px] text-neutral-400 w-8">
-                                                                {downloadProgress.percent}%
-                                                            </span>
-                                                        </div>
-                                                    ) : model.downloaded ? (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                deleteModel(model.name)
-                                                            }}
-                                                            className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-                                                            title="Excluir modelo"
-                                                        >
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation()
-                                                                downloadModel(model.name)
-                                                            }}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-xs"
-                                                        >
-                                                            <Download className="w-3 h-3" />
-                                                            Baixar
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
+                            {/* Seletor de modelo */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowModelDropdown(!showModelDropdown)}
+                                    className="w-full p-3 rounded-xl border border-white/10 bg-neutral-900/60 hover:bg-white/5 transition-colors flex items-center justify-between gap-3"
+                                >
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
+                                            <Zap className="w-4 h-4 text-purple-300" />
                                         </div>
-                                    )
-                                })}
+                                        <div className="text-left min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium text-white">
+                                                    {modeloSelecionado?.displayName || currentModelInfo.label}
+                                                </span>
+                                                {MODELOS_RECOMENDADOS.has(whisperModel) && (
+                                                    <span className="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-300 text-[10px] uppercase tracking-wide">
+                                                        Recomendado
+                                                    </span>
+                                                )}
+                                                {modeloSelecionado && !modeloSelecionado.downloaded && (
+                                                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px]">
+                                                        Nao baixado
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-neutral-500">
+                                                {currentModelInfo.size} - Qualidade: {currentModelInfo.quality} - Velocidade: {currentModelInfo.speed}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                <AnimatePresence>
+                                    {showModelDropdown && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: 6 }}
+                                            className="mt-2 rounded-xl border border-white/10 bg-neutral-900 shadow-xl z-50 overflow-hidden"
+                                        >
+                                            <div className="max-h-80 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
+                                                {modelosOrdenados.map((model) => {
+                                                    const recomendado = MODELOS_RECOMENDADOS.has(model.name as WhisperModelSize)
+                                                    const selecionado = model.name === whisperModel
+                                                    const indisponivel = !!isRecording
+                                                    return (
+                                                        <button
+                                                            key={`dropdown-${model.name}`}
+                                                            onClick={() => {
+                                                                if (isRecording) return
+                                                                onModelChange(model.name as WhisperModelSize)
+                                                                setShowModelDropdown(false)
+                                                            }}
+                                                            className={`w-full px-4 py-3 text-left transition-colors border-b border-white/5 last:border-b-0 ${
+                                                                selecionado ? 'bg-purple-500/15' : 'hover:bg-white/5'
+                                                            } ${indisponivel ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                                        >
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-sm font-medium text-white">{model.displayName}</span>
+                                                                        {recomendado && (
+                                                                            <span className="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-300 text-[10px] uppercase tracking-wide">
+                                                                                Recomendado
+                                                                            </span>
+                                                                        )}
+                                                                        {selecionado && (
+                                                                            <span className="px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px]">
+                                                                                Atual
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <p className="text-[11px] text-neutral-500 mt-0.5">
+                                                                        {formatBytes(model.size)} - RAM: {model.ramRequired}
+                                                                    </p>
+                                                                </div>
+                                                                {!model.downloaded && (
+                                                                    <span className="text-[10px] text-amber-300">Nao baixado</span>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
-                            
-                            {/* Info Note */}
+
+                            {/* Modelo selecionado */}
+                            {modeloSelecionadoResolvido && (
+                                <div className="p-3 rounded-xl border border-white/10 bg-neutral-900/50">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium text-white">{modeloSelecionadoResolvido.displayName}</span>
+                                                {MODELOS_RECOMENDADOS.has(modeloSelecionadoResolvido.name as WhisperModelSize) && (
+                                                    <span className="px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-300 text-[10px] uppercase tracking-wide">
+                                                        Recomendado
+                                                    </span>
+                                                )}
+                                                {modeloSelecionadoResolvido.name === whisperModel && (
+                                                    <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 text-[10px] font-semibold">
+                                                        ATIVO
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-neutral-500 mt-0.5">
+                                                {tamanhoModeloSelecionado} - RAM: {modeloSelecionadoResolvido.ramRequired || 'N/D'}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            {downloadSelecionado ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-16 h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+                                                        <motion.div
+                                                            className="h-full bg-purple-500"
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${downloadSelecionado.percent}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-[10px] text-neutral-400 w-8">
+                                                        {downloadSelecionado.percent}%
+                                                    </span>
+                                                </div>
+                                            ) : modeloSelecionadoResolvido.downloaded ? (
+                                                <button
+                                                    onClick={() => deleteModel(modeloSelecionadoResolvido.name)}
+                                                    className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                                                    title="Excluir modelo"
+                                                    disabled={isRecording}
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => downloadModel(modeloSelecionadoResolvido.name)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-xs"
+                                                    disabled={isRecording}
+                                                >
+                                                    <Download className="w-3 h-3" />
+                                                    Baixar
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Nota informativa */}
                             <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
                                 <div className="flex gap-2">
-                                    <Radio size={14} className="text-blue-400 flex-shrink-0 mt-0.5" />
+                                    <Radio size={14} className="text-blue-400 shrink-0 mt-0.5" />
                                     <div className="text-xs text-blue-200/80">
-                                        <p className="font-medium mb-1">Transcrição com Streaming</p>
+                                        <p className="font-medium mb-1">Transcrição Otimizada com Streaming</p>
                                         <ul className="list-disc list-inside space-y-0.5 text-blue-200/60">
                                             <li>Funciona 100% offline após download</li>
                                             <li>Transcrição em tempo real enquanto você fala</li>
                                             <li>Detecção automática de pausas (VAD)</li>
-                                            <li>Recomendado: <strong>Base</strong> para uso diário</li>
+                                            <li>Modelos <strong>Q5 ⚡</strong> são 2x mais rápidos!</li>
+                                            <li>Recomendado: <strong>Base Q5</strong> para velocidade máxima</li>
                                         </ul>
                                     </div>
                                 </div>

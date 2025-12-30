@@ -10,3 +10,22 @@ body {
   margin: 0;
   padding: 0;
 }
+
+.onda-audio-barra {
+  transform-origin: center bottom;
+  transition: height 120ms ease-out;
+  animation: onda-audio 1.1s ease-in-out infinite;
+  will-change: transform, height;
+}
+
+@keyframes onda-audio {
+  0% {
+    transform: scaleY(0.92);
+  }
+  50% {
+    transform: scaleY(1.08);
+  }
+  100% {
+    transform: scaleY(0.95);
+  }
+}

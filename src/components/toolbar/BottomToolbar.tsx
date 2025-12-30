@@ -1,5 +1,5 @@
 import { forwardRef, useMemo, useState, type RefObject } from 'react'
-import { Settings, Mic, MicOff, Sparkles, Send, ChevronUp, ChevronDown, Power, PenSquare, Camera, MessageSquare, X } from 'lucide-react'
+import { Settings, Mic, Sparkles, Send, ChevronUp, ChevronDown, Power, PenSquare, Camera, MessageSquare, X } from 'lucide-react'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
 
 interface BottomToolbarProps {
@@ -10,6 +10,8 @@ interface BottomToolbarProps {
     handleChat: () => void
     handleAnalyze: () => void
     aoPerguntarScreenshot: () => void
+    nivelAudio?: number
+    barrasAudio?: number[]
     pendingScreenshots?: string[]
     onDeleteScreenshot?: (index: number) => void
     aoAbrirAssistentes: () => void
@@ -30,6 +32,8 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     handleChat,
     handleAnalyze,
     aoPerguntarScreenshot,
+    nivelAudio,
+    barrasAudio,
     pendingScreenshots,
     onDeleteScreenshot,
     aoAbrirAssistentes,
@@ -52,10 +56,25 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
 
     const [menuAberto, setMenuAberto] = useState(false)
     const dragControls = useDragControls()
-    const barrasWave = useMemo(() => Array.from({ length: 20 }, (_, index) => ({
-        delay: (index % 6) * 0.08,
-        escala: 0.5 + (index % 5) * 0.08
+    const nivelAudioNormalizado = Math.min(1, Math.max(0, nivelAudio || 0))
+    const barrasWave = useMemo(() => Array.from({ length: 24 }, (_, index) => ({
+        id: index,
+        altura: 6 + (index % 5) * 2,
+        seed: Math.random(),
+        fase: Math.random() * Math.PI * 2,
+        vel1: 0.6 + Math.random() * 0.9,
+        vel2: 1.2 + Math.random() * 1.3,
+        peso: 0.6 + Math.random() * 0.9,
+        delay: (index % 8) * 0.05,
+        duracao: 0.9 + (index % 6) * 0.12
     })), [])
+    const barrasAtuais = barrasAudio && barrasAudio.length === barrasWave.length
+        ? barrasAudio
+        : barrasWave.map(() => 0)
+    const mediaAudio = barrasAtuais.reduce((acc, valor) => acc + valor, 0) / barrasAtuais.length
+    const nivelAudioAmplificado = Math.min(1, Math.pow(Math.max(mediaAudio, nivelAudioNormalizado) * 4, 0.65))
+    const opacidadeWave = 0.25 + nivelAudioAmplificado * 0.7
+    const tempoOscilacao = performance.now() / 1000
 
     const acionarEAbrir = (acao: () => void) => {
         setMenuAberto(false)
@@ -111,15 +130,15 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                             className="flex flex-col"
                         >
                             <div className="p-3 flex items-center gap-3 relative">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={toggleRecording}
-                                        className={`p-3 rounded-xl transition-all ${isRecording
-                                            ? 'bg-red-500 text-white shadow-lg shadow-red-500/20 animate-pulse'
-                                            : 'bg-white/10 text-white/70 hover:bg-white/15 hover:text-white'}`}
-                                    >
-                                        {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
-                                    </button>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {!isRecording && (
+                                        <button
+                                            onClick={toggleRecording}
+                                            className="p-3 rounded-xl transition-all bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
+                                        >
+                                            <Mic size={20} />
+                                        </button>
+                                    )}
 
                                     <button
                                         onClick={aoPerguntarScreenshot}
@@ -130,32 +149,41 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                                     </button>
                                 </div>
 
-                                <div className="flex-1 relative bg-white/5 rounded-xl border border-white/5 focus-within:border-white/20 transition-colors">
+                                <div className="flex-1 min-w-0 relative bg-white/5 rounded-xl border border-white/5 focus-within:border-white/20 transition-colors">
                                     {isRecording ? (
-                                        <div className="h-14 flex items-center px-4 gap-3">
-                                            <div className="flex-1 flex items-center gap-1 h-10">
-                                                {barrasWave.map((barra, index) => (
-                                                    <motion.div
-                                                        key={`wave-${index}`}
-                                                        className="w-1 rounded-full bg-white/60"
-                                                        initial={{ scaleY: 0.4 }}
-                                                        animate={{ scaleY: [barra.escala, 1.4, 0.6] }}
-                                                        transition={{
-                                                            repeat: Infinity,
-                                                            repeatType: 'mirror',
-                                                            duration: 1.2,
-                                                            ease: 'easeInOut',
-                                                            delay: barra.delay
-                                                        }}
-                                                        style={{ transformOrigin: 'center bottom' }}
-                                                    />
-                                                ))}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shadow-inner shadow-white/20">
-                                                    <Mic size={18} className="text-white" />
+                                        <div className="h-14 flex items-center justify-center px-4 relative">
+                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                <div
+                                                    className="w-full max-w-[320px] flex items-end justify-center gap-1.5"
+                                                    style={{ opacity: opacidadeWave }}
+                                                >
+                                                    {barrasWave.map((barra) => {
+                                                        const variacao =
+                                                            0.6 +
+                                                            0.22 * Math.sin(tempoOscilacao * barra.vel1 + barra.fase) +
+                                                            0.18 * Math.sin(tempoOscilacao * barra.vel2 + barra.fase * 1.7)
+                                                        const altura = barra.altura + (8 + nivelAudioAmplificado * 90) * barra.peso * variacao
+                                                        return (
+                                                            <div
+                                                                key={`wave-${barra.id}`}
+                                                                className="onda-audio-barra w-1 rounded-full bg-white/70"
+                                                                style={{
+                                                                    height: `${altura}px`,
+                                                                    animationDelay: `${barra.delay}s`,
+                                                                    animationDuration: `${barra.duracao}s`
+                                                                }}
+                                                            />
+                                                        )
+                                                    })}
                                                 </div>
-                                                <span className="text-xs text-white/60 whitespace-nowrap">Gravando... transcricao no preview.</span>
+                                            </div>
+                                            <div className="relative w-14 h-14 flex items-center justify-center">
+                                                <button
+                                                    onClick={toggleRecording}
+                                                    className="relative z-10 w-11 h-11 rounded-full bg-red-500/80 text-white shadow-lg shadow-red-500/30 flex items-center justify-center"
+                                                >
+                                                    <Mic size={18} />
+                                                </button>
                                             </div>
                                         </div>
                                     ) : (
@@ -215,7 +243,7 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                                     )}
                                 </div>
 
-                                <div className="relative">
+                                <div className="relative shrink-0">
                                     <button
                                         onClick={() => setMenuAberto((estado) => !estado)}
                                         className={`flex items-center gap-2 p-3 rounded-xl transition-colors border ${menuAberto

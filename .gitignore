@@ -25,6 +25,7 @@ release
 *.njsproj
 *.sln
 *.sw?
+.agent/*
 
 # Build resources (certificates)
 build-resources/*.p12

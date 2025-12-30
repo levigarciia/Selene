@@ -53,6 +53,7 @@ export class LocalWhisperService {
         if (app.isPackaged) {
             possiblePaths.push(
                 path.join(process.resourcesPath, 'whisper-bin', binaryName),
+                path.join(process.resourcesPath, 'whisper-bin', `${platform}-${arch}`, binaryName),
                 path.join(process.resourcesPath, 'app.asar.unpacked', 'native', 'whisper', 'bin', `${platform}-${arch}`, binaryName)
             )
         }

@@ -1,6 +1,7 @@
 /**
  * WhisperSession
  * Manages a single local transcription session with sliding window audio processing
+ * Uses double buffering to avoid losing audio during transcription
  * Runs in Electron main process
  */
 
@@ -17,11 +18,12 @@ const BYTES_PER_SAMPLE = 2 // 16-bit PCM
 const CHANNELS = 1 // Mono
 
 // Timing constants (in samples)
-const WINDOW_DURATION_SEC = 2 // Process 2 seconds at a time for faster response
-const OVERLAP_DURATION_SEC = 0.3 // 0.3 second overlap between windows
+const WINDOW_DURATION_SEC = 1.0 // Process 1 second at a time for faster feedback
+const OVERLAP_DURATION_SEC = 0.15 // 0.15 second overlap between windows
 const MIN_AUDIO_DURATION_SEC = 0.3 // Minimum audio to process
-const VAD_SILENCE_THRESHOLD = 100 // RMS threshold for silence detection (lowered for better sensitivity)
-const VAD_SILENCE_DURATION_MS = 600 // Wait for silence before completing utterance
+const VAD_SILENCE_THRESHOLD = 100 // RMS threshold for silence detection
+const VAD_SILENCE_DURATION_MS = 400 // Wait for silence before completing utterance (reduced from 600)
+const CONTINUOUS_PROCESSING_INTERVAL_MS = 1200 // Process every 1.2s even while speaking
 
 const WINDOW_SAMPLES = WINDOW_DURATION_SEC * SAMPLE_RATE
 const OVERLAP_SAMPLES = OVERLAP_DURATION_SEC * SAMPLE_RATE
@@ -55,9 +57,12 @@ export class WhisperSession extends EventEmitter {
     private binaryPath: string
     private language: string
     private noGpu: boolean
+    private modelSizeBytes: number
     
-    // Audio buffer
-    private audioBuffer: Buffer = Buffer.alloc(0)
+    // Audio buffers (double buffering to avoid losing audio during processing)
+    private bufferA: Buffer = Buffer.alloc(0)
+    private bufferB: Buffer = Buffer.alloc(0)
+    private activeBuffer: 'A' | 'B' = 'A'
     private totalSamplesReceived = 0
     
     // VAD state
@@ -65,6 +70,7 @@ export class WhisperSession extends EventEmitter {
     private isSpeaking = false
     private silenceStartTime: number | null = null
     private hadSpeechSinceLastProcess = false
+    private lastProcessTime = Date.now() // Track last processing for continuous mode
     
     // Processing state
     private isProcessing = false
@@ -90,6 +96,7 @@ export class WhisperSession extends EventEmitter {
         this.language = config.language || 'auto'
         this.speakerLabel = config.speakerLabel || null
         this.noGpu = config.noGpu || false
+        this.modelSizeBytes = this.obterTamanhoModelo()
         
         this.tempDir = path.join(os.tmpdir(), 'selene-whisper')
         if (!fs.existsSync(this.tempDir)) {
@@ -104,6 +111,49 @@ export class WhisperSession extends EventEmitter {
             ? `[WhisperSession:${this.speakerLabel}:${this.sessionId.slice(0, 8)}]`
             : `[WhisperSession:${this.sessionId.slice(0, 8)}]`
         console.log(`${prefix} ${message}`)
+    }
+
+    private obterTamanhoModelo(): number {
+        try {
+            const stats = fs.statSync(this.modelPath)
+            return stats.size
+        } catch {
+            return 0
+        }
+    }
+
+    /**
+     * Get the currently active audio buffer
+     */
+    private get audioBuffer(): Buffer {
+        return this.activeBuffer === 'A' ? this.bufferA : this.bufferB
+    }
+
+    /**
+     * Set the currently active audio buffer
+     */
+    private set audioBuffer(value: Buffer) {
+        if (this.activeBuffer === 'A') {
+            this.bufferA = value
+        } else {
+            this.bufferB = value
+        }
+    }
+
+    /**
+     * Swap buffers - call before processing to avoid losing incoming audio
+     * Returns the buffer that should be processed
+     */
+    private swapBuffers(): Buffer {
+        const bufferToProcess = this.audioBuffer
+        this.activeBuffer = this.activeBuffer === 'A' ? 'B' : 'A'
+        // Reset the new active buffer
+        if (this.activeBuffer === 'A') {
+            this.bufferA = Buffer.alloc(0)
+        } else {
+            this.bufferB = Buffer.alloc(0)
+        }
+        return bufferToProcess
     }
 
     /**
@@ -173,12 +223,22 @@ export class WhisperSession extends EventEmitter {
         // Check if we should process
         const bufferSamples = this.audioBuffer.length / BYTES_PER_SAMPLE
         const hasEnoughAudio = bufferSamples >= WINDOW_SAMPLES
-        const shouldProcess =
-            (hasEnoughAudio && this.hadSpeechSinceLastProcess && !this.isSpeaking) ||
-            (bufferSamples >= WINDOW_SAMPLES * 2) // Force process if buffer gets too large
+        const timeSinceLastProcess = now - this.lastProcessTime
+        
+        // Process conditions:
+        // 1. Buffer full + stopped speaking (original behavior)
+        // 2. Buffer full + speaking for too long (continuous processing during speech)
+        // 3. Buffer overflowing (safety)
+        const shouldProcessNormal = hasEnoughAudio && this.hadSpeechSinceLastProcess && !this.isSpeaking
+        const shouldProcessContinuous = hasEnoughAudio && this.isSpeaking && timeSinceLastProcess >= CONTINUOUS_PROCESSING_INTERVAL_MS
+        const shouldProcessOverflow = bufferSamples >= WINDOW_SAMPLES * 2
+        
+        const shouldProcess = shouldProcessNormal || shouldProcessContinuous || shouldProcessOverflow
 
         if (shouldProcess && !this.isProcessing) {
-            this.log(`Starting processing: samples=${bufferSamples}, speaking=${this.isSpeaking}, hadSpeech=${this.hadSpeechSinceLastProcess}`)
+            const reason = shouldProcessNormal ? 'silence' : shouldProcessContinuous ? 'continuous' : 'overflow'
+            this.log(`Starting processing (${reason}): samples=${bufferSamples}, speaking=${this.isSpeaking}, timeSinceProcess=${timeSinceLastProcess}ms`)
+            this.lastProcessTime = now
             this.processAudioWindow()
         }
     }
@@ -366,12 +426,14 @@ export class WhisperSession extends EventEmitter {
                 return
             }
 
+            const numThreads = Math.max(2, os.cpus().length - 2) // Use most CPUs
             const args = [
                 '-m', this.modelPath,
                 '-f', audioFile,
                 '--no-timestamps',
                 '-nt',
-                '--print-progress', 'false'
+                '--print-progress', 'false',
+                '-t', String(numThreads) // Use multiple threads for faster processing
             ]
 
             if (this.language && this.language !== 'auto') {
@@ -382,9 +444,13 @@ export class WhisperSession extends EventEmitter {
                 args.push('--no-gpu')
             }
 
+            const timeoutPorModeloMs = this.modelSizeBytes > 0
+                ? Math.min(300000, Math.round((this.modelSizeBytes / (1024 * 1024)) * 250))
+                : 0
             const timeoutMs = Math.max(
                 WHISPER_TIMEOUT_MIN_MS,
-                Math.round((audioDurationMs / 1000) * WHISPER_TIMEOUT_PER_SEC_MULTIPLIER_MS)
+                Math.round((audioDurationMs / 1000) * WHISPER_TIMEOUT_PER_SEC_MULTIPLIER_MS),
+                timeoutPorModeloMs
             )
 
             this.log(`Running whisper, audio=${audioDurationMs}ms, timeout=${timeoutMs}ms`)
