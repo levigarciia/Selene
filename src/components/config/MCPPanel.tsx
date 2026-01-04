@@ -485,6 +485,11 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
     const [showAddModal, setShowAddModal] = useState(false)
     const [loading, setLoading] = useState(false)
 
+    // Modal de aviso MCP em desenvolvimento
+    const [showWarningModal, setShowWarningModal] = useState(() => {
+        return localStorage.getItem('selene_mcp_warning_dismissed') !== 'true'
+    })
+
     // Marketplace state
     const [registryServers, setRegistryServers] = useState<DockerMCPServer[]>([])
     const [filteredServers, setFilteredServers] = useState<DockerMCPServer[]>([])
@@ -969,6 +974,56 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
             className="absolute inset-0 bg-[#0a0a0c] z-20 flex flex-col pointer-events-auto"
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
+            {/* Modal de Aviso - Feature em Desenvolvimento */}
+            <AnimatePresence>
+                {showWarningModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-neutral-900 border border-white/10 rounded-2xl p-6 max-w-md mx-4 shadow-2xl"
+                        >
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2.5 rounded-xl bg-amber-500/20">
+                                    <AlertCircle size={22} className="text-amber-400" />
+                                </div>
+                                <h3 className="text-lg font-semibold text-white">Feature em Desenvolvimento</h3>
+                            </div>
+
+                            <p className="text-neutral-300 text-sm leading-relaxed mb-6">
+                                A conexão com servidores MCP ainda está em desenvolvimento.
+                                Algumas funcionalidades podem não funcionar como esperado.
+                                <span className="text-amber-400 font-medium"> Prossiga com cuidado.</span>
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                <button
+                                    onClick={() => setShowWarningModal(false)}
+                                    className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+                                >
+                                    Entendi, continuar
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        localStorage.setItem('selene_mcp_warning_dismissed', 'true')
+                                        setShowWarningModal(false)
+                                    }}
+                                    className="w-full py-2 px-4 rounded-xl text-neutral-500 hover:text-neutral-300 text-sm transition-colors"
+                                >
+                                    Não me avise novamente
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Header */}
             <div className="flex-none h-14 flex items-center justify-between px-5 border-b border-white/5">
                 <div className="flex items-center gap-3">
