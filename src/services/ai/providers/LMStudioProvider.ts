@@ -93,4 +93,34 @@ export class LMStudioProvider implements AIProvider {
             throw e
         }
     }
+
+    async streamAnalisarImagem(pergunta: string, dataUrl: string, onChunk: (chunk: string) => void): Promise<void> {
+        if (!this.client) throw new Error('LM Studio não configurado.')
+        
+        const conteudo = [
+            { type: 'text', text: pergunta },
+            { type: 'image_url', image_url: { url: dataUrl } }
+        ]
+
+        try {
+            const stream = await this.client.chat.completions.create({
+                model: this.model,
+                messages: [
+                    { role: 'system', content: 'Analise a imagem e responda em português do Brasil.' },
+                    { role: 'user', content: conteudo as any }
+                ],
+                stream: true
+            })
+
+            for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content
+                if (content) {
+                    onChunk(content)
+                }
+            }
+        } catch (e) {
+            console.error('Erro streaming imagem LM Studio', e)
+            throw e
+        }
+    }
 }

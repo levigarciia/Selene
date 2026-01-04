@@ -95,6 +95,38 @@ export class OpenAIProvider implements AIProvider {
         }
     }
 
+    async streamAnalisarImagem(pergunta: string, dataUrl: string, onChunk: (chunk: string) => void): Promise<void> {
+        if (!this.client) throw new Error('OpenAI não configurado.')
+        
+        const conteudo = [
+            { type: 'text', text: pergunta },
+            { type: 'image_url', image_url: { url: dataUrl } }
+        ]
+
+        try {
+            const stream = await this.client.chat.completions.create({
+                model: this.model,
+                max_tokens: 800,
+                messages: [
+                    { role: 'system', content: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.' },
+                    { role: 'user', content: conteudo as any }
+                ],
+                stream: true
+            })
+
+            for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content
+                if (content) {
+                    onChunk(content)
+                }
+            }
+        } catch (error: any) {
+            console.error('Erro streaming imagem OpenAI:', error)
+            if (this.ehRateLimit(error)) throw new Error('Limite ou créditos esgotados na OpenAI.')
+            throw error
+        }
+    }
+
     private ehRateLimit(err: any) {
         const status = err?.status || err?.statusCode || err?.code
         const mensagem = (err?.message || `${err || ''}`).toLowerCase()

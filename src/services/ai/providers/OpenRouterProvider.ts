@@ -111,6 +111,36 @@ export class OpenRouterProvider implements AIProvider {
         }
     }
 
+    async streamAnalisarImagem(pergunta: string, dataUrl: string, onChunk: (chunk: string) => void): Promise<void> {
+        if (!this.client) throw new Error('OpenRouter não configurado.')
+        
+        const conteudo = [
+            { type: 'text', text: pergunta },
+            { type: 'image_url', image_url: { url: dataUrl } }
+        ]
+
+        try {
+            const stream = await this.client.chat.completions.create({
+                model: this.model,
+                messages: [
+                    { role: 'system', content: 'Analise a imagem e responda em português do Brasil.' },
+                    { role: 'user', content: conteudo as any }
+                ],
+                stream: true
+            })
+
+            for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content
+                if (content) {
+                    onChunk(content)
+                }
+            }
+        } catch (e) {
+            console.error('Falha streaming imagem OpenRouter', e)
+            throw e
+        }
+    }
+
     private async blobToBase64(blob: Blob): Promise<string> {
         const buffer = await blob.arrayBuffer()
         const bytes = new Uint8Array(buffer)

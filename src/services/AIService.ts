@@ -91,6 +91,26 @@ export class AIService {
     return this.activeProvider.analisarImagem(pergunta, dataUrl)
   }
 
+  async streamAnalisarImagem(
+    pergunta: string,
+    dataUrl: string,
+    onChunk: (chunk: string) => void
+  ): Promise<void> {
+    console.log('[AIService] streamAnalisarImagem called, provider:', this.activeProviderId)
+    
+    // Check if active provider supports streaming
+    const provider = this.activeProvider
+    if (typeof provider.streamAnalisarImagem === 'function') {
+      console.log('[AIService] Using streaming for image analysis')
+      return provider.streamAnalisarImagem(pergunta, dataUrl, onChunk)
+    }
+    
+    // Fallback to non-streaming
+    console.log('[AIService] Fallback to non-streaming image analysis')
+    const result = await provider.analisarImagem(pergunta, dataUrl)
+    onChunk(result)
+  }
+
   async analyze(texto: string): Promise<string> {
     const mensagens: MensagemChat[] = [
       { role: 'system', content: 'Você é uma assistente clara. Resuma a transcrição a seguir em português.' },

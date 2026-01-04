@@ -1,6 +1,8 @@
-import { forwardRef, useMemo, useState, type RefObject } from 'react'
-import { Settings, Mic, Sparkles, Send, ChevronUp, ChevronDown, Power, PenSquare, Camera, MessageSquare, X } from 'lucide-react'
+import { forwardRef, useEffect, useMemo, useState, type RefObject } from 'react'
+import { Settings, Mic, Sparkles, Send, ChevronUp, ChevronDown, Power, PenSquare, Camera, MessageSquare, X, Plug } from 'lucide-react'
 import { motion, AnimatePresence, useDragControls } from 'framer-motion'
+import { toolRegistry } from '../../services/tools/ToolRegistry'
+import { mcpToolBridge } from '../../services/tools/MCPToolBridge'
 
 interface BottomToolbarProps {
     isRecording: boolean
@@ -55,6 +57,13 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     }, [forceCollapse])
 
     const [menuAberto, setMenuAberto] = useState(false)
+    const [toolCallingAtivo, setToolCallingAtivo] = useState(() => {
+        const salvo = localStorage.getItem('selene_tool_calling')
+        if (salvo === null) return true
+        return salvo === 'true'
+    })
+    const [menuFerramentasMcpAberto, setMenuFerramentasMcpAberto] = useState(false)
+    const [ferramentasMcp, setFerramentasMcp] = useState(() => toolRegistry.getMcpTools())
     const dragControls = useDragControls()
     const nivelAudioNormalizado = Math.min(1, Math.max(0, nivelAudio || 0))
     const barrasWave = useMemo(() => Array.from({ length: 24 }, (_, index) => ({
@@ -80,6 +89,26 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
         setMenuAberto(false)
         acao()
     }
+
+    useEffect(() => {
+        const atualizarFerramentasMcp = () => {
+            setFerramentasMcp(toolRegistry.getMcpTools())
+        }
+
+        atualizarFerramentasMcp()
+        return toolRegistry.subscribe(atualizarFerramentasMcp)
+    }, [])
+
+    useEffect(() => {
+        if (!menuAberto) {
+            setMenuFerramentasMcpAberto(false)
+            return
+        }
+
+        mcpToolBridge.syncAllTools().catch(err => {
+            console.warn('[BottomToolbar] Falha ao sincronizar MCP:', err)
+        })
+    }, [menuAberto])
 
     return (
         <div
@@ -301,6 +330,70 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                                                             <p className="text-xs text-white/60">Corrija ou reescreva o texto selecionado.</p>
                                                         </div>
                                                     </button>
+
+                                                    <button
+                                                        onClick={() => {
+                                                            const novoValor = !toolCallingAtivo
+                                                            setToolCallingAtivo(novoValor)
+                                                            localStorage.setItem('selene_tool_calling', String(novoValor))
+                                                        }}
+                                                        className="w-full text-left px-4 py-3 hover:bg-white/5 text-white/90 flex items-center justify-between gap-2"
+                                                    >
+                                                        <div className="flex items-start gap-2">
+                                                            <Plug size={16} className={toolCallingAtivo ? 'text-amber-300 mt-0.5' : 'text-white/40 mt-0.5'} />
+                                                            <div>
+                                                                <p className="text-sm font-semibold">Tool calling</p>
+                                                                <p className="text-xs text-white/60">Permite uso automatico de ferramentas.</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className={`w-8 h-4 rounded-full transition-colors ${toolCallingAtivo ? 'bg-amber-400' : 'bg-neutral-700'}`}>
+                                                            <div className={`w-3 h-3 rounded-full bg-white shadow-sm transition-transform mt-0.5 ${toolCallingAtivo ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}`} />
+                                                        </div>
+                                                    </button>
+
+                                                    <div className="px-4 py-3 hover:bg-white/5 text-white/90">
+                                                        <button
+                                                            onClick={() => setMenuFerramentasMcpAberto((estado) => !estado)}
+                                                            className="w-full flex items-center justify-between"
+                                                        >
+                                                            <div className="flex items-start gap-2">
+                                                                <Plug size={16} className="text-white/40 mt-0.5" />
+                                                                <div>
+                                                                    <p className="text-sm font-semibold">Ferramentas MCP</p>
+                                                                    <p className="text-xs text-white/60">Lista de ferramentas conectadas.</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-xs text-white/50">
+                                                                <span>{ferramentasMcp.length}</span>
+                                                                <ChevronDown size={12} className={`transition-transform ${menuFerramentasMcpAberto ? 'rotate-180' : ''}`} />
+                                                            </div>
+                                                        </button>
+
+                                                        {menuFerramentasMcpAberto && (
+                                                            <div className="mt-2 max-h-36 overflow-y-auto space-y-1 pr-1">
+                                                                {ferramentasMcp.length === 0 ? (
+                                                                    <p className="text-xs text-white/50">Nenhuma ferramenta MCP conectada.</p>
+                                                                ) : (
+                                                                    ferramentasMcp.map((tool) => (
+                                                                        <div
+                                                                            key={tool.id}
+                                                                            className="flex items-center justify-between gap-2 rounded-lg bg-white/5 px-2 py-1.5"
+                                                                        >
+                                                                            <div className="min-w-0">
+                                                                                <p className="text-xs text-white/90 truncate">{tool.name}</p>
+                                                                                <p className="text-[10px] text-white/50 truncate">
+                                                                                    {tool.source.mcpServerName || tool.source.mcpServerId || 'MCP'}
+                                                                                </p>
+                                                                            </div>
+                                                                            <span className={`text-[10px] ${tool.enabled ? 'text-emerald-300' : 'text-white/40'}`}>
+                                                                                {tool.enabled ? 'ativa' : 'inativa'}
+                                                                            </span>
+                                                                        </div>
+                                                                    ))
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
 
                                                     <button
                                                         onClick={() => acionarEAbrir(aoAbrirConfiguracoes)}

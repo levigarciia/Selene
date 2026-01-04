@@ -172,5 +172,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.on('whisper-local:transcription-error', handler)
             return () => ipcRenderer.removeListener('whisper-local:transcription-error', handler)
         }
+    },
+
+    // ==========================================
+    // MCP (Model Context Protocol) API
+    // ==========================================
+    mcp: {
+        // Server management
+        getServers: () => ipcRenderer.invoke('mcp:get-servers'),
+        getConfig: () => ipcRenderer.invoke('mcp:get-config'),
+        addServer: (config: { id: string; name: string; command: string; args: string[]; env?: Record<string, string>; enabled: boolean; autoConnect?: boolean }) => 
+            ipcRenderer.invoke('mcp:add-server', config),
+        removeServer: (serverId: string) => ipcRenderer.invoke('mcp:remove-server', serverId),
+        
+        // Connection management
+        connect: (serverId: string) => ipcRenderer.invoke('mcp:connect', serverId),
+        disconnect: (serverId: string) => ipcRenderer.invoke('mcp:disconnect', serverId),
+        getStatus: (serverId: string) => ipcRenderer.invoke('mcp:get-status', serverId),
+        
+        // Tools
+        getTools: (serverId: string) => ipcRenderer.invoke('mcp:get-tools', serverId),
+        getAllTools: () => ipcRenderer.invoke('mcp:get-all-tools'),
+        callTool: (serverId: string, toolName: string, args: unknown) => 
+            ipcRenderer.invoke('mcp:call-tool', serverId, toolName, args)
     }
 })

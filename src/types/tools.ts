@@ -23,6 +23,7 @@ export interface ToolParameter {
 export interface ToolSource {
     type: 'builtin' | 'mcp'
     mcpServerId?: string  // If MCP, which server provides this tool
+    mcpServerName?: string // Display name of the MCP server
 }
 
 export interface ToolDefinition {
@@ -116,6 +117,7 @@ export interface ToolCardData {
     results: ToolResultItem[]
     durationMs?: number
     error?: string
+    statusText?: string             // Status message shown BEFORE this card
 }
 
 // ============================================================================
@@ -134,9 +136,12 @@ export type ToolHandler = (
 export interface MCPServerConfig {
     id: string
     name: string
-    command: string                 // e.g., "npx", "python", "node"
-    args: string[]                  // e.g., ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+    command?: string                // e.g., "npx", "python", "node"
+    args?: string[]                 // e.g., ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
     env?: Record<string, string>
+    headers?: Record<string, string>
+    transport?: 'stdio' | 'streamable-http'
+    url?: string
     enabled: boolean
     autoConnect?: boolean           // Connect on app start
 }

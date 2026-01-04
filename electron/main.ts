@@ -7,6 +7,7 @@ import { initAutoUpdater, cleanupAutoUpdater } from './updater.js'
 import { setupWhisperIPC } from './whisper.js'
 import { setupWebSearchIPC } from './web-search.js'
 import { setupLocalWhisperIPC } from './local-whisper/LocalWhisperService.js'
+import { setupMCPIPC } from './mcp/mcpIPC.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -667,6 +668,28 @@ app.on('activate', () => {
     }
 })
 
+// Single instance lock - prevent multiple instances
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+    // Another instance is already running, quit this one
+    console.log('[SingleInstance] Another instance is already running. Quitting.')
+    app.quit()
+} else {
+    // This is the first/only instance
+    app.on('second-instance', () => {
+        // Someone tried to run a second instance, focus our window
+        console.log('[SingleInstance] Second instance detected, focusing existing window.')
+        if (chatWin && !chatWin.isDestroyed()) {
+            if (chatWin.isMinimized()) chatWin.restore()
+            chatWin.focus()
+        } else if (win && !win.isDestroyed()) {
+            win.show()
+            win.focus()
+        }
+    })
+}
+
 app.whenReady().then(() => {
     createWindow()
     registrarAtalhoGramatical('Control+Alt+X')
@@ -676,6 +699,9 @@ app.whenReady().then(() => {
 
     // Initialize Web Search IPC handlers
     setupWebSearchIPC()
+
+    // Initialize MCP IPC handlers
+    setupMCPIPC()
 
     // Initialize Local Whisper Streaming IPC handlers
     if (win) {

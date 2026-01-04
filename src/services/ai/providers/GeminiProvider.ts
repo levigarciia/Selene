@@ -106,6 +106,33 @@ export class GeminiProvider implements AIProvider {
         return result.response.text()
     }
 
+    async streamAnalisarImagem(pergunta: string, dataUrl: string, onChunk: (chunk: string) => void): Promise<void> {
+        if (!this.client) throw new Error('Gemini não configurado.')
+        try {
+            const { base64, mimeType } = this.extrairBase64(dataUrl)
+
+            const model = this.client.getGenerativeModel({
+                model: 'gemini-2.0-flash',
+                systemInstruction: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.'
+            })
+
+            const result = await model.generateContentStream([
+                { text: pergunta },
+                { inlineData: { data: base64, mimeType } }
+            ])
+
+            for await (const chunk of result.stream) {
+                const text = chunk.text()
+                if (text) {
+                    onChunk(text)
+                }
+            }
+        } catch (error: any) {
+            console.error('Erro no streaming de imagem Gemini:', error)
+            throw new Error(`Erro Gemini: ${error.message || 'Erro desconhecido'}`)
+        }
+    }
+
     private async blobToBase64(blob: Blob): Promise<string> {
         const buffer = await blob.arrayBuffer()
         const bytes = new Uint8Array(buffer)

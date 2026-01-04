@@ -14,9 +14,13 @@ dist-electron
 release
 *.local
 .env
+bun.lock
+yarn.lock
+package-lock.json
 
 # Editor directories and files
 .vscode/*
+.claude/*
 !.vscode/extensions.json
 .idea
 .DS_Store
@@ -26,6 +30,7 @@ release
 *.sln
 *.sw?
 .agent/*
+.gemini/*
 
 # Build resources (certificates)
 build-resources/*.p12

@@ -83,6 +83,20 @@ declare global {
                 onTranscriptionComplete: (callback: (data: { sessionId: string; text: string; speakerLabel?: string }) => void) => () => void;
                 onTranscriptionError: (callback: (data: { sessionId: string; error: string }) => void) => () => void;
             };
+
+            // MCP (Model Context Protocol) API
+            mcp?: {
+                getServers: () => Promise<Array<{ config: { id: string; name: string; command?: string; args?: string[]; env?: Record<string, string>; headers?: Record<string, string>; transport?: 'stdio' | 'streamable-http'; url?: string; enabled: boolean; autoConnect?: boolean; icon?: string }; status: 'disconnected' | 'connecting' | 'connected' | 'error'; toolCount: number }>>;
+                getConfig: () => Promise<Array<{ id: string; name: string; command?: string; args?: string[]; env?: Record<string, string>; headers?: Record<string, string>; transport?: 'stdio' | 'streamable-http'; url?: string; enabled: boolean; autoConnect?: boolean; icon?: string }>>;
+                addServer: (config: { id: string; name: string; command?: string; args?: string[]; env?: Record<string, string>; headers?: Record<string, string>; transport?: 'stdio' | 'streamable-http'; url?: string; enabled: boolean; autoConnect?: boolean; icon?: string }) => Promise<{ success: boolean; error?: string }>;
+                removeServer: (serverId: string) => Promise<{ success: boolean; error?: string }>;
+                connect: (serverId: string) => Promise<{ success: boolean; error?: string }>;
+                disconnect: (serverId: string) => Promise<{ success: boolean; error?: string }>;
+                getStatus: (serverId: string) => Promise<'disconnected' | 'connecting' | 'connected' | 'error'>;
+                getTools: (serverId: string) => Promise<Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>>;
+                getAllTools: () => Promise<Array<{ name: string; description: string; inputSchema: Record<string, unknown>; serverId: string; serverName: string }>>;
+                callTool: (serverId: string, toolName: string, args: unknown) => Promise<{ success: boolean; result?: unknown; error?: string }>;
+            };
         };
     }
 }

@@ -16,6 +16,18 @@ import { useWindowManagement } from './hooks/useWindowManagement'
 import { useAutoDismiss } from './hooks/useAutoDismiss'
 import type { ChatMessage } from './types/chat'
 import { v4 as uuidv4 } from 'uuid'
+import { initializeBuiltInTools } from './services/tools/builtin'
+import { mcpToolBridge } from './services/tools/MCPToolBridge'
+import { toolCallingService } from './services/tools/ToolCallingService'
+import { toolRegistry } from './services/tools/ToolRegistry'
+
+// Initialize built-in tools on app start
+initializeBuiltInTools()
+
+// Sync MCP tools from connected servers
+mcpToolBridge.syncAllTools().catch(err => 
+    console.warn('[App] Failed to sync MCP tools:', err)
+)
 
 function App() {
   const [isChatMode, setIsChatMode] = useState(window.location.hash === '#chat')
@@ -154,6 +166,23 @@ function App() {
       exibirToast(voiceInput.error, 'erro', 'toolbar')
     }
   }, [voiceInput.error, exibirToast])
+
+  useEffect(() => {
+    const chatFn = async (prompt: string): Promise<string> => {
+      const servico = criarOuObterServico()
+      if (!servico) throw new Error('No AI service available')
+
+      let response = ''
+      await servico.streamChat(
+        prompt,
+        (chunk: string) => { response += chunk },
+        'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.'
+      )
+      return response
+    }
+
+    toolCallingService.setChatFunction(chatFn)
+  }, [criarOuObterServico])
 
   const adicionarMensagem = (role: 'user' | 'assistant', content: string) => {
     setMessages(prev => [...prev, {
@@ -344,7 +373,49 @@ function App() {
     let streamedContent = ''
 
     try {
-      const enhancedPrompt = systemPrompt + getProfileContext()
+      let contextoFerramentas = ''
+      const toolCallingAtivo = localStorage.getItem('selene_tool_calling') !== 'false'
+
+      if (toolCallingAtivo) {
+        try {
+          await mcpToolBridge.syncAllTools()
+        } catch (error) {
+          console.warn('[App] Falha ao sincronizar MCP:', error)
+        }
+
+        const ferramentasDisponiveis = toolRegistry.getEnabled()
+
+        if (ferramentasDisponiveis.length > 0) {
+          const historicoChat = messages.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content
+          }))
+
+          const decisao = await toolCallingService.decideToolUsage(
+            texto,
+            historicoChat,
+            ferramentasDisponiveis
+          )
+
+          if (decisao.shouldUseTool && decisao.toolCalls.length > 0) {
+            const statusMessage = await toolCallingService.generateStatusMessage(
+              texto,
+              decisao.toolCalls
+            )
+
+            if (statusMessage) {
+              setMessages(prev => prev.map(msg =>
+                msg.id === aiMsgId ? { ...msg, content: statusMessage } : msg
+              ))
+            }
+
+            const calls = await toolCallingService.executeToolCalls(decisao)
+            contextoFerramentas = toolCallingService.formatResultsForAI(calls)
+          }
+        }
+      }
+
+      const enhancedPrompt = systemPrompt + getProfileContext() + contextoFerramentas
       
       await servico.streamChat(
         texto,

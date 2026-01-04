@@ -26,7 +26,13 @@ export interface AIProvider {
     analisarImagem(pergunta: string, dataUrl: string): Promise<string>
 
     /**
+     * Analisa imagem com streaming (imagem + texto -> texto progressivo).
+     */
+    streamAnalisarImagem?(pergunta: string, dataUrl: string, onChunk: (chunk: string) => void): Promise<void>
+
+    /**
      * Verifica se o provedor está configurado e pronto para uso.
      */
     isReady(): boolean
 }
+
