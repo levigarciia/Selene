@@ -1,13 +1,17 @@
 /**
- * Investigate Service Exports
+ * Investigate Service Exports v2
  */
 
 export { investigateService } from './InvestigateService'
+export * from './types'
 export type {
-    InvestigationPhaseType,
-    InvestigationStatus,
-    InvestigationPhase,
-    SubQuestion,
     InvestigationTrace,
-    InvestigationUpdate
-} from './InvestigateService'
+    InvestigationUpdate,
+    InvestigationState,
+    Evidence,
+    ConfidenceAssessment,
+    AlignmentCheckpoint,
+    UserClarification,
+    ValidationResult,
+    SubQuestion,
+} from './types'

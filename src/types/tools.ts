@@ -9,7 +9,7 @@
 // TOOL DEFINITIONS
 // ============================================================================
 
-export type ToolCategory = 'search' | 'memory' | 'file' | 'mcp' | 'system' | 'code'
+export type ToolCategory = 'search' | 'memory' | 'file' | 'mcp' | 'system' | 'code' | 'project'
 
 export interface ToolParameter {
     name: string
@@ -47,6 +47,7 @@ export interface ToolCallContext {
     conversationId?: string
     messageId?: string
     userQuery?: string
+    projectId?: string
 }
 
 export interface ToolCallInput {

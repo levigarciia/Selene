@@ -287,7 +287,8 @@ respond:{"a":"respond"}`
     async executeToolCalls(
         decision: AIToolCallDecision,
         onToolStart?: (toolId: string, query: string) => void,
-        onToolComplete?: (call: ToolCall) => void
+        onToolComplete?: (call: ToolCall) => void,
+        context?: { conversationId?: string; projectId?: string }
     ): Promise<ToolCall[]> {
         if (!decision.shouldUseTool || decision.toolCalls.length === 0) {
             return []
@@ -307,7 +308,12 @@ respond:{"a":"respond"}`
 
             const input: ToolCallInput = {
                 toolId,
-                arguments: args
+                arguments: args,
+                context: context ? {
+                    conversationId: context.conversationId,
+                    projectId: context.projectId,
+                    userQuery: query
+                } : undefined
             }
 
             const result = await toolExecutor.execute(input)

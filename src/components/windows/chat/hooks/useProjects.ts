@@ -48,10 +48,10 @@ export function useProjects() {
     const addFileToProject = useCallback((projectId: string, file: {
         id: string
         name: string
-        type: string
+        type: 'pdf' | 'txt' | 'docx' | 'md' | 'other'
         size: number
         content: string
-        uploadedAt: number
+        addedAt: number
     }) => {
         setProjects(prev => prev.map(p => {
             if (p.id === projectId) {

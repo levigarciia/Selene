@@ -9,6 +9,7 @@ import { toolRegistry } from '../ToolRegistry'
 import { toolExecutor } from '../ToolExecutor'
 import { webSearchHandler } from './webSearchTool'
 import { memorySearchHandler } from './memorySearchTool'
+import { projectInstructionsHandler } from './projectInstructionsTool'
 import type { ToolDefinition } from '../../../types/tools'
 
 // ============================================================================
@@ -49,6 +50,29 @@ const builtInTools: ToolDefinition[] = [
         source: { type: 'builtin' },
         enabled: true,
         icon: 'Brain'
+    },
+    {
+        id: 'builtin:project_instructions',
+        name: 'Instruções do Projeto',
+        description: 'Gerencia as instruções personalizadas do projeto atual. Use para atualizar, adicionar ou limpar instruções que serão aplicadas em todas as conversas do projeto.',
+        category: 'project',
+        parameters: [
+            {
+                name: 'action',
+                type: 'string',
+                description: 'Ação a realizar: "update" (substituir), "append" (adicionar ao final), ou "clear" (limpar)',
+                required: true
+            },
+            {
+                name: 'instructions',
+                type: 'string',
+                description: 'As novas instruções (obrigatório para "update" e "append")',
+                required: false
+            }
+        ],
+        source: { type: 'builtin' },
+        enabled: true,
+        icon: 'FileCode'
     },
     {
         id: 'builtin:analyze_screenshot',
@@ -92,6 +116,7 @@ export function initializeBuiltInTools(): void {
     // Register handlers
     toolExecutor.registerHandler('builtin:web_search', webSearchHandler)
     toolExecutor.registerHandler('builtin:memory_search', memorySearchHandler)
+    toolExecutor.registerHandler('builtin:project_instructions', projectInstructionsHandler)
     // Screenshot handler will be registered when enabled
 
     initialized = true
@@ -105,4 +130,6 @@ export function getBuiltInToolDefinitions(): ToolDefinition[] {
     return [...builtInTools]
 }
 
-export { webSearchHandler, memorySearchHandler }
+export { webSearchHandler, memorySearchHandler, projectInstructionsHandler }
+export { setProjectUpdateCallback, clearProjectUpdateCallback } from './projectInstructionsTool'
+

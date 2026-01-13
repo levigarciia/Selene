@@ -24,6 +24,8 @@ interface MessageListProps {
     onCopyMessage: (msgId: string, content: string) => void
     onRegenerateResponse: () => void
     profileName?: string
+    hasInvestigationTrace?: boolean
+    onShowReasoning?: () => void
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -40,6 +42,8 @@ export const MessageList: React.FC<MessageListProps> = ({
     onCopyMessage,
     onRegenerateResponse,
     profileName,
+    hasInvestigationTrace,
+    onShowReasoning,
 }) => {
     const renderMarkdown = (
         content: string,
@@ -220,6 +224,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                                             sources={messageSources[msg.id]}
                                             sourcesExpanded={expandedSources === msg.id}
                                             onToggleSources={() => onToggleSources(msg.id)}
+                                            hasInvestigationTrace={hasInvestigationTrace && isLastMessage}
+                                            onShowReasoning={onShowReasoning}
                                         />
                                     )}
                                 </div>

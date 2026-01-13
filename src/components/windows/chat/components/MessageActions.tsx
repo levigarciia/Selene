@@ -1,7 +1,7 @@
 // Message Actions Component
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Copy, RefreshCw, Check, ChevronDown, ExternalLink } from 'lucide-react'
+import { Copy, RefreshCw, Check, ChevronDown, ExternalLink, Brain } from 'lucide-react'
 import type { WebSource } from '../types'
 
 interface MessageActionsProps {
@@ -12,6 +12,8 @@ interface MessageActionsProps {
     sources?: WebSource[]
     sourcesExpanded?: boolean
     onToggleSources?: () => void
+    hasInvestigationTrace?: boolean
+    onShowReasoning?: () => void
 }
 
 export const MessageActions: React.FC<MessageActionsProps> = ({ 
@@ -21,7 +23,9 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
     canRegenerate, 
     sources, 
     sourcesExpanded, 
-    onToggleSources 
+    onToggleSources,
+    hasInvestigationTrace,
+    onShowReasoning
 }) => (
     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         <button
@@ -40,6 +44,20 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                 <RefreshCw size={14} />
             </button>
         )}
+        
+        {/* Botão de Raciocínio */}
+        {hasInvestigationTrace && onShowReasoning && (
+            <button
+                onClick={onShowReasoning}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 transition-colors"
+                title="Ver linha de raciocínio"
+            >
+                <Brain size={12} className="text-purple-400" />
+                <span className="text-xs text-purple-300">Raciocínio</span>
+            </button>
+        )}
+        
+        {/* Botão de Fontes */}
         {sources && sources.length > 0 && (
             <div className="relative">
                 <button

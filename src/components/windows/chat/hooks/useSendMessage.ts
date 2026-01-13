@@ -108,33 +108,47 @@ export function useSendMessage({
         }))
     }, [setConversations])
 
-    // Run investigation
+    // Run investigation (message already created, just updates trace)
     const runInvestigation = useCallback(async (question: string, convId: string) => {
         setIsInvestigating(true)
         setCurrentTrace(null)
 
-        try {
-            const trace = await investigateService.investigate(question)
-            setCurrentTrace(trace)
-
-            if (trace.finalAnswer) {
-                const aiMsg: ChatMessage = {
-                    id: uuidv4(),
-                    role: 'assistant',
-                    content: trace.finalAnswer,
-                    timestamp: Date.now()
-                }
-
+        // Subscribe to updates for real-time progress
+        const unsubscribe = investigateService.subscribe((update) => {
+            setCurrentTrace(update.trace)
+            
+            // Update the existing message with progress
+            if (update.message && update.type !== 'completed') {
                 setConversations(prev => prev.map(c => {
                     if (c.id === convId) {
-                        return { ...c, messages: [...c.messages, aiMsg], updatedAt: Date.now() }
+                        const lastAiMsg = [...c.messages].reverse().find(m => m.role === 'assistant')
+                        if (lastAiMsg) {
+                            return {
+                                ...c,
+                                messages: c.messages.map(m =>
+                                    m.id === lastAiMsg.id 
+                                        ? { ...m, content: `🔍 *${update.message}*` } 
+                                        : m
+                                )
+                            }
+                        }
                     }
                     return c
                 }))
             }
+        })
+
+        try {
+            const trace = await investigateService.investigate(question)
+            setCurrentTrace(trace)
+            
+            // NOTE: Final answer is set by the calling code, NOT here
+            // This prevents duplicate messages
+            
         } catch (error) {
             console.error('[useSendMessage] Investigation error:', error)
         } finally {
+            unsubscribe()
             setIsInvestigating(false)
         }
     }, [setConversations, setIsInvestigating, setCurrentTrace])
@@ -292,12 +306,38 @@ export function useSendMessage({
 
                 const trace = investigateService.getCurrentTrace()
                 if (trace?.finalAnswer) {
+                    // Simular streaming da resposta final
+                    const fullAnswer = trace.finalAnswer
+                    let displayedContent = ''
+                    const chunkSize = 20 // caracteres por chunk
+                    const delay = 15 // ms entre chunks
+                    
+                    for (let i = 0; i < fullAnswer.length; i += chunkSize) {
+                        displayedContent = fullAnswer.slice(0, i + chunkSize)
+                        
+                        setConversations(prev => prev.map(c => {
+                            if (c.id === convId) {
+                                return {
+                                    ...c,
+                                    messages: c.messages.map(m =>
+                                        m.id === aiMsgId ? { ...m, content: displayedContent } : m
+                                    )
+                                }
+                            }
+                            return c
+                        }))
+                        
+                        // Pequeno delay para criar efeito de streaming
+                        await new Promise(resolve => setTimeout(resolve, delay))
+                    }
+                    
+                    // Garantir que a resposta final completa está lá
                     setConversations(prev => prev.map(c => {
                         if (c.id === convId) {
                             return {
                                 ...c,
                                 messages: c.messages.map(m =>
-                                    m.id === aiMsgId ? { ...m, content: trace.finalAnswer } : m
+                                    m.id === aiMsgId ? { ...m, content: fullAnswer } : m
                                 ),
                                 updatedAt: Date.now()
                             }
@@ -489,7 +529,16 @@ export function useSendMessage({
                                 }))
                             }
 
-                            const calls = await toolCallingService.executeToolCalls(decisao)
+                            // Get project ID from current conversation
+                            const convForContext = conversations.find(c => c.id === convId)
+                            const projectIdForTools = convForContext?.projectId
+
+                            const calls = await toolCallingService.executeToolCalls(
+                                decisao,
+                                undefined,
+                                undefined,
+                                { conversationId: convId!, projectId: projectIdForTools }
+                            )
                             contextoFerramentas = toolCallingService.formatResultsForAI(calls)
                             cartoesFerramentas = toolCallingService.toolCallsToCardData(calls, progressContent)
 
@@ -526,16 +575,25 @@ export function useSendMessage({
                 })
 
                 let projectContext = ''
+                let projectInstructions = ''
                 const currentConv = conversations.find(c => c.id === convId)
                 if (currentConv?.projectId) {
                     const project = projects.find(p => p.id === currentConv.projectId)
-                    if (project && project.files.length > 0) {
-                        projectContext = '\n\n' + buildProjectContext(project, userContent, project.files)
-                        console.log('[useSendMessage] Injected project context from', project.files.length, 'files')
+                    if (project) {
+                        // Add project instructions if defined
+                        if (project.instructions && project.instructions.trim()) {
+                            projectInstructions = `\n\n📁 **Instruções do Projeto "${project.name}":**\n${project.instructions.trim()}`
+                            console.log('[useSendMessage] Injected project instructions:', project.instructions.slice(0, 50) + '...')
+                        }
+                        // Add project files context
+                        if (project.files.length > 0) {
+                            projectContext = '\n\n' + buildProjectContext(project, userContent, project.files)
+                            console.log('[useSendMessage] Injected project context from', project.files.length, 'files')
+                        }
                     }
                 }
 
-                const finalPrompt = composedPrompt + webSearchContext + contextoFerramentas + projectContext
+                const finalPrompt = composedPrompt + projectInstructions + webSearchContext + contextoFerramentas + projectContext
 
                 await servico.streamChat(
                     userMsg.content,

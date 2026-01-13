@@ -17,7 +17,7 @@ import { useChatUI } from './hooks'
 import { useSendMessage } from './hooks'
 
 // Components
-import { Sidebar, ProjectView, MessageList, InputArea } from './components'
+import { Sidebar, ProjectView, MessageList, InputArea, ClarificationCard } from './components'
 import { SettingsPanel } from '../../config/SettingsPanel'
 import { AssistantsPanel } from './AssistantsPanel'
 import { AssistantEditor } from './AssistantEditor'
@@ -32,6 +32,7 @@ import { processFileForProject, isFileSupported, formatFileSize, MAX_FILE_SIZE }
 import { indexProjectFile, removeFileEmbeddings } from '../../../services/ProjectContextService'
 import type { Project } from '../../../types/project'
 import { createProject } from '../../../types/project'
+import { setProjectUpdateCallback, clearProjectUpdateCallback } from '../../../services/tools/builtin'
 
 const ChatWindow: React.FC = () => {
     // ============================================
@@ -353,6 +354,30 @@ const ChatWindow: React.FC = () => {
         ))
     }, [])
 
+    // Register project update callback for AI tool
+    useEffect(() => {
+        const handleToolUpdate = (projectId: string, updates: { instructions?: string }) => {
+            // Handle append action
+            if (updates.instructions?.startsWith('__APPEND__')) {
+                const toAppend = updates.instructions.slice(10)
+                setProjects(prev => prev.map(p => {
+                    if (p.id === projectId) {
+                        const current = p.instructions || ''
+                        const newInstructions = current ? `${current}\n\n${toAppend}` : toAppend
+                        return { ...p, instructions: newInstructions, updatedAt: Date.now() }
+                    }
+                    return p
+                }))
+            } else {
+                // Regular update
+                updateProject(projectId, updates)
+            }
+        }
+        
+        setProjectUpdateCallback(handleToolUpdate)
+        return () => clearProjectUpdateCallback()
+    }, [updateProject])
+
     const addFileToProject = useCallback(async (projectId: string, file: File) => {
         if (!isFileSupported(file)) {
             alert(`Tipo de arquivo não suportado: ${file.name}\n\nFormatos aceitos: PDF, DOCX, TXT, MD`)
@@ -510,30 +535,39 @@ const ChatWindow: React.FC = () => {
                     activeConversationId={activeConversationId}
                     onSelectConversation={(id) => {
                         setActiveConversationId(id)
+                        setActiveProjectId(null) // Close project view when selecting conversation
                         setShowSettings(false)
                         setShowAssistantsPanel(false)
+                        setShowMCPPanel(false)
                     }}
                     onDeleteConversation={deleteConversation}
                     onRenameConversation={renameConversation}
                     onMoveConversationToProject={moveConversationToProject}
                     onCreateNewConversation={() => {
                         createNewConversation()
+                        setActiveProjectId(null)
                         setShowAssistantsPanel(false)
+                        setShowSettings(false)
+                        setShowMCPPanel(false)
                     }}
                     showAssistantsPanel={showAssistantsPanel}
                     onOpenAssistantsPanel={() => {
                         setShowAssistantsPanel(true)
+                        setActiveProjectId(null)
                         setShowSettings(false)
                         setShowMCPPanel(false)
                     }}
                     onOpenMCPPanel={() => {
                         setShowMCPPanel(true)
+                        setActiveProjectId(null)
                         setShowSettings(false)
                         setShowAssistantsPanel(false)
                     }}
                     onOpenSettings={() => {
                         setShowSettings(true)
+                        setActiveProjectId(null)
                         setShowAssistantsPanel(false)
+                        setShowMCPPanel(false)
                     }}
                     showMCPPanel={showMCPPanel}
                     activeAssistant={assistants.activeAssistant}
@@ -708,7 +742,36 @@ const ChatWindow: React.FC = () => {
                         onCopyMessage={copyMessage}
                         onRegenerateResponse={regenerateLastResponse}
                         profileName={profile.name}
+                        hasInvestigationTrace={!!currentTrace}
+                        onShowReasoning={() => setShowReasoningTrail(true)}
                     />
+
+                    {/* Clarification Card - quando aguardando esclarecimento */}
+                    {currentTrace?.state === 'awaiting_clarification' && currentTrace.alignmentCheckpoint && (
+                        <div className="px-4 pb-2">
+                            <ClarificationCard
+                                checkpoint={currentTrace.alignmentCheckpoint}
+                                onSubmit={async (clarification) => {
+                                    try {
+                                        await investigateService.provideClarification(clarification)
+                                        // O trace será atualizado via subscription no useSendMessage
+                                    } catch (error) {
+                                        console.error('[ChatWindow] Error providing clarification:', error)
+                                    }
+                                }}
+                                onSkip={async () => {
+                                    try {
+                                        await investigateService.provideClarification({
+                                            answers: {},
+                                            skipClarification: true
+                                        })
+                                    } catch (error) {
+                                        console.error('[ChatWindow] Error skipping clarification:', error)
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
 
                     {/* Input Area */}
                     <InputArea
@@ -740,8 +803,6 @@ const ChatWindow: React.FC = () => {
                         mcpServers={mcpServers}
                         onOpenMCPPanel={() => setShowMCPPanel(true)}
                         onConnectMCPServer={handleConnectMCPServer}
-                        currentTrace={currentTrace}
-                        onShowReasoningTrail={() => setShowReasoningTrail(true)}
                     />
                 </div>
             </div>

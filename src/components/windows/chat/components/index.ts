@@ -5,3 +5,9 @@ export { Sidebar } from './Sidebar'
 export { ProjectView } from './ProjectView'
 export { MessageList } from './MessageList'
 export { InputArea } from './InputArea'
+
+// Investigation Components
+export { ClarificationCard } from './ClarificationCard'
+export { InvestigationProgress } from './InvestigationProgress'
+export { CitationLink, renderTextWithCitations } from './CitationLink'
+export type { Citation } from './CitationLink'

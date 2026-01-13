@@ -45,10 +45,6 @@ interface InputAreaProps {
     mcpServers: MCPServerInfo[]
     onOpenMCPPanel: () => void
     onConnectMCPServer: (serverId: string) => void
-
-    // Reasoning trail
-    currentTrace: unknown
-    onShowReasoningTrail: () => void
 }
 
 export const InputArea: React.FC<InputAreaProps> = ({
@@ -76,8 +72,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
     mcpServers,
     onOpenMCPPanel,
     onConnectMCPServer,
-    currentTrace,
-    onShowReasoningTrail,
 }) => {
     const placeholder = isGenerating
         ? (pendingMessage ? 'Aguardando processamento da mensagem anterior...' : 'Digite e Enter para enfileirar próxima mensagem...')
@@ -316,17 +310,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
                     </div>
                 )}
 
-                {/* Reasoning Trail Button */}
-                {currentTrace && !isInvestigating && (
-                    <button
-                        onClick={onShowReasoningTrail}
-                        className="flex items-center gap-1 px-2 py-1 rounded-full bg-indigo-500/20 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors"
-                        title="Ver linha de raciocínio"
-                    >
-                        <Brain size={12} className="text-indigo-400" />
-                        <span className="text-[10px] text-indigo-400 font-medium">Raciocínio</span>
-                    </button>
-                )}
 
                 {/* Send/Stop Button */}
                 {isGenerating ? (
