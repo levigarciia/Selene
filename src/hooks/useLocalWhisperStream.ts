@@ -49,6 +49,7 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
     const mediaStreamRef = useRef<MediaStream | null>(null)
     const audioContextRef = useRef<AudioContext | null>(null)
     const processorRef = useRef<ScriptProcessorNode | null>(null)
+    const audioWorkletRef = useRef<AudioWorkletNode | null>(null)
     const sessionIdRef = useRef<string | null>(null)
     const cleanupListenersRef = useRef<(() => void)[]>([])
 
@@ -154,28 +155,23 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
             sessionIdRef.current = sessionResult.sessionId
 
             // Create audio context
-            audioContextRef.current = new AudioContext({ sampleRate: 16000 })
-            const source = audioContextRef.current.createMediaStreamSource(stream)
+            const audioContext = new AudioContext({ sampleRate: 16000 })
+            audioContextRef.current = audioContext
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume()
+            }
 
-            // Create processor to capture audio data
-            // Using ScriptProcessorNode (deprecated but widely supported)
-            // TODO: Migrate to AudioWorkletNode in the future
-            const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1)
-            processorRef.current = processor
+            const source = audioContext.createMediaStreamSource(stream)
 
-            processor.onaudioprocess = (e) => {
+            const enviarAudioPcm = (inputData: Float32Array) => {
                 if (!sessionIdRef.current) return
 
-                const inputData = e.inputBuffer.getChannelData(0)
-                
-                // Convert Float32 to Int16 PCM
                 const pcmData = new Int16Array(inputData.length)
                 for (let i = 0; i < inputData.length; i++) {
                     const s = Math.max(-1, Math.min(1, inputData[i]))
                     pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
                 }
 
-                // Send audio to main process
                 window.electronAPI?.localWhisper?.sendAudio(
                     sessionIdRef.current,
                     pcmData.buffer
@@ -184,8 +180,60 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
                 })
             }
 
-            source.connect(processor)
-            processor.connect(audioContextRef.current.destination)
+            const criarAudioWorklet = async () => {
+                if (!audioContext.audioWorklet) return null
+
+                const codigo = `
+                    class SeleneAudioProcessor extends AudioWorkletProcessor {
+                        process(inputs) {
+                            const input = inputs[0]
+                            if (input && input[0] && input[0].length) {
+                                this.port.postMessage(input[0])
+                            }
+                            return true
+                        }
+                    }
+                    registerProcessor('selene-audio-processor', SeleneAudioProcessor)
+                `
+
+                const blob = new Blob([codigo], { type: 'application/javascript' })
+                const url = URL.createObjectURL(blob)
+                try {
+                    await audioContext.audioWorklet.addModule(url)
+                    return new AudioWorkletNode(audioContext, 'selene-audio-processor')
+                } finally {
+                    URL.revokeObjectURL(url)
+                }
+            }
+
+            let workletNode: AudioWorkletNode | null = null
+            try {
+                workletNode = await criarAudioWorklet()
+            } catch (err) {
+                console.warn('[useLocalWhisperStream] AudioWorklet indisponível, usando ScriptProcessorNode:', err)
+            }
+
+            if (workletNode) {
+                audioWorkletRef.current = workletNode
+                workletNode.port.onmessage = (event) => {
+                    const inputData = event.data as Float32Array
+                    if (!inputData || inputData.length === 0) return
+                    const copia = inputData.slice()
+                    enviarAudioPcm(copia)
+                }
+
+                source.connect(workletNode)
+                workletNode.connect(audioContext.destination)
+            } else {
+                const processor = audioContext.createScriptProcessor(4096, 1, 1)
+                processorRef.current = processor
+                processor.onaudioprocess = (e) => {
+                    const inputData = e.inputBuffer.getChannelData(0)
+                    enviarAudioPcm(inputData)
+                }
+                source.connect(processor)
+                processor.connect(audioContext.destination)
+            }
 
             setState(prev => ({
                 ...prev,
@@ -221,6 +269,12 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
             if (processorRef.current) {
                 processorRef.current.disconnect()
                 processorRef.current = null
+            }
+
+            if (audioWorkletRef.current) {
+                audioWorkletRef.current.port.onmessage = null
+                audioWorkletRef.current.disconnect()
+                audioWorkletRef.current = null
             }
 
             if (audioContextRef.current) {
@@ -289,6 +343,10 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
             }
             if (mediaStreamRef.current) {
                 mediaStreamRef.current.getTracks().forEach(track => track.stop())
+            }
+            if (audioWorkletRef.current) {
+                audioWorkletRef.current.port.onmessage = null
+                audioWorkletRef.current.disconnect()
             }
             if (audioContextRef.current) {
                 audioContextRef.current.close()

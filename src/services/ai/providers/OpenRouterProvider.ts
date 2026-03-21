@@ -1,5 +1,7 @@
 import OpenAI from 'openai'
 import type { AIProvider } from '../AIProvider'
+import type { OpcoesRequisicaoIA } from '../AIProvider'
+import type { MetaFimStream } from '../AIProvider'
 import type { MensagemChat } from '../types'
 
 export class OpenRouterProvider implements AIProvider {
@@ -25,13 +27,16 @@ export class OpenRouterProvider implements AIProvider {
         return !!this.client
     }
 
-    async chat(mensagens: MensagemChat[]): Promise<string> {
+    async chat(mensagens: MensagemChat[], opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
         try {
-            const completion = await this.client.chat.completions.create({
+            const payload: any = {
                 messages: mensagens,
                 model: this.model
-            })
+            }
+            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
+
+            const completion = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
             return completion.choices[0].message.content || ''
         } catch (error: any) {
             console.error('Erro no chat OpenRouter:', error)
@@ -39,21 +44,32 @@ export class OpenRouterProvider implements AIProvider {
         }
     }
 
-    async streamChat(mensagens: MensagemChat[], onChunk: (chunk: string) => void): Promise<void> {
+    async streamChat(
+        mensagens: MensagemChat[],
+        onChunk: (chunk: string) => void,
+        opcoes: OpcoesRequisicaoIA = {}
+    ): Promise<void> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
         try {
-            const stream = await this.client.chat.completions.create({
-                messages: mensagens,
+            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
+                messages: mensagens as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
                 model: this.model,
                 stream: true
-            })
+            }
+            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
+
+            const stream = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
+            let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of stream) {
+                finishReason = this.normalizarFinishReason(chunk.choices?.[0]?.finish_reason)
                 const content = chunk.choices[0]?.delta?.content
                 if (content) {
                     onChunk(content)
                 }
             }
+
+            opcoes.onFimStream?.({ finishReason })
         } catch (error: any) {
             console.error('Erro no streaming OpenRouter:', error)
             throw error
@@ -87,7 +103,7 @@ export class OpenRouterProvider implements AIProvider {
         }
     }
 
-    async analisarImagem(pergunta: string, dataUrl: string): Promise<string> {
+    async analisarImagem(pergunta: string, dataUrl: string, opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
         const conteudo = [
             { type: 'text', text: pergunta },
@@ -97,13 +113,16 @@ export class OpenRouterProvider implements AIProvider {
         // Auto-detect best vision model if default doesn't support it? 
         // Implementation kept simple as per previous logic.
         try {
-            const completion = await this.client.chat.completions.create({
+            const payload: any = {
                 model: this.model, // User responsibility to pick a vision model
                 messages: [
                     { role: 'system', content: 'Analise a imagem.' },
                     { role: 'user', content: conteudo as any }
                 ]
-            })
+            }
+            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
+
+            const completion = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
             return completion.choices[0].message.content || ''
         } catch (e) {
             console.error('Falha imagem OpenRouter', e)
@@ -111,7 +130,12 @@ export class OpenRouterProvider implements AIProvider {
         }
     }
 
-    async streamAnalisarImagem(pergunta: string, dataUrl: string, onChunk: (chunk: string) => void): Promise<void> {
+    async streamAnalisarImagem(
+        pergunta: string,
+        dataUrl: string,
+        onChunk: (chunk: string) => void,
+        opcoes: OpcoesRequisicaoIA = {}
+    ): Promise<void> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
         
         const conteudo = [
@@ -120,21 +144,28 @@ export class OpenRouterProvider implements AIProvider {
         ]
 
         try {
-            const stream = await this.client.chat.completions.create({
+            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
                 model: this.model,
                 messages: [
                     { role: 'system', content: 'Analise a imagem e responda em português do Brasil.' },
                     { role: 'user', content: conteudo as any }
-                ],
+                ] as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
                 stream: true
-            })
+            }
+            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
+
+            const stream = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
+            let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of stream) {
+                finishReason = this.normalizarFinishReason(chunk.choices?.[0]?.finish_reason)
                 const content = chunk.choices[0]?.delta?.content
                 if (content) {
                     onChunk(content)
                 }
             }
+
+            opcoes.onFimStream?.({ finishReason })
         } catch (e) {
             console.error('Falha streaming imagem OpenRouter', e)
             throw e
@@ -147,5 +178,12 @@ export class OpenRouterProvider implements AIProvider {
         let binario = ''
         for (let i = 0; i < bytes.byteLength; i++) binario += String.fromCharCode(bytes[i])
         return btoa(binario)
+    }
+
+    private normalizarFinishReason(valor: string | null | undefined): MetaFimStream['finishReason'] {
+        if (valor === 'stop') return 'stop'
+        if (valor === 'length') return 'length'
+        if (!valor) return null
+        return 'other'
     }
 }

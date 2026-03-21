@@ -30,6 +30,9 @@ export interface PromptContext {
     /** Mensagem do usuário atual (query para busca semântica) */
     currentUserMessage: string
 
+    /** ID do projeto atual para isolamento de memória/contexto */
+    currentProjectId?: string
+
     /** Preferir evitar contexto pessoal quando possivel */
     preferirSemContextoPessoal?: boolean
 
@@ -66,12 +69,65 @@ export interface ComposedPrompt {
     }
 }
 
+export interface OrcamentoPrompt {
+    systemBaseTokens: number
+    perfilTokens: number
+    autoMemoriasTokens: number
+    crossChatTokens: number
+    projetoTokens: number
+    ferramentasWebTokens: number
+}
+
+export interface OpcoesComposicaoPrompt {
+    orcamento?: Partial<OrcamentoPrompt>
+    incluirDataHora?: boolean | 'auto'
+    timeoutCrossChatMs?: number
+}
+
+export const ORCAMENTO_PROMPT_PADRAO: OrcamentoPrompt = {
+    systemBaseTokens: 300,
+    perfilTokens: 180,
+    autoMemoriasTokens: 120,
+    crossChatTokens: 120,
+    projetoTokens: 300,
+    ferramentasWebTokens: 500
+}
+
 // ============================================================================
 // UTILITÁRIOS
 // ============================================================================
 
-function estimateTokens(text: string): number {
+export function estimateTokens(text: string): number {
     return Math.ceil(text.length / 4)
+}
+
+export function limitarTextoPorTokens(texto: string, maxTokens: number): string {
+    if (!texto || maxTokens <= 0) return ''
+    const limiteCaracteres = Math.max(0, maxTokens * 4)
+    if (texto.length <= limiteCaracteres) return texto
+    return texto.slice(0, limiteCaracteres).trimEnd() + '...'
+}
+
+export function aplicarOrcamentoPrompt(
+    texto: string,
+    maxTokens: number
+): { texto: string; tokensOriginais: number; tokensFinais: number; truncado: boolean } {
+    const tokensOriginais = estimateTokens(texto)
+    const textoLimitado = limitarTextoPorTokens(texto, maxTokens)
+    const tokensFinais = estimateTokens(textoLimitado)
+    return {
+        texto: textoLimitado,
+        tokensOriginais,
+        tokensFinais,
+        truncado: tokensFinais < tokensOriginais
+    }
+}
+
+function mergeOrcamentoPrompt(orcamento?: Partial<OrcamentoPrompt>): OrcamentoPrompt {
+    return {
+        ...ORCAMENTO_PROMPT_PADRAO,
+        ...orcamento
+    }
 }
 
 function normalizarTextoParaAnalise(texto: string): string {
@@ -122,6 +178,57 @@ export function deveInjetarContextoPessoal(
     return true
 }
 
+const PADROES_TEMPORAIS = [
+    /\bhoje\b/,
+    /\bamanh[ãa]\b/,
+    /\bontem\b/,
+    /\bagora\b/,
+    /\besta semana\b/,
+    /\beste m[eê]s\b/,
+    /\bdata\b/,
+    /\bhor[aá]rio\b/,
+    /\batual\b/,
+    /\brecente\b/
+]
+
+function deveIncluirDataHoraPorMensagem(mensagem: string): boolean {
+    const textoNormalizado = normalizarTextoParaAnalise(mensagem)
+    if (!textoNormalizado) return false
+    return PADROES_TEMPORAIS.some((padrao) => padrao.test(textoNormalizado))
+}
+
+function formatarDataHoraCurta(): string {
+    const agora = new Date()
+    const data = agora.toLocaleDateString('pt-BR')
+    const hora = agora.toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+    return `Data/hora local: ${data} ${hora}.`
+}
+
+async function obterContextoCrossChatComTimeout(
+    mensagem: string,
+    currentConversationId: string | undefined,
+    currentProjectId: string | undefined,
+    timeoutMs: number
+): Promise<string> {
+    if (timeoutMs <= 0) return ''
+
+    const timeout = new Promise<string>((resolve) => {
+        const timer = setTimeout(() => {
+            clearTimeout(timer)
+            resolve('')
+        }, timeoutMs)
+    })
+
+    const busca = getContextForPrompt(mensagem, currentConversationId, currentProjectId)
+        .then((valor) => valor || '')
+        .catch(() => '')
+
+    return Promise.race([busca, timeout])
+}
+
 // ============================================================================
 // PIPELINE PRINCIPAL
 // ============================================================================
@@ -136,11 +243,14 @@ export function deveInjetarContextoPessoal(
  * 4. [Histórico do chat - gerenciado externamente]
  * 5. Contexto cross-chat (se habilitado)
  * 
- * O histórico do chat não é incluído aqui pois é gerenciado pelo ChatWindow.
- * Esta função retorna o system prompt enriquecido.
+ * O histórico do chat não é incluído aqui pois é gerenciado externamente.
  */
-export async function composePrompt(context: PromptContext): Promise<ComposedPrompt> {
+export async function composePromptComOrcamento(
+    context: PromptContext,
+    opcoes: OpcoesComposicaoPrompt = {}
+): Promise<ComposedPrompt> {
     const startTime = Date.now()
+    const orcamento = mergeOrcamentoPrompt(opcoes.orcamento)
     const permitirContextoPessoal = context.permitirContextoPessoal ?? deveInjetarContextoPessoal(
         context.currentUserMessage,
         context.preferirSemContextoPessoal ?? false
@@ -148,59 +258,73 @@ export async function composePrompt(context: PromptContext): Promise<ComposedPro
     const permitirMemoriaPerfil = context.permitirMemoriaPerfil ?? true
     const permitirMemoriasAuto = context.permitirMemoriasAuto ?? true
     const permitirCrossChat = context.permitirCrossChat ?? true
+    const incluirDataHora = opcoes.incluirDataHora === 'auto'
+        ? deveIncluirDataHoraPorMensagem(context.currentUserMessage)
+        : Boolean(opcoes.incluirDataHora)
+    const timeoutCrossChatMs = opcoes.timeoutCrossChatMs ?? 250
+
     let additionalTokens = 0
     let hasCrossChatContext = false
     let hasAutoMemories = false
-    // 1. Iniciar com system prompt base + data atual
-    const now = new Date()
-    const dataAtual = now.toLocaleDateString('pt-BR', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    })
-    const horaAtual = now.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit'
-    })
-    
-    let systemPrompt = context.systemPrompt + `\n\n📅 **Data e hora atual:** ${dataAtual}, ${horaAtual}.`
+    const partesPrompt: string[] = []
 
-    // 2. Adicionar contexto do perfil do usuário (memória persistente existente)
-    if (context.userProfileContext && permitirMemoriaPerfil) {
-        systemPrompt += context.userProfileContext
-        additionalTokens += estimateTokens(context.userProfileContext)
+    // 1. Prompt base com orçamento fixo
+    const baseAplicado = aplicarOrcamentoPrompt(context.systemPrompt, orcamento.systemBaseTokens)
+    partesPrompt.push(baseAplicado.texto)
+    additionalTokens += Math.max(0, baseAplicado.tokensFinais - baseAplicado.tokensOriginais)
+
+    // 2. Data/hora somente quando necessário
+    if (incluirDataHora) {
+        const dataHora = aplicarOrcamentoPrompt(formatarDataHoraCurta(), 32)
+        partesPrompt.push(dataHora.texto)
     }
 
-    // 3. Adicionar memórias automáticas (se habilitado)
+    // 3. Contexto de perfil com orçamento
+    if (context.userProfileContext && permitirMemoriaPerfil) {
+        const perfilAplicado = aplicarOrcamentoPrompt(context.userProfileContext, orcamento.perfilTokens)
+        if (perfilAplicado.texto) {
+            partesPrompt.push(`[contexto_usuario]\n${perfilAplicado.texto}`)
+            additionalTokens += perfilAplicado.tokensFinais
+        }
+    }
+
+    // 4. Memórias automáticas com orçamento
     if (FEATURE_FLAGS.MEMORY_AUTOPILOT_ENABLED && permitirMemoriasAuto && permitirContextoPessoal) {
-        const autoMemoriesContext = getAutoMemoriesForPrompt(context.currentUserMessage)
+        const autoMemoriesContext = getAutoMemoriesForPrompt(context.currentUserMessage, context.currentProjectId)
         if (autoMemoriesContext) {
-            systemPrompt += autoMemoriesContext
-            additionalTokens += estimateTokens(autoMemoriesContext)
+            const autoAplicado = aplicarOrcamentoPrompt(autoMemoriesContext, orcamento.autoMemoriasTokens)
+            if (autoAplicado.texto) {
+                partesPrompt.push(`[memorias_automaticas]\n${autoAplicado.texto}`)
+                additionalTokens += autoAplicado.tokensFinais
+            }
             hasAutoMemories = true
         }
     }
 
-    // 4. [Histórico do chat - gerenciado externamente pelo ChatWindow]
-
-    // 5. Adicionar contexto cross-chat (se habilitado)
+    // 5. Cross-chat com timeout e orçamento
     if (FEATURE_FLAGS.CROSS_CHAT_CONTEXT_ENABLED && permitirCrossChat && permitirContextoPessoal) {
         try {
-            const crossChatContext = await getContextForPrompt(
+            const crossChatContext = await obterContextoCrossChatComTimeout(
                 context.currentUserMessage,
-                context.currentConversationId
+                context.currentConversationId,
+                context.currentProjectId,
+                timeoutCrossChatMs
             )
 
             if (crossChatContext) {
-                systemPrompt += crossChatContext
-                additionalTokens += estimateTokens(crossChatContext)
+                const crossAplicado = aplicarOrcamentoPrompt(crossChatContext, orcamento.crossChatTokens)
+                if (crossAplicado.texto) {
+                    partesPrompt.push(`[cross_chat]\n${crossAplicado.texto}`)
+                    additionalTokens += crossAplicado.tokensFinais
+                }
                 hasCrossChatContext = true
             }
         } catch (error) {
             console.warn('[PromptPipeline] Cross-chat context failed:', error)
         }
     }
+
+    const systemPrompt = partesPrompt.filter(Boolean).join('\n\n')
 
     if (FEATURE_FLAGS.DEBUG_LOGGING) {
         console.log('[PromptPipeline] Composed prompt:', {
@@ -209,6 +333,7 @@ export async function composePrompt(context: PromptContext): Promise<ComposedPro
             additionalTokens,
             hasCrossChatContext,
             hasAutoMemories,
+            orcamento,
             timeMs: Date.now() - startTime
         })
     }
@@ -224,40 +349,40 @@ export async function composePrompt(context: PromptContext): Promise<ComposedPro
     }
 }
 
+export async function composePrompt(context: PromptContext): Promise<ComposedPrompt> {
+    return composePromptComOrcamento(context, {
+        incluirDataHora: 'auto',
+        timeoutCrossChatMs: 250
+    })
+}
+
 /**
  * Versão síncrona simplificada (sem cross-chat context)
  * Útil quando não se quer esperar pela busca semântica
  */
 export function composePromptSync(context: Omit<PromptContext, 'currentUserMessage'>): string {
+    const orcamento = ORCAMENTO_PROMPT_PADRAO
     const permitirMemoriaPerfil = context.permitirMemoriaPerfil ?? true
     const permitirMemoriasAuto = context.permitirMemoriasAuto ?? true
     const permitirContextoPessoal = context.permitirContextoPessoal ?? true
-
-    // Adicionar data atual ao prompt
-    const now = new Date()
-    const dataAtual = now.toLocaleDateString('pt-BR', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    })
-    const horaAtual = now.toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
-        minute: '2-digit'
-    })
-    
-    let systemPrompt = context.systemPrompt + `\n\n📅 **Data e hora atual:** ${dataAtual}, ${horaAtual}.`
+    let systemPrompt = limitarTextoPorTokens(context.systemPrompt, orcamento.systemBaseTokens)
 
     // Adicionar contexto do perfil
     if (context.userProfileContext && permitirMemoriaPerfil) {
-        systemPrompt += context.userProfileContext
+        const perfil = limitarTextoPorTokens(context.userProfileContext, orcamento.perfilTokens)
+        if (perfil) {
+            systemPrompt += `\n\n[contexto_usuario]\n${perfil}`
+        }
     }
 
     // Adicionar memórias automáticas
     if (FEATURE_FLAGS.MEMORY_AUTOPILOT_ENABLED && permitirMemoriasAuto && permitirContextoPessoal) {
-        const autoMemoriesContext = getAutoMemoriesForPrompt()
+        const autoMemoriesContext = getAutoMemoriesForPrompt(undefined, context.currentProjectId)
         if (autoMemoriesContext) {
-            systemPrompt += autoMemoriesContext
+            const autoMemorias = limitarTextoPorTokens(autoMemoriesContext, orcamento.autoMemoriasTokens)
+            if (autoMemorias) {
+                systemPrompt += `\n\n[memorias_automaticas]\n${autoMemorias}`
+            }
         }
     }
 
@@ -294,7 +419,8 @@ export async function processUserMessageForMemory(
     messageId: string,
     conversationId: string,
     content: string,
-    timestamp: number
+    timestamp: number,
+    projectId?: string
 ): Promise<void> {
     // 1. Indexar para cross-chat (NUNCA grava memória permanente)
     if (FEATURE_FLAGS.CROSS_CHAT_CONTEXT_ENABLED) {
@@ -303,7 +429,8 @@ export async function processUserMessageForMemory(
                 messageId,
                 conversationId,
                 content,
-                timestamp
+                timestamp,
+                projectId
             )
         } catch (error) {
             console.warn('[PromptPipeline] Cross-chat indexing failed:', error)
@@ -317,7 +444,8 @@ export async function processUserMessageForMemory(
                 messageId,
                 conversationId,
                 content,
-                timestamp
+                timestamp,
+                projectId
             )
         } catch (error) {
             console.warn('[PromptPipeline] Memory autopilot failed:', error)

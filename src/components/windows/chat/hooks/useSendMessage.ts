@@ -5,20 +5,79 @@ import type { Conversation, WebSource } from '../types'
 import type { ToolCardData } from '../../../../types/tools'
 import type { Project } from '../../../../types/project'
 import type { InvestigationTrace } from '../../../../services/investigate'
+import type { MetaFimStream } from '../../../../services/ai/AIProvider'
 
 // Services
-import { composePrompt, processUserMessageForMemory } from '../../../../services/PromptPipeline'
-import { searchWeb, formatSearchResultsForAI, fetchUrlContent, generateSearchPlanWithAI } from '../../../../services/WebSearchService'
+import {
+    ORCAMENTO_PROMPT_PADRAO,
+    aplicarOrcamentoPrompt,
+    composePromptComOrcamento,
+    deveInjetarContextoPessoal,
+    processUserMessageForMemory,
+} from '../../../../services/PromptPipeline'
+import {
+    extractSearchQuery,
+    fetchUrlContent,
+    formatSearchResultsForAI,
+    generateSearchPlanWithAI,
+    mensagemBuscaPareceAmbigua,
+    searchWeb,
+} from '../../../../services/WebSearchService'
 import { investigateService } from '../../../../services/investigate'
-import { toolCallingService } from '../../../../services/tools/ToolCallingService'
+import { toolCallingService, type EstrategiaDecisaoTool } from '../../../../services/tools/ToolCallingService'
 import { toolRegistry } from '../../../../services/tools/ToolRegistry'
-import { mcpToolBridge } from '../../../../services/tools/MCPToolBridge'
+import { obterConfiguracaoPerfilGeracao } from '../../../../services/ai/politicaGeracao'
 import {
     buildProjectContext,
     addProjectMemory,
     extractConversationMemory
 } from '../../../../services/ProjectContextService'
 import { obterNomeFonte } from '../utils'
+
+interface FiltroContextoPerfil {
+    consulta?: string
+    permitirContextoPessoal?: boolean
+    somenteIdentidadeBasica?: boolean
+}
+
+interface PoliticaLatencia {
+    prestreamBudgetMs: number
+    maxMensagensHistorico: number
+    maxCharsMensagemHistorico: number
+    toolDecisionTimeoutMs: number
+    estrategiaTools: EstrategiaDecisaoTool
+    timeoutCrossChatMs: number
+    webMaxPaginasEnriquecimento: number
+    webFetchTimeoutMs: number
+    webMaxConteudoChars: number
+}
+
+interface MetricasLatencia {
+    tempoPreStream: number
+    tempoPrompt: number
+    tempoTools: number
+    tempoWeb: number
+    ttft: number | null
+    tempoTotal: number
+    timestamp: number
+    conversationId: string
+    modo: 'chat' | 'imagem' | 'investigate'
+}
+
+const POLITICA_LATENCIA_PADRAO: PoliticaLatencia = {
+    prestreamBudgetMs: 450,
+    maxMensagensHistorico: 8,
+    maxCharsMensagemHistorico: 500,
+    toolDecisionTimeoutMs: 600,
+    estrategiaTools: 'heuristic_only',
+    timeoutCrossChatMs: 220,
+    webMaxPaginasEnriquecimento: 2,
+    webFetchTimeoutMs: 2500,
+    webMaxConteudoChars: 800,
+}
+
+const MAX_AUTO_CONTINUACOES = 2
+const MAX_SOBREPOSICAO_DEDUP = 260
 
 interface UseSendMessageParams {
     // Conversation state
@@ -60,9 +119,129 @@ interface UseSendMessageParams {
     setMessageSearchCards: React.Dispatch<React.SetStateAction<Record<string, ToolCardData[]>>>
 
     // Config
-    systemPrompt: string
-    getProfileContext: () => string
+    promptBase: string
+    getProfileContext: (filtro?: FiltroContextoPerfil) => string
     criarOuObterServico: () => any
+
+    // Latency policy
+    politicaLatencia?: Partial<PoliticaLatencia>
+}
+
+function mergePoliticaLatencia(politica?: Partial<PoliticaLatencia>): PoliticaLatencia {
+    return {
+        ...POLITICA_LATENCIA_PADRAO,
+        ...politica,
+    }
+}
+
+function truncarTexto(texto: string, maxChars: number): string {
+    if (texto.length <= maxChars) return texto
+    return texto.slice(0, maxChars).trimEnd() + '...'
+}
+
+function respostaPareceIncompleta(texto: string): boolean {
+    const t = (texto || '').trim()
+    if (!t) return true
+    if (/[.!?…)"'\]]$/.test(t)) return false
+    if (t.length < 12) return true
+    return /\b(e|ou|mas|porque|que|com|para|de|do|da|no|na|seja|como|se)\s*$/i.test(t)
+}
+
+function respostaPareceTruncadaForte(texto: string): boolean {
+    const t = (texto || '').trim()
+    if (!t) return false
+    if (!respostaPareceIncompleta(t)) return false
+
+    const longa = t.length >= 240
+    const pareceListaIncompleta = /(^|\n)(\d+\.|[-*])\s+[^\n]{0,120}$/.test(t)
+
+    return longa || pareceListaIncompleta
+}
+
+function ehFinishReasonLength(meta: MetaFimStream | null): boolean {
+    return meta?.finishReason === 'length'
+}
+
+function mesclarComDeduplicacao(base: string, adicional: string): string {
+    const textoBase = base || ''
+    const textoAdicional = adicional || ''
+    if (!textoBase) return textoAdicional
+    if (!textoAdicional) return textoBase
+
+    const maxSobreposicao = Math.min(MAX_SOBREPOSICAO_DEDUP, textoBase.length, textoAdicional.length)
+
+    for (let tamanho = maxSobreposicao; tamanho >= 20; tamanho--) {
+        const sufixo = textoBase.slice(-tamanho).toLowerCase()
+        const prefixo = textoAdicional.slice(0, tamanho).toLowerCase()
+        if (sufixo === prefixo) {
+            return textoBase + textoAdicional.slice(tamanho)
+        }
+    }
+
+    const precisaQuebra = !textoBase.endsWith('\n') && !textoAdicional.startsWith('\n')
+    return precisaQuebra ? `${textoBase}\n${textoAdicional}` : `${textoBase}${textoAdicional}`
+}
+
+function prepararHistoricoParaModelo(
+    mensagens: ChatMessage[],
+    maxMensagens: number,
+    maxCharsPorMensagem: number
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+    const validas = mensagens
+        .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+        .map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: truncarTexto(m.content, maxCharsPorMensagem),
+        }))
+
+    if (validas.length <= maxMensagens) {
+        return validas
+    }
+
+    const antigas = validas.slice(0, validas.length - maxMensagens)
+    const recentes = validas.slice(-maxMensagens)
+    const resumo = antigas
+        .slice(-4)
+        .map((m) => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${truncarTexto(m.content, 120)}`)
+        .join(' | ')
+
+    return [
+        {
+            role: 'assistant',
+            content: truncarTexto(`Resumo do contexto anterior: ${resumo}`, maxCharsPorMensagem),
+        },
+        ...recentes,
+    ]
+}
+
+async function executarComTimeout<T>(promessa: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+        return promessa.catch(() => fallback)
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const timeout = new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(fallback), timeoutMs)
+    })
+
+    try {
+        return await Promise.race([promessa, timeout])
+    } catch {
+        return fallback
+    } finally {
+        if (timer) clearTimeout(timer)
+    }
+}
+
+function publicarMetricasLatencia(metricas: MetricasLatencia): void {
+    if (typeof window === 'undefined') return
+
+    const janelaComDebug = window as Window & { __SELENE_LATENCIA__?: MetricasLatencia[] }
+    const historico = janelaComDebug.__SELENE_LATENCIA__ || []
+    janelaComDebug.__SELENE_LATENCIA__ = [...historico.slice(-29), metricas]
+
+    window.dispatchEvent(new CustomEvent('selene:metricas-latencia', { detail: metricas }))
+    console.log('[Latencia]', metricas)
 }
 
 export function useSendMessage({
@@ -92,10 +271,12 @@ export function useSendMessage({
     setCurrentTrace,
     setMessageSources,
     setMessageSearchCards,
-    systemPrompt,
+    promptBase,
     getProfileContext,
     criarOuObterServico,
+    politicaLatencia,
 }: UseSendMessageParams) {
+    const politica = mergePoliticaLatencia(politicaLatencia)
 
     // Helper to update conversation messages
     const updateConversationMessages = useCallback((convId: string, newMessages: ChatMessage[]) => {
@@ -221,6 +402,7 @@ export function useSendMessage({
 
         const promptImagem = pendingScreenshots.length > 0 ? (hasTexto ? input.trim() : 'Descreva a imagem e responda em português.') : null
         const userContent = promptImagem ?? input.trim()
+        const configGeracaoChat = obterConfiguracaoPerfilGeracao(userContent, { investigateMode })
 
         const userMsg: ChatMessage = {
             id: uuidv4(),
@@ -253,13 +435,23 @@ export function useSendMessage({
         let streamedContent = ''
 
         const isGenerationActive = () => generationIdRef.current === currentGenerationId
+        const signal = (abortControllerRef as React.MutableRefObject<AbortController | null>).current?.signal
+        const inicioTotal = performance.now()
+        const inicioPreStream = performance.now()
+        let tempoPrompt = 0
+        let tempoTools = 0
+        let tempoWeb = 0
+        let ttft: number | null = null
+        let modoMetricas: MetricasLatencia['modo'] = 'chat'
 
         try {
             if (pendingScreenshots.length > 0 && promptImagem) {
+                modoMetricas = 'imagem'
                 setIsAnalyzingImage(true)
 
                 const imagemUnica = await juntarScreenshots(pendingScreenshots)
                 if (!imagemUnica) throw new Error('Falha ao preparar imagens')
+                const configGeracaoImagem = obterConfiguracaoPerfilGeracao(promptImagem, { ehImagem: true })
 
                 let firstChunkReceived = false
                 await servico.streamAnalisarImagem(
@@ -270,6 +462,9 @@ export function useSendMessage({
 
                         if (!firstChunkReceived) {
                             firstChunkReceived = true
+                            if (ttft === null) {
+                                ttft = performance.now() - inicioTotal
+                            }
                             setIsAnalyzingImage(false)
                         }
 
@@ -285,9 +480,14 @@ export function useSendMessage({
                             }
                             return c
                         }))
+                    },
+                    {
+                        signal,
+                        temperature: configGeracaoImagem.temperature,
                     }
                 )
             } else if (investigateMode && hasTexto) {
+                modoMetricas = 'investigate'
                 console.log('[useSendMessage] Starting investigation for:', userContent)
 
                 setConversations(prev => prev.map(c => {
@@ -314,6 +514,10 @@ export function useSendMessage({
                     
                     for (let i = 0; i < fullAnswer.length; i += chunkSize) {
                         displayedContent = fullAnswer.slice(0, i + chunkSize)
+
+                        if (ttft === null) {
+                            ttft = performance.now() - inicioTotal
+                        }
                         
                         setConversations(prev => prev.map(c => {
                             if (c.id === convId) {
@@ -351,29 +555,42 @@ export function useSendMessage({
                 let contextoFerramentas = ''
                 let cartoesFerramentas: ToolCardData[] = []
 
-                if (webSearchEnabled) {
-                    try {
-                        const chatHistory = messages.map(m => ({
-                            role: m.role as 'user' | 'assistant',
-                            content: m.content
-                        }))
+                const tempoRestantePreStream = () => Math.max(0, politica.prestreamBudgetMs - (performance.now() - inicioPreStream))
 
-                        const searchPlan = await generateSearchPlanWithAI(
-                            userMsg.content,
-                            chatHistory,
-                            async (prompt: string) => {
-                                return await servico.chat(prompt, '', [])
-                            }
+                if (webSearchEnabled) {
+                    const inicioWeb = performance.now()
+                    try {
+                        const historicoBusca = prepararHistoricoParaModelo(
+                            messages,
+                            politica.maxMensagensHistorico,
+                            politica.maxCharsMensagemHistorico
                         )
 
-                        console.log('[useSendMessage] AI Search Plan:', searchPlan)
+                        let queryBusca = extractSearchQuery(userMsg.content)
+                        let statusMessage = `Vou buscar informações sobre ${truncarTexto(queryBusca, 50)}.`
+
+                        const usarPlanejamentoIA = mensagemBuscaPareceAmbigua(userMsg.content) && tempoRestantePreStream() > 80
+                        if (usarPlanejamentoIA) {
+                            const configPlanejamentoBusca = obterConfiguracaoPerfilGeracao(userMsg.content, { forcarPerfil: 'pergunta_curta' })
+                            const searchPlan = await generateSearchPlanWithAI(
+                                userMsg.content,
+                                historicoBusca,
+                                async (prompt: string) => await servico.chat(prompt, '', [], {
+                                    signal,
+                                    temperature: configPlanejamentoBusca.temperature,
+                                }),
+                                Math.min(400, Math.max(120, Math.floor(tempoRestantePreStream())))
+                            )
+                            queryBusca = searchPlan.query || queryBusca
+                            statusMessage = searchPlan.statusMessage || statusMessage
+                        }
 
                         setConversations(prev => prev.map(c => {
                             if (c.id === convId) {
                                 return {
                                     ...c,
                                     messages: c.messages.map(m =>
-                                        m.id === aiMsgId ? { ...m, content: searchPlan.statusMessage } : m
+                                        m.id === aiMsgId ? { ...m, content: statusMessage } : m
                                     )
                                 }
                             }
@@ -386,23 +603,31 @@ export function useSendMessage({
                                 toolId: 'builtin:web_search',
                                 toolName: 'Busca na Web',
                                 toolIcon: 'Globe',
-                                query: searchPlan.query,
+                                query: queryBusca,
                                 status: 'executing',
                                 resultCount: 0,
                                 results: []
                             }]
                         }))
 
-                        const searchResponse = await searchWeb(searchPlan.query, 5)
+                        const searchResponse = await executarComTimeout(
+                            searchWeb(queryBusca, 5),
+                            1800,
+                            { query: queryBusca, results: [], timestamp: Date.now() }
+                        )
 
                         if (searchResponse.results.length > 0) {
                             const enrichedResults = await Promise.all(
-                                searchResponse.results.slice(0, 3).map(async (result) => {
+                                searchResponse.results.slice(0, politica.webMaxPaginasEnriquecimento).map(async (result) => {
                                     try {
                                         if (result.content && result.content.length > 0) {
                                             return result
                                         }
-                                        const content = await fetchUrlContent(result.url, 1500)
+                                        const content = await fetchUrlContent(
+                                            result.url,
+                                            politica.webMaxConteudoChars,
+                                            politica.webFetchTimeoutMs
+                                        )
                                         return { ...result, content }
                                     } catch {
                                         return result
@@ -411,7 +636,11 @@ export function useSendMessage({
                             )
                             searchResponse.results = enrichedResults
 
-                            webSearchContext = formatSearchResultsForAI(searchResponse)
+                            const blocoWebAplicado = aplicarOrcamentoPrompt(
+                                formatSearchResultsForAI(searchResponse),
+                                ORCAMENTO_PROMPT_PADRAO.ferramentasWebTokens
+                            )
+                            webSearchContext = blocoWebAplicado.texto
 
                             const cardResults = searchResponse.results.map(r => ({
                                 type: 'link' as const,
@@ -444,15 +673,13 @@ export function useSendMessage({
                                     toolId: 'builtin:web_search',
                                     toolName: 'Busca na Web',
                                     toolIcon: 'Globe',
-                                    query: searchPlan.query,
+                                    query: queryBusca,
                                     status: 'completed',
                                     resultCount: searchResponse.results.length,
                                     results: cardResults,
-                                    statusText: searchPlan.statusMessage
+                                    statusText: statusMessage
                                 }]
                             }))
-
-                            console.log('[useSendMessage] Web search found', searchSources.length, 'sources')
                         } else {
                             setMessageSearchCards(prev => ({
                                 ...prev,
@@ -460,11 +687,11 @@ export function useSendMessage({
                                     toolId: 'builtin:web_search',
                                     toolName: 'Busca na Web',
                                     toolIcon: 'Globe',
-                                    query: searchPlan.query,
+                                    query: queryBusca,
                                     status: 'completed',
                                     resultCount: 0,
                                     results: [],
-                                    statusText: searchPlan.statusMessage
+                                    statusText: statusMessage
                                 }]
                             }))
                         }
@@ -482,123 +709,183 @@ export function useSendMessage({
                         }))
                     } catch (err) {
                         console.warn('[useSendMessage] Web search failed:', err)
+                    } finally {
+                        tempoWeb = performance.now() - inicioWeb
                     }
                 }
 
                 if (toolCallingAtivo) {
+                    const inicioTools = performance.now()
                     try {
-                        await mcpToolBridge.syncAllTools()
-                    } catch (error) {
-                        console.warn('[useSendMessage] Falha ao sincronizar MCP:', error)
-                    }
+                        const ferramentasDisponiveis = toolRegistry
+                            .getEnabled()
+                            .filter(tool => !(webSearchEnabled && tool.id === 'builtin:web_search'))
 
-                    const ferramentasDisponiveis = toolRegistry
-                        .getEnabled()
-                        .filter(tool => !(webSearchEnabled && tool.id === 'builtin:web_search'))
+                        if (ferramentasDisponiveis.length > 0) {
+                            const historicoChat = prepararHistoricoParaModelo(
+                                messages,
+                                politica.maxMensagensHistorico,
+                                politica.maxCharsMensagemHistorico
+                            )
 
-                    if (ferramentasDisponiveis.length > 0) {
-                        const historicoChat = messages.map(m => ({
-                            role: m.role as 'user' | 'assistant',
-                            content: m.content
-                        }))
-
-                        const decisao = await toolCallingService.decideToolUsage(
-                            userMsg.content,
-                            historicoChat,
-                            ferramentasDisponiveis
-                        )
-
-                        if (decisao.shouldUseTool && decisao.toolCalls.length > 0) {
-                            const statusMessage = await toolCallingService.generateStatusMessage(
+                            const decisao = await toolCallingService.decideToolUsage(
                                 userMsg.content,
-                                decisao.toolCalls
+                                historicoChat,
+                                ferramentasDisponiveis,
+                                {
+                                    estrategiaDecisao: politica.estrategiaTools,
+                                    timeoutMs: politica.toolDecisionTimeoutMs
+                                }
                             )
 
-                            let progressContent = statusMessage || ''
-                            if (progressContent) {
-                                setConversations(prev => prev.map(c => {
-                                    if (c.id === convId) {
-                                        return {
-                                            ...c,
-                                            messages: c.messages.map(m =>
-                                                m.id === aiMsgId ? { ...m, content: progressContent } : m
-                                            )
+                            if (decisao.shouldUseTool && decisao.toolCalls.length > 0) {
+                                const statusMessage = await toolCallingService.generateStatusMessage(
+                                    userMsg.content,
+                                    decisao.toolCalls
+                                )
+
+                                const progressContent = statusMessage || ''
+                                if (progressContent) {
+                                    setConversations(prev => prev.map(c => {
+                                        if (c.id === convId) {
+                                            return {
+                                                ...c,
+                                                messages: c.messages.map(m =>
+                                                    m.id === aiMsgId ? { ...m, content: progressContent } : m
+                                                )
+                                            }
                                         }
-                                    }
-                                    return c
-                                }))
-                            }
+                                        return c
+                                    }))
+                                }
 
-                            // Get project ID from current conversation
-                            const convForContext = conversations.find(c => c.id === convId)
-                            const projectIdForTools = convForContext?.projectId
+                                const convForContext = conversations.find(c => c.id === convId)
+                                const projectIdForTools = convForContext?.projectId
 
-                            const calls = await toolCallingService.executeToolCalls(
-                                decisao,
-                                undefined,
-                                undefined,
-                                { conversationId: convId!, projectId: projectIdForTools }
-                            )
-                            contextoFerramentas = toolCallingService.formatResultsForAI(calls)
-                            cartoesFerramentas = toolCallingService.toolCallsToCardData(calls, progressContent)
+                                const calls = await toolCallingService.executeToolCalls(
+                                    decisao,
+                                    undefined,
+                                    undefined,
+                                    { conversationId: convId!, projectId: projectIdForTools }
+                                )
 
-                            if (cartoesFerramentas.length > 0) {
-                                setMessageSearchCards(prev => {
-                                    const existentes = prev[aiMsgId] || []
-                                    return {
-                                        ...prev,
-                                        [aiMsgId]: [...existentes, ...cartoesFerramentas]
-                                    }
-                                })
+                                const blocoToolsAplicado = aplicarOrcamentoPrompt(
+                                    toolCallingService.formatResultsForAI(calls),
+                                    ORCAMENTO_PROMPT_PADRAO.ferramentasWebTokens
+                                )
+                                contextoFerramentas = blocoToolsAplicado.texto
+                                cartoesFerramentas = toolCallingService.toolCallsToCardData(calls, progressContent)
 
-                                setConversations(prev => prev.map(c => {
-                                    if (c.id === convId) {
+                                if (cartoesFerramentas.length > 0) {
+                                    setMessageSearchCards(prev => {
+                                        const existentes = prev[aiMsgId] || []
                                         return {
-                                            ...c,
-                                            messages: c.messages.map(m =>
-                                                m.id === aiMsgId ? { ...m, content: '' } : m
-                                            )
+                                            ...prev,
+                                            [aiMsgId]: [...existentes, ...cartoesFerramentas]
                                         }
-                                    }
-                                    return c
-                                }))
+                                    })
+
+                                    setConversations(prev => prev.map(c => {
+                                        if (c.id === convId) {
+                                            return {
+                                                ...c,
+                                                messages: c.messages.map(m =>
+                                                    m.id === aiMsgId ? { ...m, content: '' } : m
+                                                )
+                                            }
+                                        }
+                                        return c
+                                    }))
+                                }
                             }
                         }
+                    } finally {
+                        tempoTools = performance.now() - inicioTools
                     }
                 }
 
-                const { systemPrompt: composedPrompt } = await composePrompt({
-                    systemPrompt,
-                    userProfileContext: getProfileContext(),
-                    currentConversationId: convId,
-                    currentUserMessage: userMsg.content
+                const inicioPrompt = performance.now()
+                const currentConv = conversations.find(c => c.id === convId)
+                const currentProjectId = currentConv?.projectId
+                const emProjeto = Boolean(currentProjectId)
+                const permitirContextoPessoal = deveInjetarContextoPessoal(userMsg.content, true)
+                const contextoPerfil = getProfileContext({
+                    consulta: userMsg.content,
+                    permitirContextoPessoal: emProjeto ? false : permitirContextoPessoal,
+                    somenteIdentidadeBasica: emProjeto,
                 })
+
+                const { systemPrompt: composedPrompt } = await composePromptComOrcamento(
+                    {
+                        systemPrompt: promptBase,
+                        userProfileContext: contextoPerfil,
+                        currentConversationId: convId,
+                        currentProjectId,
+                        currentUserMessage: userMsg.content,
+                        permitirContextoPessoal,
+                    },
+                    {
+                        orcamento: ORCAMENTO_PROMPT_PADRAO,
+                        incluirDataHora: 'auto',
+                        timeoutCrossChatMs: Math.min(
+                            politica.timeoutCrossChatMs,
+                            Math.max(80, Math.floor(tempoRestantePreStream()))
+                        ),
+                    }
+                )
+                tempoPrompt = performance.now() - inicioPrompt
 
                 let projectContext = ''
                 let projectInstructions = ''
-                const currentConv = conversations.find(c => c.id === convId)
                 if (currentConv?.projectId) {
                     const project = projects.find(p => p.id === currentConv.projectId)
                     if (project) {
-                        // Add project instructions if defined
                         if (project.instructions && project.instructions.trim()) {
-                            projectInstructions = `\n\n📁 **Instruções do Projeto "${project.name}":**\n${project.instructions.trim()}`
-                            console.log('[useSendMessage] Injected project instructions:', project.instructions.slice(0, 50) + '...')
+                            const instrucaoAplicada = aplicarOrcamentoPrompt(
+                                `[instrucoes_projeto]\n${project.instructions.trim()}`,
+                                Math.floor(ORCAMENTO_PROMPT_PADRAO.projetoTokens / 2)
+                            )
+                            projectInstructions = instrucaoAplicada.texto
                         }
-                        // Add project files context
                         if (project.files.length > 0) {
-                            projectContext = '\n\n' + buildProjectContext(project, userContent, project.files)
-                            console.log('[useSendMessage] Injected project context from', project.files.length, 'files')
+                            const contextoProjetoBruto = buildProjectContext(project, userContent, project.files)
+                            const contextoProjetoAplicado = aplicarOrcamentoPrompt(
+                                contextoProjetoBruto,
+                                Math.floor(ORCAMENTO_PROMPT_PADRAO.projetoTokens / 2)
+                            )
+                            projectContext = contextoProjetoAplicado.texto
                         }
                     }
                 }
 
-                const finalPrompt = composedPrompt + projectInstructions + webSearchContext + contextoFerramentas + projectContext
+                const instrucaoRespostaCurta = (configGeracaoChat.perfil === 'saudacao_ack' || configGeracaoChat.perfil === 'pergunta_curta')
+                    ? '[formato_resposta]\nResponda de forma curta e completa em português do Brasil, finalizando a última frase.'
+                    : ''
 
+                const finalPrompt = [
+                    composedPrompt,
+                    projectInstructions,
+                    webSearchContext,
+                    contextoFerramentas,
+                    projectContext,
+                    instrucaoRespostaCurta,
+                ].filter(Boolean).join('\n\n')
+
+                const historicoParaModelo = prepararHistoricoParaModelo(
+                    messages,
+                    politica.maxMensagensHistorico,
+                    politica.maxCharsMensagemHistorico
+                )
+
+                let metaFimPrincipal: MetaFimStream | null = null
                 await servico.streamChat(
                     userMsg.content,
                     (chunk: string) => {
                         if (!isGenerationActive()) return
+
+                        if (ttft === null) {
+                            ttft = performance.now() - inicioTotal
+                        }
 
                         streamedContent += chunk
                         setConversations(prev => prev.map(c => {
@@ -614,8 +901,148 @@ export function useSendMessage({
                         }))
                     },
                     finalPrompt,
-                    messages
+                    historicoParaModelo,
+                    {
+                        signal,
+                        temperature: configGeracaoChat.temperature,
+                        onFimStream: (meta: MetaFimStream) => {
+                            metaFimPrincipal = meta
+                        },
+                    }
                 )
+
+                let continuacoesExecutadas = 0
+                let truncamentoPersistente =
+                    ehFinishReasonLength(metaFimPrincipal) ||
+                    respostaPareceTruncadaForte(streamedContent)
+
+                while (isGenerationActive() && truncamentoPersistente && continuacoesExecutadas < MAX_AUTO_CONTINUACOES) {
+                    continuacoesExecutadas += 1
+                    const conteudoAntesContinuacao = streamedContent
+                    let bufferContinuacao = ''
+                    let metaFimContinuacao: MetaFimStream | null = null
+
+                    const instrucaoContinuacao = [
+                        'Continue exatamente de onde a resposta anterior parou.',
+                        'Não repita conteúdo já escrito.',
+                        'Finalize a explicação com fechamento completo.',
+                    ].join(' ')
+
+                    const historicoContinuacao = [
+                        ...historicoParaModelo,
+                        { role: 'user' as const, content: userMsg.content },
+                        {
+                            role: 'assistant' as const,
+                            content: truncarTexto(conteudoAntesContinuacao, 1800),
+                        },
+                    ]
+
+                    await servico.streamChat(
+                        instrucaoContinuacao,
+                        (chunk: string) => {
+                            if (!isGenerationActive()) return
+                            bufferContinuacao += chunk
+                            streamedContent += chunk
+                            setConversations(prev => prev.map(c => {
+                                if (c.id === convId) {
+                                    return {
+                                        ...c,
+                                        messages: c.messages.map(m =>
+                                            m.id === aiMsgId ? { ...m, content: streamedContent } : m
+                                        )
+                                    }
+                                }
+                                return c
+                            }))
+                        },
+                        finalPrompt,
+                        historicoContinuacao,
+                        {
+                            signal,
+                            temperature: configGeracaoChat.temperature,
+                            onFimStream: (meta: MetaFimStream) => {
+                                metaFimContinuacao = meta
+                            },
+                        }
+                    )
+
+                    if (bufferContinuacao.trim()) {
+                        const conteudoSemDuplicacao = mesclarComDeduplicacao(conteudoAntesContinuacao, bufferContinuacao)
+                        if (conteudoSemDuplicacao !== streamedContent) {
+                            streamedContent = conteudoSemDuplicacao
+                            setConversations(prev => prev.map(c => {
+                                if (c.id === convId) {
+                                    return {
+                                        ...c,
+                                        messages: c.messages.map(m =>
+                                            m.id === aiMsgId ? { ...m, content: streamedContent } : m
+                                        )
+                                    }
+                                }
+                                return c
+                            }))
+                        }
+                    }
+
+                    truncamentoPersistente =
+                        ehFinishReasonLength(metaFimContinuacao) ||
+                        respostaPareceTruncadaForte(bufferContinuacao || streamedContent)
+                }
+
+                if (isGenerationActive() && truncamentoPersistente) {
+                    streamedContent = `${streamedContent.trimEnd()}\n\n[Resposta interrompida por limite do modelo.]`
+                    setConversations(prev => prev.map(c => {
+                        if (c.id === convId) {
+                            return {
+                                ...c,
+                                messages: c.messages.map(m =>
+                                    m.id === aiMsgId ? { ...m, content: streamedContent } : m
+                                )
+                            }
+                        }
+                        return c
+                    }))
+                }
+
+                const respostaVazia = !streamedContent.trim()
+                const respostaCurtaIncompleta =
+                    (configGeracaoChat.perfil === 'saudacao_ack' || configGeracaoChat.perfil === 'pergunta_curta')
+                    && respostaPareceIncompleta(streamedContent)
+
+                if (isGenerationActive() && (respostaVazia || respostaCurtaIncompleta)) {
+                    try {
+                        const promptReparo = respostaVazia
+                            ? userMsg.content
+                            : `${userMsg.content}\n\nResponda novamente de forma curta e completa, sem cortar a frase final.`
+
+                        const respostaReparo = await servico.chat(
+                            promptReparo,
+                            finalPrompt,
+                            historicoParaModelo,
+                            {
+                                signal,
+                                temperature: configGeracaoChat.temperature,
+                            }
+                        )
+
+                        if (respostaReparo?.trim()) {
+                            streamedContent = respostaReparo.trim()
+                            setConversations(prev => prev.map(c => {
+                                if (c.id === convId) {
+                                    return {
+                                        ...c,
+                                        messages: c.messages.map(m =>
+                                            m.id === aiMsgId ? { ...m, content: streamedContent } : m
+                                        )
+                                    }
+                                }
+                                return c
+                            }))
+                        }
+                    } catch (erroReparo) {
+                        console.warn('[useSendMessage] Falha no reparo de resposta curta:', erroReparo)
+                    }
+                }
 
                 if (searchSources.length > 0) {
                     setMessageSources(prev => ({
@@ -629,7 +1056,8 @@ export function useSendMessage({
                 userMsg.id,
                 convId,
                 userMsg.content,
-                userMsg.timestamp
+                userMsg.timestamp,
+                conversations.find(c => c.id === convId)?.projectId
             ).catch(err => console.warn('[useSendMessage] Memory processing failed:', err))
 
             const currentConv = conversations.find(c => c.id === convId)
@@ -683,6 +1111,20 @@ export function useSendMessage({
                 updateConversationMessages(convId, [...messages, userMsg, errorMsg])
             }
         } finally {
+            const tempoTotal = performance.now() - inicioTotal
+            const tempoPreStream = performance.now() - inicioPreStream
+            publicarMetricasLatencia({
+                tempoPreStream,
+                tempoPrompt,
+                tempoTools,
+                tempoWeb,
+                ttft,
+                tempoTotal,
+                timestamp: Date.now(),
+                conversationId: convId,
+                modo: modoMetricas,
+            })
+
             if (isGenerationActive()) {
                 setIsGenerating(false)
                 setIsAnalyzingImage(false)
@@ -693,10 +1135,13 @@ export function useSendMessage({
     }, [
         input, pendingScreenshots, isGenerating, activeConversationId, messages,
         conversations, projects, webSearchEnabled, toolCallingAtivo, investigateMode,
-        systemPrompt, getProfileContext, criarOuObterServico, updateConversationMessages,
+        promptBase, getProfileContext, criarOuObterServico, updateConversationMessages,
         runInvestigation, setConversations, setActiveConversationId, setInput,
         setPendingScreenshots, setPendingMessage, setIsGenerating, setIsAnalyzingImage,
-        setMessageSources, setMessageSearchCards, textareaRef, generationIdRef, abortControllerRef
+        setMessageSources, setMessageSearchCards, textareaRef, generationIdRef, abortControllerRef,
+        politica.maxMensagensHistorico, politica.maxCharsMensagemHistorico, politica.prestreamBudgetMs,
+        politica.timeoutCrossChatMs, politica.webMaxPaginasEnriquecimento, politica.webFetchTimeoutMs,
+        politica.webMaxConteudoChars, politica.estrategiaTools, politica.toolDecisionTimeoutMs,
     ])
 
     // Stop generation
@@ -739,16 +1184,109 @@ export function useSendMessage({
 
         updateConversationMessages(activeConversationId, messagesUpToUser)
         setIsGenerating(true)
+        ;(abortControllerRef as React.MutableRefObject<AbortController | null>).current = new AbortController()
+        const signal = (abortControllerRef as React.MutableRefObject<AbortController | null>).current?.signal
 
         try {
-            const { systemPrompt: composedPrompt } = await composePrompt({
-                systemPrompt,
-                userProfileContext: getProfileContext(),
-                currentConversationId: activeConversationId,
-                currentUserMessage: userContent
+            const permitirContextoPessoal = deveInjetarContextoPessoal(userContent, true)
+            const currentConv = conversations.find(c => c.id === activeConversationId)
+            const currentProjectId = currentConv?.projectId
+            const emProjeto = Boolean(currentProjectId)
+            const contextoPerfil = getProfileContext({
+                consulta: userContent,
+                permitirContextoPessoal: emProjeto ? false : permitirContextoPessoal,
+                somenteIdentidadeBasica: emProjeto,
             })
 
-            const response = await servico.chat(userContent, composedPrompt, messagesUpToUser.slice(0, -1))
+            const { systemPrompt: composedPrompt } = await composePromptComOrcamento(
+                {
+                    systemPrompt: promptBase,
+                    userProfileContext: contextoPerfil,
+                    currentConversationId: activeConversationId,
+                    currentProjectId,
+                    currentUserMessage: userContent,
+                    permitirContextoPessoal,
+                },
+                {
+                    orcamento: ORCAMENTO_PROMPT_PADRAO,
+                    incluirDataHora: 'auto',
+                    timeoutCrossChatMs: politica.timeoutCrossChatMs,
+                }
+            )
+
+            const historicoParaModelo = prepararHistoricoParaModelo(
+                messagesUpToUser.slice(0, -1),
+                politica.maxMensagensHistorico,
+                politica.maxCharsMensagemHistorico
+            )
+
+            const configGeracaoRegen = obterConfiguracaoPerfilGeracao(userContent, { investigateMode })
+            let response = ''
+            let metaFimPrincipal: MetaFimStream | null = null
+            await servico.streamChat(
+                userContent,
+                (chunk: string) => { response += chunk },
+                composedPrompt,
+                historicoParaModelo,
+                {
+                    signal,
+                    temperature: configGeracaoRegen.temperature,
+                    onFimStream: (meta: MetaFimStream) => {
+                        metaFimPrincipal = meta
+                    },
+                }
+            )
+
+            let continuacoesExecutadas = 0
+            let truncamentoPersistente =
+                ehFinishReasonLength(metaFimPrincipal) ||
+                respostaPareceTruncadaForte(response)
+
+            while (truncamentoPersistente && continuacoesExecutadas < MAX_AUTO_CONTINUACOES) {
+                continuacoesExecutadas += 1
+                const conteudoAntesContinuacao = response
+                let bufferContinuacao = ''
+                let metaFimContinuacao: MetaFimStream | null = null
+
+                const instrucaoContinuacao = [
+                    'Continue exatamente de onde a resposta anterior parou.',
+                    'Não repita conteúdo já escrito.',
+                    'Finalize a explicação com fechamento completo.',
+                ].join(' ')
+
+                const historicoContinuacao = [
+                    ...historicoParaModelo,
+                    { role: 'user' as const, content: userContent },
+                    {
+                        role: 'assistant' as const,
+                        content: truncarTexto(conteudoAntesContinuacao, 1800),
+                    },
+                ]
+
+                await servico.streamChat(
+                    instrucaoContinuacao,
+                    (chunk: string) => { bufferContinuacao += chunk },
+                    composedPrompt,
+                    historicoContinuacao,
+                    {
+                        signal,
+                        temperature: configGeracaoRegen.temperature,
+                        onFimStream: (meta: MetaFimStream) => {
+                            metaFimContinuacao = meta
+                        },
+                    }
+                )
+
+                response = mesclarComDeduplicacao(conteudoAntesContinuacao, bufferContinuacao)
+                truncamentoPersistente =
+                    ehFinishReasonLength(metaFimContinuacao) ||
+                    respostaPareceTruncadaForte(bufferContinuacao || response)
+            }
+
+            if (truncamentoPersistente) {
+                response = `${response.trimEnd()}\n\n[Resposta interrompida por limite do modelo.]`
+            }
+
             const aiMsg: ChatMessage = {
                 id: uuidv4(),
                 role: 'assistant',
@@ -756,12 +1294,22 @@ export function useSendMessage({
                 timestamp: Date.now()
             }
             updateConversationMessages(activeConversationId, [...messagesUpToUser, aiMsg])
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'AbortError') {
+                console.log('[useSendMessage] Regenerate stopped by user')
+                return
+            }
             console.error('[useSendMessage] Regenerate error:', error)
         } finally {
+            ;(abortControllerRef as React.MutableRefObject<AbortController | null>).current = null
             setIsGenerating(false)
         }
-    }, [activeConversationId, messages, isGenerating, systemPrompt, getProfileContext, criarOuObterServico, updateConversationMessages, setIsGenerating])
+    }, [
+        activeConversationId, messages, isGenerating, investigateMode, promptBase, getProfileContext,
+        criarOuObterServico, updateConversationMessages, setIsGenerating, abortControllerRef,
+        politica.maxMensagensHistorico, politica.maxCharsMensagemHistorico,
+        politica.timeoutCrossChatMs,
+    ])
 
     return {
         handleSend,

@@ -19,6 +19,9 @@ export interface IndexedMessage {
     /** ID da conversa de origem */
     conversationId: string
 
+    /** ID do projeto de origem (opcional para conversas globais) */
+    projectId?: string
+
     /** Conteúdo textual da mensagem */
     content: string
 
@@ -153,6 +156,7 @@ export function validateIndexedMessage(data: unknown): data is IndexedMessage {
     return (
         typeof msg.id === 'string' &&
         typeof msg.conversationId === 'string' &&
+        (typeof msg.projectId === 'string' || typeof msg.projectId === 'undefined') &&
         typeof msg.content === 'string' &&
         Array.isArray(msg.embedding) &&
         typeof msg.timestamp === 'number' &&
@@ -201,6 +205,7 @@ export function createEmptyMetrics(): CrossChatMetrics {
 export function createIndexedMessage(
     id: string,
     conversationId: string,
+    projectId: string | undefined,
     content: string,
     embedding: number[],
     timestamp: number
@@ -208,6 +213,7 @@ export function createIndexedMessage(
     return {
         id,
         conversationId,
+        projectId,
         content,
         embedding,
         timestamp,

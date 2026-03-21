@@ -19,6 +19,7 @@ export interface Memory {
 export interface FiltroContextoPerfil {
     consulta?: string
     permitirContextoPessoal?: boolean
+    somenteIdentidadeBasica?: boolean
 }
 
 function normalizarTextoParaRelevancia(texto: string): string {
@@ -130,7 +131,22 @@ export function useUserProfile() {
     // Build enhanced system prompt context
     const getProfileContext = useCallback((filtro: FiltroContextoPerfil = {}) => {
         const permitirContextoPessoal = filtro.permitirContextoPessoal ?? true
+        const somenteIdentidadeBasica = filtro.somenteIdentidadeBasica ?? false
         const consulta = filtro.consulta?.trim() || ''
+
+        if (somenteIdentidadeBasica) {
+            let contextoBasico = ''
+            if (profile.name || profile.occupation) {
+                contextoBasico += '\n\n--- Contexto do Usuário ---\n'
+                if (profile.name) {
+                    contextoBasico += `O usuário quer ser chamado de: ${profile.name}\n`
+                }
+                if (profile.occupation) {
+                    contextoBasico += `Ocupação: ${profile.occupation}\n`
+                }
+            }
+            return contextoBasico
+        }
 
         const memoriasFiltradas = permitirContextoPessoal
             ? filtrarMemoriasPorRelevancia(memories, consulta)

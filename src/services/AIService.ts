@@ -1,6 +1,7 @@
 export * from './ai/types'
 import type { AIConfig, AcaoTexto, MensagemChat, ProvedorID, TomTexto } from './ai/types'
 import type { AIProvider } from './ai/AIProvider'
+import type { OpcoesRequisicaoIA } from './ai/AIProvider'
 import { OpenAIProvider } from './ai/providers/OpenAIProvider'
 import { GeminiProvider } from './ai/providers/GeminiProvider'
 import { OpenRouterProvider } from './ai/providers/OpenRouterProvider'
@@ -39,27 +40,33 @@ export class AIService {
     return this.providers[this.activeProviderId]
   }
 
-  async chat(texto: string, systemPrompt: string = 'Você é uma assistente útil chamada Selene.', history: { role: 'user' | 'assistant', content: string }[] = []): Promise<string> {
+  async chat(
+    texto: string,
+    systemPrompt: string = 'Você é uma assistente útil chamada Selene.',
+    history: { role: 'user' | 'assistant', content: string }[] = [],
+    opcoes: OpcoesRequisicaoIA = {}
+  ): Promise<string> {
     const mensagens: MensagemChat[] = [
       { role: 'system', content: systemPrompt },
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: texto }
     ]
-    return this.activeProvider.chat(mensagens)
+    return this.activeProvider.chat(mensagens, opcoes)
   }
 
   async streamChat(
     texto: string,
     onChunk: (chunk: string) => void,
     systemPrompt: string = 'Você é uma assistente útil chamada Selene.',
-    history: { role: 'user' | 'assistant', content: string }[] = []
+    history: { role: 'user' | 'assistant', content: string }[] = [],
+    opcoes: OpcoesRequisicaoIA = {}
   ): Promise<void> {
     const mensagens: MensagemChat[] = [
       { role: 'system', content: systemPrompt },
       ...history.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: texto }
     ]
-    return this.activeProvider.streamChat(mensagens, onChunk)
+    return this.activeProvider.streamChat(mensagens, onChunk, opcoes)
   }
 
   async transcribe(audioBlob: Blob): Promise<string> {
@@ -87,14 +94,15 @@ export class AIService {
     return ''
   }
 
-  async analisarImagem(pergunta: string, dataUrl: string): Promise<string> {
-    return this.activeProvider.analisarImagem(pergunta, dataUrl)
+  async analisarImagem(pergunta: string, dataUrl: string, opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
+    return this.activeProvider.analisarImagem(pergunta, dataUrl, opcoes)
   }
 
   async streamAnalisarImagem(
     pergunta: string,
     dataUrl: string,
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string) => void,
+    opcoes: OpcoesRequisicaoIA = {}
   ): Promise<void> {
     console.log('[AIService] streamAnalisarImagem called, provider:', this.activeProviderId)
     
@@ -102,12 +110,12 @@ export class AIService {
     const provider = this.activeProvider
     if (typeof provider.streamAnalisarImagem === 'function') {
       console.log('[AIService] Using streaming for image analysis')
-      return provider.streamAnalisarImagem(pergunta, dataUrl, onChunk)
+      return provider.streamAnalisarImagem(pergunta, dataUrl, onChunk, opcoes)
     }
     
     // Fallback to non-streaming
     console.log('[AIService] Fallback to non-streaming image analysis')
-    const result = await provider.analisarImagem(pergunta, dataUrl)
+    const result = await provider.analisarImagem(pergunta, dataUrl, opcoes)
     onChunk(result)
   }
 

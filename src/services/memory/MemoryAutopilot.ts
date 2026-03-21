@@ -27,6 +27,7 @@ import {
     deduplicateMemories,
     areSimilar
 } from './MemoryExtractor'
+import { pertenceAoEscopo } from './escopoMemoria'
 
 
 // ============================================================================
@@ -38,6 +39,7 @@ let lastExtractionTime = 0
 let pendingMessages: Array<{
     id: string
     conversationId: string
+    projectId?: string
     content: string
     timestamp: number
 }> = []
@@ -50,7 +52,8 @@ function loadState(): AutopilotState {
     try {
         // Carregar memórias automáticas
         const memoriesStr = localStorage.getItem(STORAGE_KEYS.AUTO_MEMORIES)
-        const memories: AutoMemory[] = memoriesStr ? JSON.parse(memoriesStr) : []
+        const memoriesBrutas: AutoMemory[] = memoriesStr ? JSON.parse(memoriesStr) : []
+        const memories = migrarMemoriasPorProjeto(memoriesBrutas)
 
         // Carregar métricas
         const metricsStr = localStorage.getItem(STORAGE_KEYS.MEMORY_AUTOPILOT_METRICS)
@@ -185,7 +188,8 @@ export class MemoryAutopilotService {
         messageId: string,
         conversationId: string,
         content: string,
-        timestamp: number
+        timestamp: number,
+        projectId?: string
     ): Promise<void> {
         if (!this.isEnabled()) return
 
@@ -195,7 +199,7 @@ export class MemoryAutopilotService {
         }
 
         // Adicionar à fila
-        pendingMessages.push({ id: messageId, conversationId, content, timestamp })
+        pendingMessages.push({ id: messageId, conversationId, projectId, content, timestamp })
 
         // Limitar tamanho da fila
         if (pendingMessages.length > MEMORY_AUTOPILOT_CONFIG.MAX_MESSAGES_PER_EXTRACTION * 2) {
@@ -264,7 +268,12 @@ export class MemoryAutopilotService {
             // Salvar novas memórias
             for (const extracted of finalToSave) {
                 const sourceMsg = toProcess[0] // Usar primeira mensagem como origem
-                const memory = createAutoMemory(extracted, sourceMsg.id, sourceMsg.conversationId)
+                const memory = createAutoMemory(
+                    extracted,
+                    sourceMsg.id,
+                    sourceMsg.conversationId,
+                    sourceMsg.projectId
+                )
                 state.memories.push(memory)
                 state.dailyCount++
             }
@@ -305,13 +314,13 @@ export class MemoryAutopilotService {
     /**
      * Obtém memórias formatadas para o prompt
      */
-    getMemoriesForPrompt(consulta?: string): string {
+    getMemoriesForPrompt(consulta?: string, projectId?: string): string {
         if (!state || state.memories.length === 0) {
             return ''
         }
 
 
-        const memoriasFiltradas = filtrarMemoriasPorRelevancia(state.memories, consulta)
+        const memoriasFiltradas = filtrarMemoriasPorRelevancia(state.memories, consulta, projectId)
         if (memoriasFiltradas.length === 0) {
             return ''
         }
@@ -467,17 +476,25 @@ function normalizarTextoParaRelevancia(texto: string): string {
         .trim()
 }
 
-function filtrarMemoriasPorRelevancia(memorias: AutoMemory[], consulta?: string): AutoMemory[] {
+function filtrarMemoriasPorRelevancia(
+    memorias: AutoMemory[],
+    consulta?: string,
+    projectId?: string
+): AutoMemory[] {
+    const memoriasNoEscopo = memorias.filter((memoria) =>
+        pertenceAoEscopo(memoria.sourceProjectId, projectId)
+    )
+
     if (!consulta) {
-        return memorias
+        return memoriasNoEscopo
     }
 
     const consultaNormalizada = normalizarTextoParaRelevancia(consulta)
     if (!consultaNormalizada) {
-        return memorias
+        return memoriasNoEscopo
     }
 
-    return memorias.filter(memoria => {
+    return memoriasNoEscopo.filter(memoria => {
         if (areSimilar(consultaNormalizada, memoria.text, MEMORY_AUTOPILOT_CONFIG.RELEVANCIA_MINIMA_PARA_PROMPT)) {
             return true
         }
@@ -519,18 +536,55 @@ export async function processUserMessage(
     messageId: string,
     conversationId: string,
     content: string,
-    timestamp: number
+    timestamp: number,
+    projectId?: string
 ): Promise<void> {
-    return getMemoryAutopilot().processMessage(messageId, conversationId, content, timestamp)
+    return getMemoryAutopilot().processMessage(messageId, conversationId, content, timestamp, projectId)
+}
+
+function migrarMemoriasPorProjeto(memorias: AutoMemory[]): AutoMemory[] {
+    try {
+        const conversasSalvas = localStorage.getItem('selene_conversations')
+        if (!conversasSalvas) return memorias
+
+        const conversas = JSON.parse(conversasSalvas) as Array<{ id: string; projectId?: string }>
+        const mapaProjetos = new Map<string, string>()
+        for (const conversa of conversas) {
+            if (conversa.projectId) {
+                mapaProjetos.set(conversa.id, conversa.projectId)
+            }
+        }
+        if (mapaProjetos.size === 0) return memorias
+
+        let alterou = false
+        const memoriasAtualizadas = memorias.map((memoria) => {
+            if (memoria.sourceProjectId) return memoria
+            const projectId = mapaProjetos.get(memoria.sourceConversationId)
+            if (!projectId) return memoria
+            alterou = true
+            return {
+                ...memoria,
+                sourceProjectId: projectId,
+            }
+        })
+
+        if (alterou) {
+            localStorage.setItem(STORAGE_KEYS.AUTO_MEMORIES, JSON.stringify(memoriasAtualizadas))
+        }
+        return memoriasAtualizadas
+    } catch (erro) {
+        console.warn('[MemoryAutopilot] Falha ao migrar memórias por projeto:', erro)
+        return memorias
+    }
 }
 
 /**
  * Função helper para obter memórias para prompt
  */
-export function getAutoMemoriesForPrompt(consulta?: string): string {
+export function getAutoMemoriesForPrompt(consulta?: string, projectId?: string): string {
     const autopilot = getMemoryAutopilot()
     if (!autopilot.isEnabled()) {
         return ''
     }
-    return autopilot.getMemoriesForPrompt(consulta)
+    return autopilot.getMemoriesForPrompt(consulta, projectId)
 }

@@ -1,5 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { AIProvider } from '../AIProvider'
+import type { OpcoesRequisicaoIA } from '../AIProvider'
+import type { MetaFimStream } from '../AIProvider'
 import type { MensagemChat } from '../types'
 
 export class GeminiProvider implements AIProvider {
@@ -15,8 +17,9 @@ export class GeminiProvider implements AIProvider {
         return !!this.client
     }
 
-    async chat(mensagens: MensagemChat[]): Promise<string> {
+    async chat(mensagens: MensagemChat[], opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('Gemini não configurado.')
+        if (opcoes.signal?.aborted) throw criarErroAbortado()
         try {
             const systemInstruction = mensagens.find((m) => m.role === 'system')?.content
             const conteudo = mensagens
@@ -24,11 +27,14 @@ export class GeminiProvider implements AIProvider {
                 .map((m) => `${m.role === 'assistant' ? 'Assistente:' : 'Usuário:'}\n${m.content}`)
                 .join('\n\n')
 
+            const generationConfig = this.construirConfigGeracao(opcoes)
             const model = this.client.getGenerativeModel({
                 model: 'gemini-2.0-flash',
-                systemInstruction
+                systemInstruction,
+                ...(generationConfig ? { generationConfig } : {})
             })
             const result = await model.generateContent(conteudo)
+            if (opcoes.signal?.aborted) throw criarErroAbortado()
             const response = await result.response
             return response.text()
         } catch (error: any) {
@@ -37,8 +43,13 @@ export class GeminiProvider implements AIProvider {
         }
     }
 
-    async streamChat(mensagens: MensagemChat[], onChunk: (chunk: string) => void): Promise<void> {
+    async streamChat(
+        mensagens: MensagemChat[],
+        onChunk: (chunk: string) => void,
+        opcoes: OpcoesRequisicaoIA = {}
+    ): Promise<void> {
         if (!this.client) throw new Error('Gemini não configurado.')
+        if (opcoes.signal?.aborted) throw criarErroAbortado()
         try {
             const systemInstruction = mensagens.find((m) => m.role === 'system')?.content
             const conteudo = mensagens
@@ -46,19 +57,25 @@ export class GeminiProvider implements AIProvider {
                 .map((m) => `${m.role === 'assistant' ? 'Assistente:' : 'Usuário:'}\n${m.content}`)
                 .join('\n\n')
 
+            const generationConfig = this.construirConfigGeracao(opcoes)
             const model = this.client.getGenerativeModel({
                 model: 'gemini-2.0-flash',
-                systemInstruction
+                systemInstruction,
+                ...(generationConfig ? { generationConfig } : {})
             })
 
             const result = await model.generateContentStream(conteudo)
+            let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of result.stream) {
+                if (opcoes.signal?.aborted) throw criarErroAbortado()
+                finishReason = this.normalizarFinishReasonGemini((chunk as any)?.candidates?.[0]?.finishReason)
                 const text = chunk.text()
                 if (text) {
                     onChunk(text)
                 }
             }
+            opcoes.onFimStream?.({ finishReason })
         } catch (error: any) {
             console.error('Erro no streaming Gemini:', error)
             throw new Error(`Erro Gemini: ${error.message || 'Erro desconhecido'}`)
@@ -90,43 +107,59 @@ export class GeminiProvider implements AIProvider {
         }
     }
 
-    async analisarImagem(pergunta: string, dataUrl: string): Promise<string> {
+    async analisarImagem(pergunta: string, dataUrl: string, opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('Gemini não configurado.')
+        if (opcoes.signal?.aborted) throw criarErroAbortado()
         const { base64, mimeType } = this.extrairBase64(dataUrl)
 
+        const generationConfig = this.construirConfigGeracao(opcoes)
         const model = this.client.getGenerativeModel({
             model: 'gemini-2.0-flash',
-            systemInstruction: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.'
+            systemInstruction: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.',
+            ...(generationConfig ? { generationConfig } : {})
         })
 
         const result = await model.generateContent([
             { text: pergunta },
             { inlineData: { data: base64, mimeType } }
         ])
+        if (opcoes.signal?.aborted) throw criarErroAbortado()
         return result.response.text()
     }
 
-    async streamAnalisarImagem(pergunta: string, dataUrl: string, onChunk: (chunk: string) => void): Promise<void> {
+    async streamAnalisarImagem(
+        pergunta: string,
+        dataUrl: string,
+        onChunk: (chunk: string) => void,
+        opcoes: OpcoesRequisicaoIA = {}
+    ): Promise<void> {
         if (!this.client) throw new Error('Gemini não configurado.')
+        if (opcoes.signal?.aborted) throw criarErroAbortado()
         try {
             const { base64, mimeType } = this.extrairBase64(dataUrl)
 
+            const generationConfig = this.construirConfigGeracao(opcoes)
             const model = this.client.getGenerativeModel({
                 model: 'gemini-2.0-flash',
-                systemInstruction: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.'
+                systemInstruction: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.',
+                ...(generationConfig ? { generationConfig } : {})
             })
 
             const result = await model.generateContentStream([
                 { text: pergunta },
                 { inlineData: { data: base64, mimeType } }
             ])
+            let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of result.stream) {
+                if (opcoes.signal?.aborted) throw criarErroAbortado()
+                finishReason = this.normalizarFinishReasonGemini((chunk as any)?.candidates?.[0]?.finishReason)
                 const text = chunk.text()
                 if (text) {
                     onChunk(text)
                 }
             }
+            opcoes.onFimStream?.({ finishReason })
         } catch (error: any) {
             console.error('Erro no streaming de imagem Gemini:', error)
             throw new Error(`Erro Gemini: ${error.message || 'Erro desconhecido'}`)
@@ -151,4 +184,27 @@ export class GeminiProvider implements AIProvider {
         const t = texto.toLowerCase()
         return t.includes('não consigo ouvir') || t.includes('cannot listen')
     }
+
+    private construirConfigGeracao(opcoes: OpcoesRequisicaoIA): { temperature?: number } | undefined {
+        const config: { temperature?: number } = {}
+        if (typeof opcoes.temperature === 'number') {
+            config.temperature = opcoes.temperature
+        }
+        if (Object.keys(config).length === 0) return undefined
+        return config
+    }
+
+    private normalizarFinishReasonGemini(valor: string | undefined): MetaFimStream['finishReason'] {
+        if (!valor) return null
+        const motivo = valor.toUpperCase()
+        if (motivo === 'STOP' || motivo === 'FINISH_REASON_STOP') return 'stop'
+        if (motivo.includes('MAX_TOKENS') || motivo.includes('TOKEN') || motivo.includes('LENGTH')) return 'length'
+        return 'other'
+    }
+}
+
+function criarErroAbortado(): Error {
+    const erro = new Error('Abortado pelo usuário')
+    ;(erro as Error & { name?: string }).name = 'AbortError'
+    return erro
 }

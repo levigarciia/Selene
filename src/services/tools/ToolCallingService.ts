@@ -18,6 +18,12 @@ import type {
 } from '../../types/tools'
 
 type ChatFunction = (prompt: string) => Promise<string>
+export type EstrategiaDecisaoTool = 'heuristic_only' | 'ai_fallback'
+
+export interface OpcoesDecisaoTool {
+    estrategiaDecisao?: EstrategiaDecisaoTool
+    timeoutMs?: number
+}
 
 class ToolCallingService {
     private chatFn: ChatFunction | null = null
@@ -40,8 +46,11 @@ class ToolCallingService {
     async decideToolUsage(
         userMessage: string,
         chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
-        availableTools?: ToolDefinition[]
+        availableTools?: ToolDefinition[],
+        opcoes: OpcoesDecisaoTool = {}
     ): Promise<AIToolCallDecision> {
+        const estrategiaDecisao = opcoes.estrategiaDecisao || 'heuristic_only'
+        const timeoutMs = opcoes.timeoutMs ?? 600
         const tools = availableTools || toolRegistry.getEnabled()
         if (tools.length === 0) {
             return { shouldUseTool: false, toolCalls: [] }
@@ -52,6 +61,9 @@ class ToolCallingService {
         if (fastDecision) {
             console.log('[ToolCallingService] Fast heuristic decision:', fastDecision.shouldUseTool ? 'use tool' : 'respond')
             return fastDecision
+        }
+        if (estrategiaDecisao === 'heuristic_only') {
+            return { shouldUseTool: false, toolCalls: [] }
         }
 
         // No chat function? Return no tools
@@ -68,7 +80,8 @@ class ToolCallingService {
         const prompt = this.buildDecisionPrompt(userMessage, tools, historyContext)
 
         try {
-            const response = await this.chatFn(prompt)
+            const respostaComTimeout = this.executarComTimeout(this.chatFn(prompt), timeoutMs)
+            const response = await respostaComTimeout
             return this.parseDecisionResponse(response)
         } catch (error) {
             console.error('[ToolCallingService] Decision error:', error)
@@ -447,6 +460,24 @@ respond:{"a":"respond"}`
             return query.substring(0, 47) + '...'
         }
         return query
+    }
+
+    private async executarComTimeout<T>(promessa: Promise<T>, timeoutMs: number): Promise<T> {
+        if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+            return promessa
+        }
+        let timer: ReturnType<typeof setTimeout> | null = null
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(`Tool decision timeout (${timeoutMs}ms)`))
+            }, timeoutMs)
+        })
+
+        try {
+            return await Promise.race([promessa, timeout])
+        } finally {
+            if (timer) clearTimeout(timer)
+        }
     }
 
     private resolverFerramenta(toolIdOuNome: string): ToolDefinition | undefined {

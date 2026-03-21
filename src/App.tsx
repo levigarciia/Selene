@@ -20,6 +20,7 @@ import { initializeBuiltInTools } from './services/tools/builtin'
 import { mcpToolBridge } from './services/tools/MCPToolBridge'
 import { toolCallingService } from './services/tools/ToolCallingService'
 import { toolRegistry } from './services/tools/ToolRegistry'
+import { obterConfiguracaoPerfilGeracao } from './services/ai/politicaGeracao'
 
 // Initialize built-in tools on app start
 initializeBuiltInTools()
@@ -172,11 +173,16 @@ function App() {
       const servico = criarOuObterServico()
       if (!servico) throw new Error('No AI service available')
 
+      const configGeracao = obterConfiguracaoPerfilGeracao(prompt, { forcarPerfil: 'pergunta_curta' })
       let response = ''
       await servico.streamChat(
         prompt,
         (chunk: string) => { response += chunk },
-        'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.'
+        'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.',
+        [],
+        {
+          temperature: configGeracao.temperature,
+        }
       )
       return response
     }
@@ -337,7 +343,10 @@ function App() {
       }])
 
       try {
-        const resposta = await servico.analisarImagem(prompt, imagemUnica)
+        const configGeracaoImagem = obterConfiguracaoPerfilGeracao(prompt, { ehImagem: true })
+        const resposta = await servico.analisarImagem(prompt, imagemUnica, {
+          temperature: configGeracaoImagem.temperature,
+        })
         setMessages(prev => prev.map(msg => 
           msg.id === aiMsgId ? { ...msg, content: resposta } : msg
         ))
@@ -416,6 +425,7 @@ function App() {
       }
 
       const enhancedPrompt = systemPrompt + getProfileContext() + contextoFerramentas
+      const configGeracaoChat = obterConfiguracaoPerfilGeracao(texto)
       
       await servico.streamChat(
         texto,
@@ -426,7 +436,10 @@ function App() {
           ))
         },
         enhancedPrompt,
-        messages
+        messages,
+        {
+          temperature: configGeracaoChat.temperature,
+        }
       )
     } catch (e: any) {
       const mensagem = e?.message || 'Falha ao enviar'

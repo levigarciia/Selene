@@ -21,6 +21,7 @@ import {
     validateEmbeddingIndex
 } from './CrossChatTypes'
 import { getEmbeddingService } from './EmbeddingService'
+import { pertenceAoEscopo } from '../memory/escopoMemoria'
 
 // ============================================================================
 // ESTADO
@@ -40,16 +41,59 @@ function loadIndex(): EmbeddingIndex {
         if (stored) {
             const parsed = JSON.parse(stored)
             if (validateEmbeddingIndex(parsed)) {
+                const migrado = migrarIndicePorProjeto(parsed)
                 if (FEATURE_FLAGS.DEBUG_LOGGING) {
-                    console.log('[EmbeddingIndex] Loaded index with', parsed.messages.length, 'messages')
+                    console.log('[EmbeddingIndex] Loaded index with', migrado.messages.length, 'messages')
                 }
-                return parsed
+                return migrado
             }
         }
     } catch (e) {
         console.warn('[EmbeddingIndex] Failed to load index:', e)
     }
     return createEmptyIndex()
+}
+
+function migrarIndicePorProjeto(index: EmbeddingIndex): EmbeddingIndex {
+    try {
+        const conversasSalvas = localStorage.getItem('selene_conversations')
+        if (!conversasSalvas) return index
+
+        const conversas = JSON.parse(conversasSalvas) as Array<{ id: string; projectId?: string }>
+        const mapaProjetos = new Map<string, string>()
+        for (const conversa of conversas) {
+            if (conversa.projectId) {
+                mapaProjetos.set(conversa.id, conversa.projectId)
+            }
+        }
+
+        if (mapaProjetos.size === 0) return index
+
+        let alterou = false
+        const mensagensAtualizadas = index.messages.map((mensagem) => {
+            if (mensagem.projectId) return mensagem
+            const projectId = mapaProjetos.get(mensagem.conversationId)
+            if (!projectId) return mensagem
+            alterou = true
+            return {
+                ...mensagem,
+                projectId,
+            }
+        })
+
+        if (!alterou) return index
+
+        const migrado: EmbeddingIndex = {
+            ...index,
+            messages: mensagensAtualizadas,
+            lastUpdated: Date.now(),
+        }
+        saveIndex(migrado)
+        return migrado
+    } catch (erro) {
+        console.warn('[EmbeddingIndex] Falha ao migrar índice por projeto:', erro)
+        return index
+    }
 }
 
 function saveIndex(index: EmbeddingIndex): void {
@@ -116,7 +160,8 @@ export async function indexMessage(
     messageId: string,
     conversationId: string,
     content: string,
-    timestamp: number
+    timestamp: number,
+    projectId?: string
 ): Promise<boolean> {
     // Validar tamanho mínimo
     if (content.length < CROSS_CHAT_CONFIG.MIN_MESSAGE_LENGTH) {
@@ -141,6 +186,7 @@ export async function indexMessage(
     const indexed = createIndexedMessage(
         messageId,
         conversationId,
+        projectId,
         content,
         embedding,
         timestamp
@@ -172,6 +218,7 @@ export async function indexMessages(
         conversationId: string
         content: string
         timestamp: number
+        projectId?: string
     }>
 ): Promise<number> {
     let indexed = 0
@@ -181,7 +228,8 @@ export async function indexMessages(
             msg.id,
             msg.conversationId,
             msg.content,
-            msg.timestamp
+            msg.timestamp,
+            msg.projectId
         )
         if (success) indexed++
     }
@@ -200,6 +248,7 @@ export async function indexMessages(
 export async function searchSimilar(
     query: string,
     excludeConversationId?: string,
+    projectId?: string,
     limit: number = CROSS_CHAT_CONFIG.MAX_SEARCH_RESULTS
 ): Promise<SearchResult[]> {
     const index = getIndex()
@@ -217,6 +266,10 @@ export async function searchSimilar(
     for (const msg of index.messages) {
         // Excluir conversa atual
         if (excludeConversationId && msg.conversationId === excludeConversationId) {
+            continue
+        }
+
+        if (!pertenceAoEscopo(msg.projectId, projectId)) {
             continue
         }
 
@@ -274,6 +327,7 @@ export function flushIndex(): void {
 export async function rebuildIndex(
     conversations: Array<{
         id: string
+        projectId?: string
         messages: Array<{
             id: string
             role: string
@@ -300,7 +354,8 @@ export async function rebuildIndex(
                     id: msg.id,
                     conversationId: conv.id,
                     content: msg.content,
-                    timestamp: msg.timestamp
+                    timestamp: msg.timestamp,
+                    projectId: conv.projectId
                 })
             }
         }

@@ -200,7 +200,7 @@ function decodeHtmlEntities(text: string): string {
  * @param url - URL to fetch
  * @param maxLength - Maximum text length (default: 2000)
  */
-export async function fetchUrlContent(url: string, maxLength = 2000): Promise<string> {
+export async function fetchUrlContent(url: string, maxLength = 2000, timeoutMs = 10000): Promise<string> {
     console.log(`[WebSearch] Fetching: ${url}`)
     
     try {
@@ -216,7 +216,7 @@ export async function fetchUrlContent(url: string, maxLength = 2000): Promise<st
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             },
-            signal: AbortSignal.timeout(10000) // 10s timeout
+            signal: AbortSignal.timeout(timeoutMs)
         })
         
         if (!response.ok) {
@@ -395,6 +395,24 @@ export function extractSearchQuery(message: string): string {
     return query || message
 }
 
+export function mensagemBuscaPareceAmbigua(message: string): boolean {
+    const texto = message.trim().toLowerCase()
+    if (!texto) return false
+
+    if (texto.length < 24) return true
+
+    const termosGenericos = [
+        'isso',
+        'sobre isso',
+        'detalhes',
+        'novidades',
+        'pesquise',
+        'busque'
+    ]
+
+    return termosGenericos.some((termo) => texto === termo || texto.endsWith(` ${termo}`))
+}
+
 /**
  * Generate optimized search query and status message using AI
  * Now considers the full chat history for better context
@@ -402,7 +420,8 @@ export function extractSearchQuery(message: string): string {
 export async function generateSearchPlanWithAI(
     userMessage: string,
     chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
-    chatFn: (prompt: string) => Promise<string>
+    chatFn: (prompt: string) => Promise<string>,
+    timeoutMs: number = 600
 ): Promise<SearchPlan> {
     // Build conversation context
     const conversationContext = chatHistory.length > 0
@@ -436,7 +455,10 @@ REGRAS:
 4. Responda APENAS o JSON, nada mais`
 
     try {
-        const response = await chatFn(systemPrompt)
+        const response = await Promise.race([
+            chatFn(systemPrompt),
+            new Promise<string>((_, reject) => setTimeout(() => reject(new Error(`Search plan timeout (${timeoutMs}ms)`)), timeoutMs))
+        ])
         
         // Parse JSON from response
         const jsonMatch = response.match(/\{[\s\S]*\}/)

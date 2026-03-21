@@ -25,7 +25,7 @@ export const memorySearchHandler: ToolHandler = async (args, context): Promise<T
         let formattedForAI = ''
 
         // 1. Search auto-memories
-        const autoMemories = getAutoMemoriesForPrompt(query)
+        const autoMemories = getAutoMemoriesForPrompt(query, context?.projectId)
         if (autoMemories) {
             formattedForAI += '\n**Memórias do Usuário:**\n' + autoMemories
             results.push({
@@ -37,7 +37,7 @@ export const memorySearchHandler: ToolHandler = async (args, context): Promise<T
 
         // 2. Search cross-chat context
         try {
-            const crossChatContext = await getContextForPrompt(query, context?.conversationId)
+            const crossChatContext = await getContextForPrompt(query, context?.conversationId, context?.projectId)
             if (crossChatContext) {
                 formattedForAI += '\n**Contexto de Conversas Anteriores:**\n' + crossChatContext
                 results.push({

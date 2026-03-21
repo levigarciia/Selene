@@ -34,6 +34,20 @@ O prompt final enviado para a IA é composto na seguinte ordem:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Isolamento por Projeto (estilo ChatGPT Projects)
+
+A Selene usa escopo de memória por conversa:
+
+- `project:<id>` para conversas vinculadas a projeto
+- `global` para conversas sem projeto
+
+Regras:
+
+1. Conversas de projeto só acessam contexto/memória do mesmo `projectId`.
+2. Conversas fora de projeto só acessam contexto/memória global.
+3. Não há vazamento entre projeto e fora de projeto.
+4. Exceção global permitida em projeto: apenas `nome` e `ocupação` do usuário.
+
 ## Sistema 1: Cross-Chat Context
 
 ### Propósito
@@ -79,6 +93,9 @@ Recupera automaticamente trechos relevantes de conversas anteriores para enrique
 - Apenas indexa para busca futura
 - Toggle independente nas configurações
 - Não expõe contexto recuperado na UI
+- Busca semântica filtrada por escopo:
+  - Projeto: somente mensagens do mesmo `projectId`
+  - Global: somente mensagens sem `projectId` (legado sem campo também conta como global)
 
 ---
 
@@ -101,6 +118,13 @@ Detecta, extrai e salva automaticamente memórias duráveis e de alto sinal das 
 │  LocalStorage    │    │  (confiança ≥ 0.75) │    │  (jaccard ≥ 0.85)│
 └──────────────────┘    └─────────────────────┘    └──────────────────┘
 ```
+
+### Escopo
+
+- Memórias automáticas agora salvam `sourceProjectId` (opcional).
+- Injeção no prompt respeita o escopo:
+  - Projeto: só memórias com `sourceProjectId` igual ao projeto atual.
+  - Global: só memórias sem `sourceProjectId`.
 
 ### Categorias Extraídas
 
@@ -212,3 +236,4 @@ npm test src/services/crosschat/__tests__/EmbeddingService.test.ts
 3. **Previsibilidade**: Sem comportamentos "surpresa", thresholds explícitos
 4. **Auditabilidade**: Prompts versionados, schemas validados
 5. **Baixo Custo**: Limites rígidos de tokens, cache agressivo
+6. **Fronteira de Projeto**: contexto e memória nunca atravessam projeto ↔ global

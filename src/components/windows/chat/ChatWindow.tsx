@@ -28,6 +28,7 @@ import { ReasoningTrailModal } from '../../modals/ReasoningTrailModal'
 import { investigateService } from '../../../services/investigate'
 import { toolCallingService } from '../../../services/tools/ToolCallingService'
 import { mcpToolBridge } from '../../../services/tools/MCPToolBridge'
+import { obterConfiguracaoPerfilGeracao } from '../../../services/ai/politicaGeracao'
 import { processFileForProject, isFileSupported, formatFileSize, MAX_FILE_SIZE } from '../../../services/DocumentService'
 import { indexProjectFile, removeFileEmbeddings } from '../../../services/ProjectContextService'
 import type { Project } from '../../../types/project'
@@ -167,7 +168,7 @@ const ChatWindow: React.FC = () => {
         setCurrentTrace,
         setMessageSources,
         setMessageSearchCards,
-        systemPrompt,
+        promptBase: assistants.effectiveSystemPrompt || systemPrompt,
         getProfileContext,
         criarOuObterServico,
     })
@@ -245,21 +246,44 @@ const ChatWindow: React.FC = () => {
     // Service Configuration
     // ============================================
     useEffect(() => {
-        const chatFn = async (prompt: string): Promise<string> => {
+        const chatFnInvestigacao = async (prompt: string): Promise<string> => {
             const servico = criarOuObterServico()
             if (!servico) throw new Error('No AI service available')
 
+            const configGeracao = obterConfiguracaoPerfilGeracao(prompt, { investigateMode: true })
             let response = ''
             await servico.streamChat(
                 prompt,
                 (chunk: string) => { response += chunk },
-                'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.'
+                'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.',
+                [],
+                {
+                    temperature: configGeracao.temperature,
+                }
             )
             return response
         }
 
-        investigateService.setChatFunction(chatFn)
-        toolCallingService.setChatFunction(chatFn)
+        const chatFnTools = async (prompt: string): Promise<string> => {
+            const servico = criarOuObterServico()
+            if (!servico) throw new Error('No AI service available')
+
+            const configGeracao = obterConfiguracaoPerfilGeracao(prompt, { forcarPerfil: 'pergunta_curta' })
+            let response = ''
+            await servico.streamChat(
+                prompt,
+                (chunk: string) => { response += chunk },
+                'Você é um assistente de decisão de ferramentas. Seja extremamente conciso.',
+                [],
+                {
+                    temperature: configGeracao.temperature,
+                }
+            )
+            return response
+        }
+
+        investigateService.setChatFunction(chatFnInvestigacao)
+        toolCallingService.setChatFunction(chatFnTools)
     }, [criarOuObterServico])
 
     // ============================================

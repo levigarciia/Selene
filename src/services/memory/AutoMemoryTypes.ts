@@ -37,6 +37,9 @@ export interface AutoMemory {
     /** ID da conversa de origem */
     sourceConversationId: string
 
+    /** ID do projeto de origem (opcional para conversas globais) */
+    sourceProjectId?: string
+
     /** Data de extração */
     createdAt: number
 
@@ -238,7 +241,8 @@ export function createEmptyMetrics(): AutopilotMetrics {
 export function createAutoMemory(
     extracted: ExtractedMemory,
     sourceMessageId: string,
-    sourceConversationId: string
+    sourceConversationId: string,
+    sourceProjectId?: string
 ): AutoMemory {
     const id = `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
@@ -250,6 +254,7 @@ export function createAutoMemory(
         confidence: extracted.confidence,
         sourceMessageId,
         sourceConversationId,
+        sourceProjectId,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         reinforcementCount: 1,

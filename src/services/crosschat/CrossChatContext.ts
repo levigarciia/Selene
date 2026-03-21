@@ -136,7 +136,8 @@ export class CrossChatContextService {
         messageId: string,
         conversationId: string,
         content: string,
-        timestamp: number
+        timestamp: number,
+        projectId?: string
     ): Promise<boolean> {
         if (!this.isEnabled()) return false
 
@@ -145,7 +146,7 @@ export class CrossChatContextService {
             return false
         }
 
-        const success = await indexMessage(messageId, conversationId, content, timestamp)
+        const success = await indexMessage(messageId, conversationId, content, timestamp, projectId)
 
         if (success && metrics) {
             metrics.totalMessagesIndexed++
@@ -166,7 +167,8 @@ export class CrossChatContextService {
      */
     async getRelevantContext(
         query: string,
-        currentConversationId?: string
+        currentConversationId?: string,
+        currentProjectId?: string
     ): Promise<CrossChatContextData | null> {
         if (!this.isEnabled()) return null
 
@@ -175,6 +177,7 @@ export class CrossChatContextService {
             const results = await searchSimilar(
                 query,
                 currentConversationId,
+                currentProjectId,
                 CROSS_CHAT_CONFIG.MAX_SEARCH_RESULTS
             )
 
@@ -314,7 +317,8 @@ export function getCrossChatService(): CrossChatContextService {
  */
 export async function getContextForPrompt(
     query: string,
-    currentConversationId?: string
+    currentConversationId?: string,
+    currentProjectId?: string
 ): Promise<string> {
     const service = getCrossChatService()
 
@@ -322,7 +326,7 @@ export async function getContextForPrompt(
         return ''
     }
 
-    const context = await service.getRelevantContext(query, currentConversationId)
+    const context = await service.getRelevantContext(query, currentConversationId, currentProjectId)
 
     if (!context) {
         return ''

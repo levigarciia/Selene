@@ -55,6 +55,7 @@ class InvestigateServiceV2 {
     private listeners: Set<InvestigationListener> = new Set()
     private abortController: AbortController | null = null
     private activeRunId: string | null = null
+    private historicoChat: Array<{ role: 'user' | 'assistant'; content: string }> = []
 
     // ========================================================================
     // SETUP
@@ -67,6 +68,12 @@ class InvestigateServiceV2 {
 
     setStreamCallback(fn: StreamCallback | null): void {
         this.streamFn = fn
+    }
+
+    setHistoricoChat(historico: Array<{ role: 'user' | 'assistant'; content: string }>): void {
+        this.historicoChat = historico
+            .filter(m => m && typeof m.content === 'string' && m.content.trim().length > 0)
+            .slice(-10)
     }
 
     get isRunning(): boolean {
@@ -321,6 +328,7 @@ class InvestigateServiceV2 {
 
         // Detecta se pede informação abrangente (mesmo sendo pergunta "curta")
         const asksForBroadInfo = this.asksForBroadInfo(q)
+        const hasEnoughContext = this.temContextoSuficiente(question)
 
         return {
             // Só é simples se NÃO pedir info abrangente
@@ -328,9 +336,87 @@ class InvestigateServiceV2 {
             needsCurrentInfo: this.needsCurrentInfo(q),
             needsMultipleSources: this.needsMultipleSources(q) || asksForBroadInfo,
             isAmbiguous: this.isAmbiguous(q),
-            hasEnoughContext: false, // TODO: checar histórico
+            hasEnoughContext,
             isComplex: this.isComplex(q) || asksForBroadInfo
         }
+    }
+
+    private temContextoSuficiente(question: string): boolean {
+        const historico = this.historicoChat
+            .filter(m => m.content && m.content.trim().length > 0)
+
+        if (historico.length === 0) return false
+
+        const perguntaNormalizada = this.normalizarTexto(question)
+        const tokensPergunta = this.extrairTokensRelevantes(question)
+        const temIndicadores = this.temIndicadoresDeContexto(question)
+
+        const mensagensRecentes = historico
+            .filter(m => this.normalizarTexto(m.content) !== perguntaNormalizada)
+            .slice(-6)
+
+        if (mensagensRecentes.length === 0) return false
+
+        const tokensPerguntaSet = new Set(tokensPergunta)
+        for (const msg of mensagensRecentes) {
+            const tokensMsg = this.extrairTokensRelevantes(msg.content)
+            if (tokensMsg.length === 0) continue
+
+            let intersecao = 0
+            const tokensMsgSet = new Set(tokensMsg)
+            tokensPerguntaSet.forEach(t => {
+                if (tokensMsgSet.has(t)) intersecao += 1
+            })
+
+            if (intersecao >= 2) return true
+            if (intersecao >= 1 && tokensPerguntaSet.size <= 2) return true
+            if (temIndicadores && tokensMsg.length >= 4) return true
+        }
+
+        return false
+    }
+
+    private temIndicadoresDeContexto(texto: string): boolean {
+        const termos = [
+            'isso', 'isto', 'essa', 'esse', 'essas', 'esses',
+            'aquilo', 'aquele', 'aquela', 'aqueles', 'aquelas',
+            'ele', 'ela', 'eles', 'elas', 'disso', 'dessa', 'desse',
+            'daquele', 'daquela', 'daquilo', 'aqui', 'ali', 'la', 'tal'
+        ]
+        const normalizado = this.normalizarTexto(texto)
+        return termos.some(t => normalizado.includes(t))
+    }
+
+    private extrairTokensRelevantes(texto: string): string[] {
+        const stopwords = new Set([
+            'a', 'o', 'as', 'os', 'um', 'uma', 'uns', 'umas',
+            'de', 'da', 'do', 'das', 'dos', 'em', 'no', 'na', 'nos', 'nas',
+            'ao', 'aos', 'à', 'às', 'por', 'para', 'com', 'sem', 'sobre',
+            'e', 'ou', 'que', 'qual', 'quais', 'quem', 'como', 'onde', 'quando',
+            'quanto', 'porque', 'por', 'porquê', 'se', 'ser', 'estar', 'é', 'são',
+            'foi', 'era', 'sua', 'seu', 'suas', 'seus', 'meu', 'minha', 'meus', 'minhas',
+            'this', 'that', 'the', 'and', 'or', 'to', 'for', 'of', 'in', 'on', 'with',
+            'is', 'are', 'was', 'were', 'be', 'been', 'being', 'i', 'you', 'he', 'she',
+            'they', 'we', 'it', 'what', 'which', 'who', 'how', 'where', 'when', 'why'
+        ])
+
+        const normalizado = this.normalizarTexto(texto)
+        if (!normalizado) return []
+
+        return normalizado
+            .split(' ')
+            .map(t => t.trim())
+            .filter(t => t.length > 2 && !stopwords.has(t))
+    }
+
+    private normalizarTexto(texto: string): string {
+        return texto
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
     }
 
     private asksForBroadInfo(q: string): boolean {
@@ -1152,11 +1238,49 @@ ${validationNotes || '(Sem validação adicional)'}
     }
 
     private getRecencyAssessment(evidence: Evidence[]): string {
-        // TODO: Analisar datas das fontes quando disponíveis
-        // Por agora, retorna 'unknown' se não há evidências com data
         if (evidence.length === 0) return 'unknown'
-        const hasDateInfo = evidence.some(e => e.source.date)
-        return hasDateInfo ? 'recent' : 'unknown'
+        const timestamps = evidence
+            .map(e => this.parseDataFonte(e.source.date))
+            .filter((t): t is number => typeof t === 'number' && !Number.isNaN(t))
+
+        if (timestamps.length === 0) return 'unknown'
+
+        const maisRecente = Math.max(...timestamps)
+        const agora = Date.now()
+        const dias = Math.max(0, Math.floor((agora - maisRecente) / (1000 * 60 * 60 * 24)))
+
+        if (dias <= 7) return 'current'
+        if (dias <= 365) return 'recent'
+        return 'dated'
+    }
+
+    private parseDataFonte(data?: string): number | null {
+        if (!data) return null
+        const limpa = data.trim()
+        if (!limpa) return null
+
+        const ts = Date.parse(limpa)
+        if (!Number.isNaN(ts)) return ts
+
+        const matchBr = limpa.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/)
+        if (matchBr) {
+            const dia = Number(matchBr[1])
+            const mes = Number(matchBr[2]) - 1
+            const ano = Number(matchBr[3])
+            const parsed = new Date(ano, mes, dia).getTime()
+            return Number.isNaN(parsed) ? null : parsed
+        }
+
+        const matchIso = limpa.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/)
+        if (matchIso) {
+            const ano = Number(matchIso[1])
+            const mes = Number(matchIso[2]) - 1
+            const dia = Number(matchIso[3])
+            const parsed = new Date(ano, mes, dia).getTime()
+            return Number.isNaN(parsed) ? null : parsed
+        }
+
+        return null
     }
 
     private getConsistencyLevel(validations: ValidationResult[]): string {
