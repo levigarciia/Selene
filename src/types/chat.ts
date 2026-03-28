@@ -4,6 +4,7 @@ export interface ChatMessage {
     id: string
     role: Role
     content: string
+    raciocinio?: string
     timestamp: number
     images?: string[] // Base64 encoded images
 }

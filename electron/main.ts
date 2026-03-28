@@ -328,6 +328,39 @@ function pararTracker() {
     }
 }
 
+function configurarMenuInspecionar(winAlvo: BrowserWindow) {
+    winAlvo.webContents.on('context-menu', (_event, params) => {
+        if (!isDebugMode) return
+        if (winAlvo.isDestroyed()) return
+
+        const menu = Menu.buildFromTemplate([
+            {
+                label: 'Inspecionar elemento',
+                click: () => {
+                    if (winAlvo.isDestroyed()) return
+                    if (!winAlvo.webContents.isDevToolsOpened()) {
+                        winAlvo.webContents.openDevTools({ mode: 'detach', activate: true })
+                    }
+                    winAlvo.webContents.inspectElement(params.x, params.y)
+                }
+            },
+            {
+                label: winAlvo.webContents.isDevToolsOpened() ? 'Fechar DevTools' : 'Abrir DevTools',
+                click: () => {
+                    if (winAlvo.isDestroyed()) return
+                    if (winAlvo.webContents.isDevToolsOpened()) {
+                        winAlvo.webContents.closeDevTools()
+                    } else {
+                        winAlvo.webContents.openDevTools({ mode: 'detach', activate: true })
+                    }
+                }
+            }
+        ])
+
+        menu.popup({ window: winAlvo })
+    })
+}
+
 function createGrammarWindow() {
     if (grammarWin && !grammarWin.isDestroyed()) {
         grammarWin.show()
@@ -361,6 +394,8 @@ function createGrammarWindow() {
     } else {
         grammarWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { search: 'window=grammar' })
     }
+
+    configurarMenuInspecionar(grammarWin)
 
     // Opcional: esconder ao invés de fechar no evento nativo se desejar persistência
     // Mas vamos deixar o padrão (destruir) e recriar, para evitar memory leaks se não usado.
@@ -610,6 +645,10 @@ function createWindow() {
             chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
         }
 
+        if (chatWin) {
+            configurarMenuInspecionar(chatWin)
+        }
+
         chatWin.webContents.on('did-finish-load', () => {
             chatWin?.webContents.send('hydrate-chat', messages)
         })
@@ -630,6 +669,8 @@ function createWindow() {
     } else {
         win.loadFile(path.join(process.env.DIST || '', 'index.html'))
     }
+
+    configurarMenuInspecionar(win)
 }
 
 ipcMain.on('window-minimize', (event) => {
@@ -752,6 +793,10 @@ app.whenReady().then(() => {
             chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
         }
 
+        if (chatWin) {
+            configurarMenuInspecionar(chatWin)
+        }
+
         chatWin.on('closed', () => {
             chatWin = null
             if (win && !win.isDestroyed()) {
@@ -829,6 +874,10 @@ app.whenReady().then(() => {
                             chatWin.loadURL(`${VITE_DEV_SERVER_URL}#chat`)
                         } else {
                             chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
+                        }
+
+                        if (chatWin) {
+                            configurarMenuInspecionar(chatWin)
                         }
                         
                         chatWin.on('closed', () => {

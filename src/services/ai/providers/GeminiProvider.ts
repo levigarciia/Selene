@@ -70,9 +70,16 @@ export class GeminiProvider implements AIProvider {
             for await (const chunk of result.stream) {
                 if (opcoes.signal?.aborted) throw criarErroAbortado()
                 finishReason = this.normalizarFinishReasonGemini((chunk as any)?.candidates?.[0]?.finishReason)
-                const text = chunk.text()
-                if (text) {
-                    onChunk(text)
+                const partes = this.extrairPartesTextoGemini(chunk as any)
+                if (partes.raciocinio) {
+                    opcoes.onEventoStream?.({
+                        tipo: 'raciocinio',
+                        texto: partes.raciocinio,
+                        origem: 'delta_raciocinio'
+                    })
+                }
+                if (partes.conteudo) {
+                    onChunk(partes.conteudo)
                 }
             }
             opcoes.onFimStream?.({ finishReason })
@@ -111,11 +118,12 @@ export class GeminiProvider implements AIProvider {
         if (!this.client) throw new Error('Gemini não configurado.')
         if (opcoes.signal?.aborted) throw criarErroAbortado()
         const { base64, mimeType } = this.extrairBase64(dataUrl)
+        const systemInstruction = this.resolverInstrucaoSistemaImagem(opcoes)
 
         const generationConfig = this.construirConfigGeracao(opcoes)
         const model = this.client.getGenerativeModel({
             model: 'gemini-2.0-flash',
-            systemInstruction: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.',
+            ...(systemInstruction ? { systemInstruction } : {}),
             ...(generationConfig ? { generationConfig } : {})
         })
 
@@ -137,11 +145,12 @@ export class GeminiProvider implements AIProvider {
         if (opcoes.signal?.aborted) throw criarErroAbortado()
         try {
             const { base64, mimeType } = this.extrairBase64(dataUrl)
+            const systemInstruction = this.resolverInstrucaoSistemaImagem(opcoes)
 
             const generationConfig = this.construirConfigGeracao(opcoes)
             const model = this.client.getGenerativeModel({
                 model: 'gemini-2.0-flash',
-                systemInstruction: 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.',
+                ...(systemInstruction ? { systemInstruction } : {}),
                 ...(generationConfig ? { generationConfig } : {})
             })
 
@@ -154,9 +163,16 @@ export class GeminiProvider implements AIProvider {
             for await (const chunk of result.stream) {
                 if (opcoes.signal?.aborted) throw criarErroAbortado()
                 finishReason = this.normalizarFinishReasonGemini((chunk as any)?.candidates?.[0]?.finishReason)
-                const text = chunk.text()
-                if (text) {
-                    onChunk(text)
+                const partes = this.extrairPartesTextoGemini(chunk as any)
+                if (partes.raciocinio) {
+                    opcoes.onEventoStream?.({
+                        tipo: 'raciocinio',
+                        texto: partes.raciocinio,
+                        origem: 'delta_raciocinio'
+                    })
+                }
+                if (partes.conteudo) {
+                    onChunk(partes.conteudo)
                 }
             }
             opcoes.onFimStream?.({ finishReason })
@@ -194,12 +210,46 @@ export class GeminiProvider implements AIProvider {
         return config
     }
 
+    private resolverInstrucaoSistemaImagem(opcoes: OpcoesRequisicaoIA): string | undefined {
+        if (Object.prototype.hasOwnProperty.call(opcoes, 'systemPromptOverride')) {
+            const sobrescrita = (opcoes.systemPromptOverride || '').trim()
+            return sobrescrita || undefined
+        }
+
+        return 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.'
+    }
+
     private normalizarFinishReasonGemini(valor: string | undefined): MetaFimStream['finishReason'] {
         if (!valor) return null
         const motivo = valor.toUpperCase()
         if (motivo === 'STOP' || motivo === 'FINISH_REASON_STOP') return 'stop'
         if (motivo.includes('MAX_TOKENS') || motivo.includes('TOKEN') || motivo.includes('LENGTH')) return 'length'
         return 'other'
+    }
+
+    private extrairPartesTextoGemini(chunk: any): { conteudo: string; raciocinio: string } {
+        const partes = chunk?.candidates?.[0]?.content?.parts
+        if (!Array.isArray(partes) || partes.length === 0) {
+            const texto = typeof chunk?.text === 'function' ? chunk.text() : ''
+            return { conteudo: texto || '', raciocinio: '' }
+        }
+
+        let conteudo = ''
+        let raciocinio = ''
+
+        for (const parte of partes) {
+            const textoParte = typeof parte?.text === 'string' ? parte.text : ''
+            if (!textoParte) continue
+
+            const ehRaciocinio = Boolean(parte?.thought) || parte?.type === 'thought'
+            if (ehRaciocinio) {
+                raciocinio += textoParte
+            } else {
+                conteudo += textoParte
+            }
+        }
+
+        return { conteudo, raciocinio }
     }
 }
 

@@ -1,6 +1,6 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles, Terminal } from 'lucide-react'
+import { Brain, ChevronDown, Sparkles, Terminal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import seleneLogo from '/tray-icon.png'
 import type { ChatMessage } from '../../../../types/chat'
@@ -45,6 +45,8 @@ export const MessageList: React.FC<MessageListProps> = ({
     hasInvestigationTrace,
     onShowReasoning,
 }) => {
+    const [raciocinioExpandidoPorMensagem, setRaciocinioExpandidoPorMensagem] = React.useState<Record<string, boolean>>({})
+
     const renderMarkdown = (
         content: string,
         fontesDaMensagem: WebSource[],
@@ -123,6 +125,30 @@ export const MessageList: React.FC<MessageListProps> = ({
         </div>
     )
 
+    const renderBlocoRaciocinio = (msgId: string, raciocinio: string) => {
+        const expandido = Boolean(raciocinioExpandidoPorMensagem[msgId])
+        return (
+            <div className="w-full rounded-xl border border-white/10 bg-neutral-900/50 overflow-hidden">
+                <button
+                    type="button"
+                    onClick={() => setRaciocinioExpandidoPorMensagem((prev) => ({ ...prev, [msgId]: !expandido }))}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-white/5 transition-colors"
+                >
+                    <span className="flex items-center gap-2 text-xs text-neutral-300">
+                        <Brain size={14} className="text-purple-300" />
+                        Raciocínio do modelo
+                    </span>
+                    <ChevronDown size={14} className={`text-neutral-500 transition-transform ${expandido ? 'rotate-180' : ''}`} />
+                </button>
+                {expandido && (
+                    <div className="px-3 pb-3 pt-1 border-t border-white/5">
+                        <p className="text-xs text-neutral-300 whitespace-pre-wrap leading-relaxed">{raciocinio}</p>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     return (
         <main
             ref={messagesContainerRef}
@@ -143,6 +169,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                 messages.map((msg, index) => {
                     const fontesDaMensagem = messageSources[msg.id] || []
                     const isLastMessage = index === messages.length - 1
+                    const raciocinioDaMensagem = (msg.raciocinio || '').trim()
 
                     // Hide the AI bubble when analyzing image
                     const shouldHideForImageAnalysis = isAnalyzingImage && isLastMessage && msg.role === 'assistant' && !msg.content
@@ -165,15 +192,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                             )}
 
                             <div className={`max-w-[70%] min-w-0 flex flex-col gap-2 overflow-hidden ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                {msg.role === 'assistant' && raciocinioDaMensagem && renderBlocoRaciocinio(msg.id, raciocinioDaMensagem)}
                                 {(() => {
-                                    // If we have cards, render them with their statusText
+                                    // If we have cards, render card list first and text answer below
                                     if (hasCards) {
                                         const cards = messageSearchCards[msg.id] || []
                                         return (
                                             <>
                                                 {cards.map((card, cardIdx) => (
                                                     <React.Fragment key={`tool-group-${msg.id}-${cardIdx}`}>
-                                                        {card.statusText && renderMarkdown(card.statusText, fontesDaMensagem, false, isLastMessage, msg.role)}
                                                         <ToolCard
                                                             key={`tool-${msg.id}-${cardIdx}`}
                                                             data={card}

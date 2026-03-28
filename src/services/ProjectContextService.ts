@@ -113,6 +113,21 @@ interface FileChunkEmbedding {
     embedding: number[]
 }
 
+export interface ContextoPromptProjeto {
+    promptSistemaProjeto: string
+    totalArquivos: number
+    arquivosListados: number
+    trechosIncluidos: number
+    temInstrucoes: boolean
+}
+
+export interface ContextoArquivosProjeto {
+    blocoContexto: string
+    totalArquivos: number
+    arquivosListados: number
+    trechosIncluidos: number
+}
+
 // Load file embeddings
 export function loadFileEmbeddings(): FileChunkEmbedding[] {
     try {
@@ -275,17 +290,94 @@ export function buildProjectContext(
             }
         }
     }
-    
-    // Add project memories
-    const memories = getProjectMemories(project.id)
-    if (memories.length > 0) {
-        parts.push('\n## Memórias do Projeto:')
-        for (const memory of memories.slice(-5)) {
-            parts.push(`- ${memory.text}`)
+
+    return parts.join('\n')
+}
+
+function limitarTexto(texto: string, maxCaracteres: number): string {
+    if (maxCaracteres <= 0) return ''
+    if (texto.length <= maxCaracteres) return texto
+    return texto.slice(0, maxCaracteres).trimEnd() + '...'
+}
+
+function formatarTamanhoArquivo(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function formatarTipoArquivo(tipo: ProjectFile['type']): string {
+    return tipo.toUpperCase()
+}
+
+interface OpcoesPromptProjeto {
+    maxCaracteresTotais?: number
+    maxArquivosInventario?: number
+    maxTrechos?: number
+}
+
+export function criarPromptSistemaProjeto(
+    project: Project,
+    _userMessage?: string,
+    _opcoes: OpcoesPromptProjeto = {}
+): ContextoPromptProjeto {
+    const promptSistemaProjeto = (project.instructions || '').trim()
+
+    return {
+        promptSistemaProjeto,
+        totalArquivos: project.files.length,
+        arquivosListados: 0,
+        trechosIncluidos: 0,
+        temInstrucoes: Boolean(promptSistemaProjeto),
+    }
+}
+
+export function criarContextoArquivosProjeto(
+    project: Project,
+    userMessage: string,
+    opcoes: OpcoesPromptProjeto = {}
+): ContextoArquivosProjeto {
+    const maxCaracteresTotais = opcoes.maxCaracteresTotais ?? 2400
+    const maxArquivosInventario = opcoes.maxArquivosInventario ?? 12
+    const maxTrechos = opcoes.maxTrechos ?? 4
+    const inventario = project.files.slice(0, maxArquivosInventario)
+    const arquivosRestantes = Math.max(0, project.files.length - inventario.length)
+    const trechosRelevantes = searchProjectFiles(project.id, userMessage, maxTrechos)
+
+    const secoes: string[] = []
+
+    if (project.files.length > 0) {
+        const linhasArquivos = inventario.map((file, indice) =>
+            `${indice + 1}. ${file.name} (${formatarTipoArquivo(file.type)}, ${formatarTamanhoArquivo(file.size)})`
+        )
+
+        if (arquivosRestantes > 0) {
+            linhasArquivos.push(`... e mais ${arquivosRestantes} arquivo(s).`)
+        }
+
+        secoes.push(`Arquivos do projeto:\n${linhasArquivos.join('\n')}`)
+    }
+
+    if (trechosRelevantes.length > 0) {
+        const blocosTrechos = trechosRelevantes
+            .map((chunk) => {
+                const file = project.files.find(f => f.id === chunk.fileId)
+                if (!file) return null
+                return `${file.name}:\n${chunk.text}`
+            })
+            .filter((item): item is string => Boolean(item))
+
+        if (blocosTrechos.length > 0) {
+            secoes.push(`Trechos relevantes dos arquivos:\n${blocosTrechos.join('\n\n')}`)
         }
     }
-    
-    return parts.join('\n')
+
+    return {
+        blocoContexto: limitarTexto(secoes.join('\n\n'), maxCaracteresTotais),
+        totalArquivos: project.files.length,
+        arquivosListados: inventario.length,
+        trechosIncluidos: Math.min(trechosRelevantes.length, maxTrechos),
+    }
 }
 
 // Extract key information from a conversation to add as project memory

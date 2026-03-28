@@ -4,10 +4,21 @@ export interface MetaFimStream {
     finishReason?: 'stop' | 'length' | 'other' | null
 }
 
+export type TipoEventoStreamIA = 'conteudo' | 'raciocinio'
+export type OrigemEventoStreamIA = 'delta_conteudo' | 'delta_raciocinio' | 'tag_think'
+
+export interface EventoStreamIA {
+    tipo: TipoEventoStreamIA
+    texto: string
+    origem?: OrigemEventoStreamIA
+}
+
 export interface OpcoesRequisicaoIA {
     signal?: AbortSignal
     temperature?: number
     perfilGeracao?: string
+    systemPromptOverride?: string
+    onEventoStream?: (evento: EventoStreamIA) => void
     onFimStream?: (meta: MetaFimStream) => void
 }
 

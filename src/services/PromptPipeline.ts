@@ -12,6 +12,8 @@
 import { FEATURE_FLAGS } from '../config/memoryConfig'
 import { getContextForPrompt, getCrossChatService } from './crosschat/CrossChatContext'
 import { getAutoMemoriesForPrompt, getMemoryAutopilot } from './memory/MemoryAutopilot'
+import type { Project } from '../types/project'
+import { criarPromptSistemaProjeto } from './ProjectContextService'
 
 // ============================================================================
 // TIPOS
@@ -47,6 +49,9 @@ export interface PromptContext {
 
     /** Permitir contexto do perfil do usuario */
     permitirMemoriaPerfil?: boolean
+
+    /** Projeto atual quando o prompt deve ser soberano ao projeto */
+    currentProject?: Project | null
 }
 
 export interface ComposedPrompt {
@@ -66,6 +71,15 @@ export interface ComposedPrompt {
 
         /** Timestamp da composição */
         composedAt: number
+
+        /** Qual modo de composição foi aplicado */
+        mode?: 'default' | 'project'
+
+        /** Total de arquivos do projeto incluídos no inventário */
+        totalArquivosProjeto?: number
+
+        /** Quantos trechos relevantes de arquivos foram anexados */
+        trechosProjetoIncluidos?: number
     }
 }
 
@@ -350,10 +364,50 @@ export async function composePromptComOrcamento(
 }
 
 export async function composePrompt(context: PromptContext): Promise<ComposedPrompt> {
-    return composePromptComOrcamento(context, {
+    return composePromptEfetivo(context, {
         incluirDataHora: 'auto',
         timeoutCrossChatMs: 250
     })
+}
+
+export async function composePromptEfetivo(
+    context: PromptContext,
+    opcoes: OpcoesComposicaoPrompt = {}
+): Promise<ComposedPrompt> {
+    if (context.currentProject) {
+        const contextoProjeto = criarPromptSistemaProjeto(
+            context.currentProject
+        )
+
+        if (FEATURE_FLAGS.DEBUG_LOGGING) {
+            console.log('[PromptPipeline] Project-only prompt:', {
+                projectId: context.currentProject.id,
+                temInstrucoes: contextoProjeto.temInstrucoes,
+            })
+        }
+
+        return {
+            systemPrompt: contextoProjeto.promptSistemaProjeto,
+            metadata: {
+                hasCrossChatContext: false,
+                hasAutoMemories: false,
+                additionalTokens: estimateTokens(contextoProjeto.promptSistemaProjeto),
+                composedAt: Date.now(),
+                mode: 'project',
+                totalArquivosProjeto: contextoProjeto.totalArquivos,
+                trechosProjetoIncluidos: contextoProjeto.trechosIncluidos,
+            }
+        }
+    }
+
+    const resultadoPadrao = await composePromptComOrcamento(context, opcoes)
+    return {
+        ...resultadoPadrao,
+        metadata: {
+            ...resultadoPadrao.metadata,
+            mode: 'default',
+        }
+    }
 }
 
 /**

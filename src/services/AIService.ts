@@ -7,6 +7,95 @@ import { GeminiProvider } from './ai/providers/GeminiProvider'
 import { OpenRouterProvider } from './ai/providers/OpenRouterProvider'
 import { LMStudioProvider } from './ai/providers/LMStudioProvider'
 
+class ExtratorRaciocinioThink {
+  private readonly tagInicio = '<think>'
+  private readonly tagFim = '</think>'
+  private bufferPendente = ''
+  private emRaciocinio = false
+
+  processar(fragmento: string): { conteudo: string; raciocinio: string } {
+    const textoEntrada = `${this.bufferPendente}${fragmento || ''}`
+    this.bufferPendente = ''
+    if (!textoEntrada) return { conteudo: '', raciocinio: '' }
+
+    const textoLower = textoEntrada.toLowerCase()
+    const partesConteudo: string[] = []
+    const partesRaciocinio: string[] = []
+
+    let cursor = 0
+    while (cursor < textoEntrada.length) {
+      if (this.emRaciocinio) {
+        const idxFim = textoLower.indexOf(this.tagFim, cursor)
+        if (idxFim === -1) {
+          const restante = textoEntrada.slice(cursor)
+          const { textoSeguro, sufixoPendente } = this.extrairSufixoPendente(restante, this.tagFim)
+          if (textoSeguro) partesRaciocinio.push(textoSeguro)
+          this.bufferPendente = sufixoPendente
+          break
+        }
+
+        if (idxFim > cursor) {
+          partesRaciocinio.push(textoEntrada.slice(cursor, idxFim))
+        }
+        cursor = idxFim + this.tagFim.length
+        this.emRaciocinio = false
+        continue
+      }
+
+      const idxInicio = textoLower.indexOf(this.tagInicio, cursor)
+      if (idxInicio === -1) {
+        const restante = textoEntrada.slice(cursor)
+        const { textoSeguro, sufixoPendente } = this.extrairSufixoPendente(restante, this.tagInicio)
+        if (textoSeguro) partesConteudo.push(textoSeguro)
+        this.bufferPendente = sufixoPendente
+        break
+      }
+
+      if (idxInicio > cursor) {
+        partesConteudo.push(textoEntrada.slice(cursor, idxInicio))
+      }
+      cursor = idxInicio + this.tagInicio.length
+      this.emRaciocinio = true
+    }
+
+    return {
+      conteudo: partesConteudo.join(''),
+      raciocinio: partesRaciocinio.join('')
+    }
+  }
+
+  finalizar(): { conteudo: string; raciocinio: string } {
+    if (!this.bufferPendente) {
+      return { conteudo: '', raciocinio: '' }
+    }
+
+    const restante = this.bufferPendente
+    this.bufferPendente = ''
+    if (this.emRaciocinio) {
+      return { conteudo: '', raciocinio: restante }
+    }
+
+    return { conteudo: restante, raciocinio: '' }
+  }
+
+  private extrairSufixoPendente(texto: string, tagCompleta: string): { textoSeguro: string; sufixoPendente: string } {
+    const limite = Math.min(tagCompleta.length - 1, texto.length)
+    const tagLower = tagCompleta.toLowerCase()
+
+    for (let tamanho = limite; tamanho > 0; tamanho--) {
+      const sufixo = texto.slice(-tamanho).toLowerCase()
+      if (tagLower.startsWith(sufixo)) {
+        return {
+          textoSeguro: texto.slice(0, -tamanho),
+          sufixoPendente: texto.slice(-tamanho)
+        }
+      }
+    }
+
+    return { textoSeguro: texto, sufixoPendente: '' }
+  }
+}
+
 export class AIService {
   private providers: Record<ProvedorID, AIProvider>
   private activeProviderId: ProvedorID
@@ -40,17 +129,33 @@ export class AIService {
     return this.providers[this.activeProviderId]
   }
 
+  private construirMensagensChat(
+    texto: string,
+    systemPrompt: string,
+    history: { role: 'user' | 'assistant', content: string }[] = []
+  ): MensagemChat[] {
+    const mensagens: MensagemChat[] = []
+    const systemNormalizado = (systemPrompt || '').trim()
+
+    if (systemNormalizado) {
+      mensagens.push({ role: 'system', content: systemNormalizado })
+    }
+
+    mensagens.push(
+      ...history.map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: texto }
+    )
+
+    return mensagens
+  }
+
   async chat(
     texto: string,
     systemPrompt: string = 'Você é uma assistente útil chamada Selene.',
     history: { role: 'user' | 'assistant', content: string }[] = [],
     opcoes: OpcoesRequisicaoIA = {}
   ): Promise<string> {
-    const mensagens: MensagemChat[] = [
-      { role: 'system', content: systemPrompt },
-      ...history.map(m => ({ role: m.role, content: m.content })),
-      { role: 'user', content: texto }
-    ]
+    const mensagens = this.construirMensagensChat(texto, systemPrompt, history)
     return this.activeProvider.chat(mensagens, opcoes)
   }
 
@@ -61,12 +166,50 @@ export class AIService {
     history: { role: 'user' | 'assistant', content: string }[] = [],
     opcoes: OpcoesRequisicaoIA = {}
   ): Promise<void> {
-    const mensagens: MensagemChat[] = [
-      { role: 'system', content: systemPrompt },
-      ...history.map(m => ({ role: m.role, content: m.content })),
-      { role: 'user', content: texto }
-    ]
-    return this.activeProvider.streamChat(mensagens, onChunk, opcoes)
+    const mensagens = this.construirMensagensChat(texto, systemPrompt, history)
+
+    const extratorThink = new ExtratorRaciocinioThink()
+
+    const emitirConteudo = (conteudo: string, origem: 'delta_conteudo' | 'tag_think' = 'delta_conteudo') => {
+      if (!conteudo) return
+      onChunk(conteudo)
+      opcoes.onEventoStream?.({ tipo: 'conteudo', texto: conteudo, origem })
+    }
+
+    const emitirRaciocinio = (raciocinio: string, origem: 'delta_raciocinio' | 'tag_think' = 'tag_think') => {
+      if (!raciocinio) return
+      opcoes.onEventoStream?.({ tipo: 'raciocinio', texto: raciocinio, origem })
+    }
+
+    const processarFragmentoConteudo = (fragmento: string, origem: 'delta_conteudo' | 'tag_think' = 'delta_conteudo') => {
+      if (!fragmento) return
+      const { conteudo, raciocinio } = extratorThink.processar(fragmento)
+      if (raciocinio) emitirRaciocinio(raciocinio, 'tag_think')
+      if (conteudo) emitirConteudo(conteudo, origem)
+    }
+
+    const opcoesAdaptadas: OpcoesRequisicaoIA = {
+      ...opcoes,
+      onEventoStream: (evento) => {
+        if (!evento?.texto) return
+        if (evento.tipo === 'raciocinio') {
+          emitirRaciocinio(evento.texto, evento.origem || 'delta_raciocinio')
+          return
+        }
+        const origemConteudo = evento.origem === 'tag_think' ? 'tag_think' : 'delta_conteudo'
+        processarFragmentoConteudo(evento.texto, origemConteudo)
+      }
+    }
+
+    await this.activeProvider.streamChat(
+      mensagens,
+      (chunk) => processarFragmentoConteudo(chunk, 'delta_conteudo'),
+      opcoesAdaptadas
+    )
+
+    const restante = extratorThink.finalizar()
+    if (restante.raciocinio) emitirRaciocinio(restante.raciocinio, 'tag_think')
+    if (restante.conteudo) emitirConteudo(restante.conteudo, 'delta_conteudo')
   }
 
   async transcribe(audioBlob: Blob): Promise<string> {
@@ -105,18 +248,58 @@ export class AIService {
     opcoes: OpcoesRequisicaoIA = {}
   ): Promise<void> {
     console.log('[AIService] streamAnalisarImagem called, provider:', this.activeProviderId)
-    
+
+    const extratorThink = new ExtratorRaciocinioThink()
+    const emitirConteudo = (conteudo: string, origem: 'delta_conteudo' | 'tag_think' = 'delta_conteudo') => {
+      if (!conteudo) return
+      onChunk(conteudo)
+      opcoes.onEventoStream?.({ tipo: 'conteudo', texto: conteudo, origem })
+    }
+    const emitirRaciocinio = (raciocinio: string, origem: 'delta_raciocinio' | 'tag_think' = 'tag_think') => {
+      if (!raciocinio) return
+      opcoes.onEventoStream?.({ tipo: 'raciocinio', texto: raciocinio, origem })
+    }
+    const processarConteudo = (fragmento: string) => {
+      if (!fragmento) return
+      const { conteudo, raciocinio } = extratorThink.processar(fragmento)
+      if (raciocinio) emitirRaciocinio(raciocinio, 'tag_think')
+      if (conteudo) emitirConteudo(conteudo, 'delta_conteudo')
+    }
+
     // Check if active provider supports streaming
     const provider = this.activeProvider
     if (typeof provider.streamAnalisarImagem === 'function') {
       console.log('[AIService] Using streaming for image analysis')
-      return provider.streamAnalisarImagem(pergunta, dataUrl, onChunk, opcoes)
+      await provider.streamAnalisarImagem(
+        pergunta,
+        dataUrl,
+        (chunk) => processarConteudo(chunk),
+        {
+          ...opcoes,
+          onEventoStream: (evento) => {
+            if (!evento?.texto) return
+            if (evento.tipo === 'raciocinio') {
+              emitirRaciocinio(evento.texto, evento.origem || 'delta_raciocinio')
+              return
+            }
+            processarConteudo(evento.texto)
+          }
+        }
+      )
+
+      const restante = extratorThink.finalizar()
+      if (restante.raciocinio) emitirRaciocinio(restante.raciocinio, 'tag_think')
+      if (restante.conteudo) emitirConteudo(restante.conteudo, 'delta_conteudo')
+      return
     }
-    
+
     // Fallback to non-streaming
     console.log('[AIService] Fallback to non-streaming image analysis')
     const result = await provider.analisarImagem(pergunta, dataUrl, opcoes)
-    onChunk(result)
+    processarConteudo(result)
+    const restante = extratorThink.finalizar()
+    if (restante.raciocinio) emitirRaciocinio(restante.raciocinio, 'tag_think')
+    if (restante.conteudo) emitirConteudo(restante.conteudo, 'delta_conteudo')
   }
 
   async analyze(texto: string): Promise<string> {

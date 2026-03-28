@@ -29,7 +29,7 @@ import { investigateService } from '../../../services/investigate'
 import { toolCallingService } from '../../../services/tools/ToolCallingService'
 import { mcpToolBridge } from '../../../services/tools/MCPToolBridge'
 import { obterConfiguracaoPerfilGeracao } from '../../../services/ai/politicaGeracao'
-import { processFileForProject, isFileSupported, formatFileSize, MAX_FILE_SIZE } from '../../../services/DocumentService'
+import { processFileForProject, isFileSupported, formatFileSize, obterLimiteMaximoArquivo, getFileType } from '../../../services/DocumentService'
 import { indexProjectFile, removeFileEmbeddings } from '../../../services/ProjectContextService'
 import type { Project } from '../../../types/project'
 import { createProject } from '../../../types/project'
@@ -189,6 +189,16 @@ const ChatWindow: React.FC = () => {
             newProjectInputRef.current.focus()
         }
     }, [isCreatingProject, newProjectInputRef])
+
+    useEffect(() => {
+        if (!activeProjectId || !projectChatInputRef.current) return
+
+        const timeoutId = window.setTimeout(() => {
+            projectChatInputRef.current?.focus()
+        }, 0)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [activeProjectId, projectChatInputRef])
 
     // ============================================
     // Electron Events
@@ -407,8 +417,10 @@ const ChatWindow: React.FC = () => {
             alert(`Tipo de arquivo não suportado: ${file.name}\n\nFormatos aceitos: PDF, DOCX, TXT, MD`)
             return
         }
-        if (file.size > MAX_FILE_SIZE) {
-            alert(`Arquivo muito grande: ${formatFileSize(file.size)}\n\nTamanho máximo: ${formatFileSize(MAX_FILE_SIZE)}`)
+        const limiteMaximo = obterLimiteMaximoArquivo(file)
+        if (file.size > limiteMaximo) {
+            const tipoArquivo = getFileType(file).toUpperCase()
+            alert(`Arquivo muito grande: ${formatFileSize(file.size)}\n\nTamanho máximo para ${tipoArquivo}: ${formatFileSize(limiteMaximo)}`)
             return
         }
 
@@ -475,6 +487,14 @@ const ChatWindow: React.FC = () => {
 
         return newConv.id
     }, [setInput])
+
+    const abrirProjeto = useCallback((projectId: string) => {
+        setActiveConversationId(null)
+        setActiveProjectId(projectId)
+        setShowSettings(false)
+        setShowAssistantsPanel(false)
+        setShowMCPPanel(false)
+    }, [setShowAssistantsPanel, setShowMCPPanel, setShowSettings])
 
     // ============================================
     // Message Actions
@@ -547,7 +567,7 @@ const ChatWindow: React.FC = () => {
                     onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
                     projects={projects}
                     activeProjectId={activeProjectId}
-                    onSelectProject={setActiveProjectId}
+                    onSelectProject={abrirProjeto}
                     onDeleteProject={deleteProject}
                     isCreatingProject={isCreatingProject}
                     newProjectName={newProjectName}

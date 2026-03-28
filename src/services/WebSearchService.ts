@@ -20,7 +20,13 @@ export interface WebSearchResponse {
 
 export interface SearchPlan {
     query: string
+    queryPrincipal: string
+    queriesSecundarias?: string[]
     statusMessage: string
+    motivoEscalonamento?: string
+    planejamentoValido: boolean
+    origem: 'ia' | 'falha'
+    motivoFalha?: 'timeout' | 'json_invalido' | 'query_invalida' | 'erro_ia'
 }
 
 type RespostaBuscaIpc = { success: boolean; data?: WebSearchResponse; error?: string }
@@ -386,13 +392,40 @@ export function extractSearchQuery(message: string): string {
         .replace(/^(pesquise?|busque?|procure?|search|find)\s*(por|for|sobre|about)?\s*/i, '')
         .replace(/^(o que é|quem é|como|quando|onde|qual|quanto)\s*/i, '$1 ')
         .trim()
-    
+
+    // Remove comandos conversacionais para focar no tema da busca
+    query = query
+        .replace(/^(na\s+)?(internet|web)\s*/i, '')
+        .replace(/^(pra|para)\s+mim\b[\s,:-]*/i, '')
+        .replace(/^(pesquisa(r)?\s+)?(na\s+)?(internet|web)\s*(pra|para)\s+mim\b[\s,:-]*/i, '')
+        .replace(/^(me\s+)?(explica(r)?|me\s+diz|diz|conta|fala|resuma?|resume|detalha|me\s+atualiza|atualiza|quero\s+saber|me\s+fala)\b[\s,:-]*/i, '')
+        .replace(/^(de\s+forma\s+(simples|f[aá]cil|resumida)|de\s+jeito\s+(simples|f[aá]cil))\b[\s,:-]*/i, '')
+        .replace(/^(por\s+favor|pfv|pls)\b[\s,:-]*/i, '')
+        .replace(/\b(o\s+q|oq)\b/gi, 'o que')
+        .replace(/\btoda?\s+a?\s+treta\s+(do|da|de)\b/gi, '$1 ')
+        .replace(/\b(q|que)\s+ta\b/gi, 'que está')
+        .replace(/\bta\b/gi, 'está')
+        .replace(/\b(que\s+)?est[aá]\s+acontecendo\s+(nesses?|nestes?|nos)\s+[uú]ltimos?\s+dias\b/gi, 'últimos dias')
+        .replace(/\b(que\s+)?est[aá]\s+acontecendo\b/gi, '')
+        .replace(/\b(oq|o que)\s+q\b/gi, 'o que')
+        .replace(/\b(o que)\b/gi, '')
+        .replace(/\b(nesses?|nestes?|nos)\s+[uú]ltimos?\s+dias\b/gi, 'últimos dias')
+        .replace(/^(sobre|do|da|de|o|a|os|as)\s+/i, '')
+        .replace(/^(sobre|do|da|de|o|a|os|as)\s+/i, '')
+        .replace(/[!?]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+
     // Limit query length
     if (query.length > 100) {
         query = query.substring(0, 100)
     }
-    
-    return query || message
+
+    if (!query || query.length < 3) {
+        return message.trim().slice(0, 100)
+    }
+
+    return query
 }
 
 export function mensagemBuscaPareceAmbigua(message: string): boolean {
@@ -413,6 +446,147 @@ export function mensagemBuscaPareceAmbigua(message: string): boolean {
     return termosGenericos.some((termo) => texto === termo || texto.endsWith(` ${termo}`))
 }
 
+function normalizarTextoComparacaoBusca(texto: string): string {
+    return (texto || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function ehQueryMuitoParecidaAoPrompt(query: string, promptOriginal: string): boolean {
+    const queryNormalizada = normalizarTextoComparacaoBusca(query)
+    const promptNormalizado = normalizarTextoComparacaoBusca(promptOriginal)
+    if (!queryNormalizada || !promptNormalizado) return true
+    if (queryNormalizada === promptNormalizado) return true
+    if (queryNormalizada.length >= promptNormalizado.length * 0.8 && promptNormalizado.includes(queryNormalizada)) {
+        return true
+    }
+    return false
+}
+
+function queryPareceConversacionalParaBusca(query: string): boolean {
+    const queryNormalizada = normalizarTextoComparacaoBusca(query)
+    if (!queryNormalizada) return true
+
+    const totalPalavras = queryNormalizada.split(' ').filter(Boolean).length
+    if (totalPalavras < 2) return true
+    if (totalPalavras > 10) return true
+
+    const padroesConversacionais = [
+        /\b(me|voce|vc|quero|explica|fala|conta|diz)\b/i,
+        /\bo que\b/i,
+        /\bque esta acontecendo\b/i,
+        /\bna internet\b/i,
+    ]
+
+    return padroesConversacionais.some((padrao) => padrao.test(queryNormalizada))
+}
+
+export function queryPlanejadaEhValida(query: string, userMessage: string): boolean {
+    const queryNormalizada = extractSearchQuery(String(query || '')).slice(0, 100)
+    if (!queryNormalizada || queryNormalizada.length < 3) return false
+    if (ehQueryMuitoParecidaAoPrompt(queryNormalizada, userMessage)) return false
+    if (queryPareceConversacionalParaBusca(queryNormalizada)) return false
+    return true
+}
+
+function limparMarkdownJson(texto: string): string {
+    return (texto || '')
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim()
+}
+
+function extrairValorCampo(texto: string, campos: string[]): string {
+    for (const campo of campos) {
+        const regexJson = new RegExp(`"${campo}"\\s*:\\s*"([^"]+)"`, 'i')
+        const matchJson = texto.match(regexJson)
+        if (matchJson?.[1]) return matchJson[1].trim()
+
+        const regexLinha = new RegExp(`^\\s*${campo}\\s*[:=-]\\s*(.+)$`, 'im')
+        const matchLinha = texto.match(regexLinha)
+        if (matchLinha?.[1]) {
+            return matchLinha[1]
+                .replace(/^["'`]/, '')
+                .replace(/["'`]$/, '')
+                .trim()
+        }
+    }
+    return ''
+}
+
+function tokenizarTermosRelevantes(texto: string): string[] {
+    const stopwords = new Set([
+        'a', 'o', 'as', 'os', 'de', 'do', 'da', 'dos', 'das', 'em', 'na', 'no', 'nas', 'nos',
+        'e', 'ou', 'que', 'pra', 'para', 'por', 'com', 'me', 'minha', 'meu', 'mim',
+        'internet', 'web', 'pesquisa', 'pesquisar', 'busca', 'buscar', 'explica', 'explicar',
+        'rolando', 'acontecendo', 'sobre', 'qual', 'quais', 'como', 'quando', 'onde',
+    ])
+
+    return normalizarTextoComparacaoBusca(texto)
+        .split(' ')
+        .map((item) => item.trim())
+        .filter((item) => item.length >= 3)
+        .filter((item) => !stopwords.has(item))
+}
+
+function extrairPlanoBuscaFallback(
+    respostaBruta: string,
+    userMessage: string
+): { queryPrincipal: string; statusMessage: string; queriesSecundarias: string[] } | null {
+    const texto = limparMarkdownJson(respostaBruta)
+    if (!texto) return null
+
+    let queryPrincipal = extractSearchQuery(
+        extrairValorCampo(texto, ['queryPrincipal', 'query'])
+    ).slice(0, 100)
+
+    if (!queryPrincipal) {
+        const termosUsuario = new Set(tokenizarTermosRelevantes(userMessage))
+        const primeiraLinhaUtil = texto
+            .split('\n')
+            .map((linha) => linha.trim())
+            .find((linha) =>
+                linha.length >= 6 &&
+                linha.length <= 100 &&
+                !linha.startsWith('{') &&
+                !linha.startsWith('}') &&
+                !linha.startsWith('[') &&
+                !linha.startsWith(']') &&
+                !linha.toLowerCase().startsWith('statusmessage') &&
+                !linha.toLowerCase().startsWith('queriessecundarias') &&
+                tokenizarTermosRelevantes(linha).filter((termo) => termosUsuario.has(termo)).length >= 2
+            )
+        queryPrincipal = extractSearchQuery(primeiraLinhaUtil || '').slice(0, 100)
+    }
+
+    if (!queryPlanejadaEhValida(queryPrincipal, userMessage)) {
+        return null
+    }
+
+    const statusMessage = extrairValorCampo(texto, ['statusMessage']) || `Vou buscar informações sobre ${queryPrincipal}.`
+
+    const queriesSecundariasBrutas = extrairValorCampo(texto, ['queriesSecundarias'])
+    const queriesSecundarias = queriesSecundariasBrutas
+        ? queriesSecundariasBrutas
+            .split(/[;,|]/)
+            .map((item) => extractSearchQuery(item).slice(0, 100))
+            .filter((item) => item && item.length >= 3)
+            .filter((item) => queryPlanejadaEhValida(item, userMessage))
+            .filter((item, indice, lista) => item !== queryPrincipal && lista.indexOf(item) === indice)
+            .slice(0, 2)
+        : []
+
+    return {
+        queryPrincipal,
+        statusMessage: statusMessage.trim(),
+        queriesSecundarias,
+    }
+}
+
 /**
  * Generate optimized search query and status message using AI
  * Now considers the full chat history for better context
@@ -421,8 +595,21 @@ export async function generateSearchPlanWithAI(
     userMessage: string,
     chatHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     chatFn: (prompt: string) => Promise<string>,
-    timeoutMs: number = 600
+    timeoutMs: number = 0
 ): Promise<SearchPlan> {
+    const criarFalha = (
+        motivoFalha: SearchPlan['motivoFalha'],
+        statusMessage: string = ''
+    ): SearchPlan => ({
+        query: '',
+        queryPrincipal: '',
+        queriesSecundarias: [],
+        statusMessage,
+        planejamentoValido: false,
+        origem: 'falha',
+        motivoFalha,
+    })
+
     // Build conversation context
     const conversationContext = chatHistory.length > 0
         ? chatHistory.slice(-6).map(m => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content.substring(0, 200)}`).join('\n')
@@ -434,8 +621,10 @@ ${conversationContext ? `**Contexto da conversa:**\n${conversationContext}\n\n` 
 
 Responda EXATAMENTE no formato JSON:
 {
-  "query": "a query otimizada para buscar no DuckDuckGo em português",
-  "statusMessage": "uma frase natural explicando o que você vai buscar (sem emojis)"
+  "queryPrincipal": "query principal otimizada para DuckDuckGo em português",
+  "queriesSecundarias": ["query secundária 1", "query secundária 2"],
+  "statusMessage": "uma frase natural explicando o que você vai buscar (sem emojis)",
+  "motivoEscalonamento": "frase curta do porquê abrir sub-buscas (interno)"
 }
 
 Exemplos de statusMessage BOM:
@@ -449,33 +638,82 @@ Exemplos de statusMessage RUIM (não use):
 - "Buscando cotação atual do Bitcoin..." ❌
 
 REGRAS:
-1. A query deve ser otimizada para buscadores (palavras-chave relevantes)
+1. A queryPrincipal deve ser otimizada para buscadores (palavras-chave relevantes)
 2. A statusMessage deve ser uma frase natural em primeira pessoa, como se você estivesse conversando
 3. Considere o contexto da conversa ao gerar a query
-4. Responda APENAS o JSON, nada mais`
+4. A queryPrincipal deve ter estilo de palavras-chave (3 a 8 termos), sem texto conversacional
+5. Não use nas queries: "me explica", "o que", "que está acontecendo", "sobre isso"
+6. Quando houver pedido temporal (ex.: "últimos dias", "esta semana"), preserve esse recorte na query
+7. queriesSecundarias deve ter 0 a 2 itens
+8. Só inclua queriesSecundarias quando precisar cobrir contexto+causa+atualização
+9. NÃO copie o prompt do usuário literalmente
+10. Responda APENAS o JSON, nada mais`
 
     try {
-        const response = await Promise.race([
-            chatFn(systemPrompt),
-            new Promise<string>((_, reject) => setTimeout(() => reject(new Error(`Search plan timeout (${timeoutMs}ms)`)), timeoutMs))
-        ])
+        const response = timeoutMs > 0
+            ? await Promise.race([
+                chatFn(systemPrompt),
+                new Promise<string>((_, reject) => setTimeout(() => reject(new Error(`Search plan timeout (${timeoutMs}ms)`)), timeoutMs))
+            ])
+            : await chatFn(systemPrompt)
         
         // Parse JSON from response
         const jsonMatch = response.match(/\{[\s\S]*\}/)
         if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]) as SearchPlan
-            return {
-                query: parsed.query || extractSearchQuery(userMessage),
-                statusMessage: parsed.statusMessage || `Vou buscar informações sobre isso.`
+            try {
+                const parsed = JSON.parse(jsonMatch[0]) as Partial<SearchPlan> & { query?: string }
+                const queryPrincipal = extractSearchQuery(
+                    String(parsed.queryPrincipal || parsed.query || '')
+                ).slice(0, 100)
+
+                if (!queryPlanejadaEhValida(queryPrincipal, userMessage)) {
+                    return criarFalha('query_invalida')
+                }
+
+                const queriesSecundarias = Array.isArray(parsed.queriesSecundarias)
+                    ? parsed.queriesSecundarias
+                        .map((item) => extractSearchQuery(String(item || '')).slice(0, 100))
+                        .filter((item) => item && item.length >= 3)
+                        .filter((item) => queryPlanejadaEhValida(item, userMessage))
+                        .filter((item, indice, lista) => item !== queryPrincipal && lista.indexOf(item) === indice)
+                        .slice(0, 2)
+                    : []
+
+                return {
+                    query: queryPrincipal,
+                    queryPrincipal,
+                    queriesSecundarias,
+                    statusMessage: (parsed.statusMessage || `Vou buscar informações sobre ${queryPrincipal}.`).trim(),
+                    motivoEscalonamento: parsed.motivoEscalonamento || undefined,
+                    planejamentoValido: true,
+                    origem: 'ia',
+                }
+            } catch {
+                // tenta extração tolerante abaixo
             }
         }
+
+        const planoFallback = extrairPlanoBuscaFallback(response, userMessage)
+        if (planoFallback) {
+            return {
+                query: planoFallback.queryPrincipal,
+                queryPrincipal: planoFallback.queryPrincipal,
+                queriesSecundarias: planoFallback.queriesSecundarias,
+                statusMessage: planoFallback.statusMessage,
+                planejamentoValido: true,
+                origem: 'ia',
+            }
+        }
+
+        if (!jsonMatch) return criarFalha('json_invalido')
+        return criarFalha('query_invalida')
     } catch (error) {
+        const mensagemErro = String((error as Error)?.message || '').toLowerCase()
+        if (mensagemErro.includes('timeout')) {
+            console.info('[WebSearch] Search plan timeout; usando fallback do chamador.')
+            return criarFalha('timeout')
+        }
         console.warn('[WebSearch] Failed to generate search plan with AI:', error)
-    }
-    
-    // Fallback to simple extraction
-    return {
-        query: extractSearchQuery(userMessage),
-        statusMessage: `Vou buscar informações sobre isso.`
+        return criarFalha('erro_ia')
     }
 }

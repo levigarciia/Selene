@@ -190,11 +190,11 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
                                     <textarea
                                         value={project.instructions || ''}
                                         onChange={(e) => onUpdateProject({ instructions: e.target.value })}
-                                        placeholder="Adicione instruções específicas para este projeto. Por exemplo: 'Responda sempre em inglês', 'Use formato técnico', 'Foque em Python'..."
+                                        placeholder="Defina o prompt-base deste projeto. Exemplo: 'Você é DOUG.EXE...', 'Responda no formato técnico X', 'Considere somente os arquivos anexados'..."
                                         className="w-full h-32 p-4 rounded-xl bg-white/5 border border-white/10 text-neutral-200 placeholder-neutral-500 text-sm resize-none outline-none focus:border-purple-500/50 transition-colors [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10"
                                     />
                                     <p className="text-xs text-neutral-600 mt-1.5">
-                                        Estas instruções serão aplicadas automaticamente em todas as conversas deste projeto.
+                                        Em conversas deste projeto, este texto substitui o prompt global e os assistentes. Só o contexto do próprio projeto e seus arquivos será usado.
                                     </p>
                                 </motion.div>
                             )}

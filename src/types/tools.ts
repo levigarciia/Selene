@@ -118,7 +118,7 @@ export interface ToolCardData {
     results: ToolResultItem[]
     durationMs?: number
     error?: string
-    statusText?: string             // Status message shown BEFORE this card
+    statusText?: string             // Status message shown inside this card
 }
 
 // ============================================================================

@@ -97,6 +97,11 @@ export const ToolCard: React.FC<ToolCardProps> = ({
                 )}
                 
                 <div className="flex-1 min-w-0 text-left">
+                    {data.statusText && (
+                        <span className="text-xs text-neutral-400 block mb-1 truncate">
+                            {data.statusText}
+                        </span>
+                    )}
                     <span className={`${compact ? 'text-xs' : 'text-sm'} text-neutral-300 truncate block`}>
                         {data.query}
                     </span>

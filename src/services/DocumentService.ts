@@ -15,7 +15,15 @@ export const SUPPORTED_FILE_TYPES = [
     '.md'
 ]
 
-export const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MB = 1024 * 1024
+
+export const LIMITES_TAMANHO_ARQUIVO = {
+    pdf: 200 * MB,
+    docx: 100 * MB,
+    txt: 50 * MB,
+    md: 50 * MB,
+    other: 10 * MB, // Fallback conservador para tipos não mapeados
+} as const
 
 export function getFileType(file: File): ProjectFile['type'] {
     const ext = file.name.split('.').pop()?.toLowerCase()
@@ -32,6 +40,11 @@ export function isFileSupported(file: File): boolean {
     return SUPPORTED_FILE_TYPES.some(type => 
         file.type.includes(type) || file.name.endsWith(type)
     )
+}
+
+export function obterLimiteMaximoArquivo(file: File): number {
+    const tipo = getFileType(file)
+    return LIMITES_TAMANHO_ARQUIVO[tipo] ?? LIMITES_TAMANHO_ARQUIVO.other
 }
 
 // Extract text from a file

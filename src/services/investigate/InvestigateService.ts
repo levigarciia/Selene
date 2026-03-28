@@ -43,6 +43,10 @@ export * from './types'
 
 type ChatFunction = (prompt: string) => Promise<string>
 type StreamCallback = (chunk: string) => void
+type ContextoExecucaoInvestigacao = {
+    conversationId?: string
+    projectId?: string
+}
 
 // ============================================================================
 // INVESTIGATE SERVICE v2
@@ -56,6 +60,7 @@ class InvestigateServiceV2 {
     private abortController: AbortController | null = null
     private activeRunId: string | null = null
     private historicoChat: Array<{ role: 'user' | 'assistant'; content: string }> = []
+    private contextoExecucao: ContextoExecucaoInvestigacao = {}
 
     // ========================================================================
     // SETUP
@@ -74,6 +79,10 @@ class InvestigateServiceV2 {
         this.historicoChat = historico
             .filter(m => m && typeof m.content === 'string' && m.content.trim().length > 0)
             .slice(-10)
+    }
+
+    setContextoExecucao(contexto: ContextoExecucaoInvestigacao): void {
+        this.contextoExecucao = { ...contexto }
     }
 
     get isRunning(): boolean {
@@ -245,6 +254,7 @@ class InvestigateServiceV2 {
                 this.currentTrace.totalDurationMs = Date.now() - this.currentTrace.startedAt
             }
             this.abortController = null
+            this.contextoExecucao = {}
         }
 
         return this.currentTrace!
@@ -746,6 +756,11 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
                         (call) => {
                             subQ.toolCalls.push(call.id)
                             this.currentTrace!.totalToolCalls++
+                        },
+                        {
+                            conversationId: this.contextoExecucao.conversationId,
+                            projectId: this.contextoExecucao.projectId,
+                            userQuery: subQ.question
                         }
                     )
 

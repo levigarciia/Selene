@@ -5,13 +5,13 @@ import type { Conversation, WebSource } from '../types'
 import type { ToolCardData } from '../../../../types/tools'
 import type { Project } from '../../../../types/project'
 import type { InvestigationTrace } from '../../../../services/investigate'
-import type { MetaFimStream } from '../../../../services/ai/AIProvider'
+import type { EventoStreamIA, MetaFimStream } from '../../../../services/ai/AIProvider'
 
 // Services
 import {
     ORCAMENTO_PROMPT_PADRAO,
     aplicarOrcamentoPrompt,
-    composePromptComOrcamento,
+    composePromptEfetivo,
     deveInjetarContextoPessoal,
     processUserMessageForMemory,
 } from '../../../../services/PromptPipeline'
@@ -20,7 +20,7 @@ import {
     fetchUrlContent,
     formatSearchResultsForAI,
     generateSearchPlanWithAI,
-    mensagemBuscaPareceAmbigua,
+    shouldSearchWeb,
     searchWeb,
 } from '../../../../services/WebSearchService'
 import { investigateService } from '../../../../services/investigate'
@@ -28,8 +28,9 @@ import { toolCallingService, type EstrategiaDecisaoTool } from '../../../../serv
 import { toolRegistry } from '../../../../services/tools/ToolRegistry'
 import { obterConfiguracaoPerfilGeracao } from '../../../../services/ai/politicaGeracao'
 import {
-    buildProjectContext,
     addProjectMemory,
+    criarContextoArquivosProjeto,
+    criarPromptSistemaProjeto,
     extractConversationMemory
 } from '../../../../services/ProjectContextService'
 import { obterNomeFonte } from '../utils'
@@ -50,6 +51,8 @@ interface PoliticaLatencia {
     webMaxPaginasEnriquecimento: number
     webFetchTimeoutMs: number
     webMaxConteudoChars: number
+    webQueryPlanTimeoutMs: number
+    maxBuscasWebPorMensagem: number
 }
 
 interface MetricasLatencia {
@@ -68,12 +71,14 @@ const POLITICA_LATENCIA_PADRAO: PoliticaLatencia = {
     prestreamBudgetMs: 450,
     maxMensagensHistorico: 8,
     maxCharsMensagemHistorico: 500,
-    toolDecisionTimeoutMs: 600,
-    estrategiaTools: 'heuristic_only',
+    toolDecisionTimeoutMs: 0,
+    estrategiaTools: 'ai_only',
     timeoutCrossChatMs: 220,
     webMaxPaginasEnriquecimento: 2,
     webFetchTimeoutMs: 2500,
     webMaxConteudoChars: 800,
+    webQueryPlanTimeoutMs: 0,
+    maxBuscasWebPorMensagem: 3,
 }
 
 const MAX_AUTO_CONTINUACOES = 2
@@ -244,6 +249,62 @@ function publicarMetricasLatencia(metricas: MetricasLatencia): void {
     console.log('[Latencia]', metricas)
 }
 
+const PROMPT_SISTEMA_INVESTIGACAO = 'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.'
+const PROMPT_SISTEMA_TOOLS = 'Você é um assistente de decisão de ferramentas. Seja extremamente conciso.'
+
+function criarPromptSistemaImagem(systemPrompt: string): string {
+    return systemPrompt.trim()
+}
+
+
+
+function anexarBlocosNaMensagem(mensagem: string, blocos: string[]): string {
+    const blocosValidos = blocos.map((bloco) => bloco.trim()).filter(Boolean)
+    if (blocosValidos.length === 0) return mensagem
+    return [
+        ...blocosValidos,
+        '',
+        mensagem,
+    ].join('\n\n')
+}
+
+function criarChatFnInvestigacao(
+    servico: any,
+    systemPrompt: string
+): (prompt: string) => Promise<string> {
+    return async (prompt: string): Promise<string> => {
+        const configGeracao = obterConfiguracaoPerfilGeracao(prompt, { investigateMode: true })
+        let response = ''
+        await servico.streamChat(
+            prompt,
+            (chunk: string) => { response += chunk },
+            systemPrompt,
+            [],
+            {
+                temperature: configGeracao.temperature,
+            }
+        )
+        return response
+    }
+}
+
+function criarChatFnFerramentas(servico: any): (prompt: string) => Promise<string> {
+    return async (prompt: string): Promise<string> => {
+        const configGeracao = obterConfiguracaoPerfilGeracao(prompt, { forcarPerfil: 'pergunta_curta' })
+        let response = ''
+        await servico.streamChat(
+            prompt,
+            (chunk: string) => { response += chunk },
+            PROMPT_SISTEMA_TOOLS,
+            [],
+            {
+                temperature: configGeracao.temperature,
+            }
+        )
+        return response
+    }
+}
+
 export function useSendMessage({
     conversations,
     setConversations,
@@ -290,9 +351,28 @@ export function useSendMessage({
     }, [setConversations])
 
     // Run investigation (message already created, just updates trace)
-    const runInvestigation = useCallback(async (question: string, convId: string) => {
+    const runInvestigation = useCallback(async (
+        question: string,
+        convId: string,
+        opcoes?: {
+            chatFn?: (prompt: string) => Promise<string>
+            historico?: Array<{ role: 'user' | 'assistant'; content: string }>
+            conversationId?: string
+            projectId?: string
+            restaurarChatFn?: (prompt: string) => Promise<string>
+        }
+    ) => {
         setIsInvestigating(true)
         setCurrentTrace(null)
+
+        if (opcoes?.chatFn) {
+            investigateService.setChatFunction(opcoes.chatFn)
+        }
+        investigateService.setHistoricoChat(opcoes?.historico || [])
+        investigateService.setContextoExecucao({
+            conversationId: opcoes?.conversationId || convId,
+            projectId: opcoes?.projectId,
+        })
 
         // Subscribe to updates for real-time progress
         const unsubscribe = investigateService.subscribe((update) => {
@@ -330,9 +410,16 @@ export function useSendMessage({
             console.error('[useSendMessage] Investigation error:', error)
         } finally {
             unsubscribe()
+            if (opcoes?.restaurarChatFn) {
+                investigateService.setChatFunction(opcoes.restaurarChatFn)
+            }
+            const servicoRestauracao = criarOuObterServico()
+            if (servicoRestauracao) {
+                toolCallingService.setChatFunction(criarChatFnFerramentas(servicoRestauracao))
+            }
             setIsInvestigating(false)
         }
-    }, [setConversations, setIsInvestigating, setCurrentTrace])
+    }, [criarOuObterServico, setConversations, setIsInvestigating, setCurrentTrace])
 
     // Join multiple screenshots into one
     const juntarScreenshots = async (imagens: string[]) => {
@@ -433,8 +520,25 @@ export function useSendMessage({
         ;(generationIdRef as React.MutableRefObject<string | null>).current = currentGenerationId
         ;(abortControllerRef as React.MutableRefObject<AbortController | null>).current = new AbortController()
         let streamedContent = ''
+        let streamedRaciocinio = ''
 
         const isGenerationActive = () => generationIdRef.current === currentGenerationId
+        const atualizarMensagemAssistente = (conteudo: string, raciocinio: string = streamedRaciocinio) => {
+            const raciocinioNormalizado = raciocinio.trim()
+            setConversations(prev => prev.map(c => {
+                if (c.id === convId) {
+                    return {
+                        ...c,
+                        messages: c.messages.map(m =>
+                            m.id === aiMsgId
+                                ? { ...m, content: conteudo, raciocinio: raciocinioNormalizado || undefined }
+                                : m
+                        )
+                    }
+                }
+                return c
+            }))
+        }
         const signal = (abortControllerRef as React.MutableRefObject<AbortController | null>).current?.signal
         const inicioTotal = performance.now()
         const inicioPreStream = performance.now()
@@ -443,6 +547,10 @@ export function useSendMessage({
         let tempoWeb = 0
         let ttft: number | null = null
         let modoMetricas: MetricasLatencia['modo'] = 'chat'
+        const currentConv = conversations.find(c => c.id === convId)
+        const currentProject = currentConv?.projectId
+            ? projects.find(project => project.id === currentConv.projectId) || null
+            : null
 
         try {
             if (pendingScreenshots.length > 0 && promptImagem) {
@@ -452,10 +560,24 @@ export function useSendMessage({
                 const imagemUnica = await juntarScreenshots(pendingScreenshots)
                 if (!imagemUnica) throw new Error('Falha ao preparar imagens')
                 const configGeracaoImagem = obterConfiguracaoPerfilGeracao(promptImagem, { ehImagem: true })
+                let systemPromptOverride: string | undefined
+                const promptImagemComContexto = promptImagem
+                if (currentProject) {
+                    const promptSistemaImagemBase = criarPromptSistemaProjeto(currentProject).promptSistemaProjeto
+                    const contextoArquivosProjeto = criarContextoArquivosProjeto(currentProject, promptImagem, {
+                        maxCaracteresTotais: Math.max(1200, ORCAMENTO_PROMPT_PADRAO.projetoTokens * 4),
+                    }).blocoContexto
+                    // Contexto dos arquivos vai no system prompt, não na mensagem do usuário
+                    const partesSistema = [criarPromptSistemaImagem(promptSistemaImagemBase)]
+                    if (contextoArquivosProjeto) {
+                        partesSistema.push(`[contexto_projeto_arquivos]\n${contextoArquivosProjeto}`)
+                    }
+                    systemPromptOverride = partesSistema.filter(Boolean).join('\n\n')
+                }
 
                 let firstChunkReceived = false
                 await servico.streamAnalisarImagem(
-                    promptImagem,
+                    promptImagemComContexto,
                     imagemUnica,
                     (chunk: string) => {
                         if (!isGenerationActive()) return
@@ -469,40 +591,48 @@ export function useSendMessage({
                         }
 
                         streamedContent += chunk
-                        setConversations(prev => prev.map(c => {
-                            if (c.id === convId) {
-                                return {
-                                    ...c,
-                                    messages: c.messages.map(m =>
-                                        m.id === aiMsgId ? { ...m, content: streamedContent } : m
-                                    )
-                                }
-                            }
-                            return c
-                        }))
+                        atualizarMensagemAssistente(streamedContent, '')
                     },
                     {
                         signal,
                         temperature: configGeracaoImagem.temperature,
+                        systemPromptOverride,
                     }
                 )
             } else if (investigateMode && hasTexto) {
                 modoMetricas = 'investigate'
                 console.log('[useSendMessage] Starting investigation for:', userContent)
 
-                setConversations(prev => prev.map(c => {
-                    if (c.id === convId) {
-                        return {
-                            ...c,
-                            messages: c.messages.map(m =>
-                                m.id === aiMsgId ? { ...m, content: '🔍 *Iniciando investigação...*' } : m
-                            )
-                        }
-                    }
-                    return c
-                }))
+                atualizarMensagemAssistente('🔍 *Iniciando investigação...*', '')
+                const historicoInvestigacao = prepararHistoricoParaModelo(
+                    messages,
+                    politica.maxMensagensHistorico,
+                    politica.maxCharsMensagemHistorico
+                )
+                const contextoArquivosProjeto = currentProject
+                    ? criarContextoArquivosProjeto(currentProject, userContent, {
+                        maxCaracteresTotais: Math.max(1200, ORCAMENTO_PROMPT_PADRAO.projetoTokens * 4),
+                    }).blocoContexto
+                    : ''
+                // Contexto dos arquivos vai no system prompt da investigação
+                const promptSistemaInvestigacaoBase = currentProject
+                    ? criarPromptSistemaProjeto(currentProject).promptSistemaProjeto
+                    : PROMPT_SISTEMA_INVESTIGACAO
+                const promptSistemaInvestigacao = contextoArquivosProjeto
+                    ? [promptSistemaInvestigacaoBase, `[contexto_projeto_arquivos]\n${contextoArquivosProjeto}`].filter(Boolean).join('\n\n')
+                    : promptSistemaInvestigacaoBase
+                const chatFnInvestigacao = criarChatFnInvestigacao(servico, promptSistemaInvestigacao)
+                const chatFnRestauracao = criarChatFnInvestigacao(servico, PROMPT_SISTEMA_INVESTIGACAO)
+                const chatFnFerramentas = criarChatFnFerramentas(servico)
 
-                await runInvestigation(userContent, convId!)
+                await runInvestigation(userContent, convId!, {
+                    chatFn: chatFnInvestigacao,
+                    historico: historicoInvestigacao,
+                    conversationId: convId,
+                    projectId: currentProject?.id,
+                    restaurarChatFn: chatFnRestauracao,
+                })
+                toolCallingService.setChatFunction(chatFnFerramentas)
 
                 const trace = investigateService.getCurrentTrace()
                 if (trace?.finalAnswer) {
@@ -519,17 +649,7 @@ export function useSendMessage({
                             ttft = performance.now() - inicioTotal
                         }
                         
-                        setConversations(prev => prev.map(c => {
-                            if (c.id === convId) {
-                                return {
-                                    ...c,
-                                    messages: c.messages.map(m =>
-                                        m.id === aiMsgId ? { ...m, content: displayedContent } : m
-                                    )
-                                }
-                            }
-                            return c
-                        }))
+                        atualizarMensagemAssistente(displayedContent, '')
                         
                         // Pequeno delay para criar efeito de streaming
                         await new Promise(resolve => setTimeout(resolve, delay))
@@ -541,7 +661,7 @@ export function useSendMessage({
                             return {
                                 ...c,
                                 messages: c.messages.map(m =>
-                                    m.id === aiMsgId ? { ...m, content: fullAnswer } : m
+                                    m.id === aiMsgId ? { ...m, content: fullAnswer, raciocinio: undefined } : m
                                 ),
                                 updatedAt: Date.now()
                             }
@@ -554,10 +674,14 @@ export function useSendMessage({
                 let searchSources: WebSource[] = []
                 let contextoFerramentas = ''
                 let cartoesFerramentas: ToolCardData[] = []
+                let houveBuscaWeb = false
+                let buscaWebComResultados = false
 
                 const tempoRestantePreStream = () => Math.max(0, politica.prestreamBudgetMs - (performance.now() - inicioPreStream))
 
-                if (webSearchEnabled) {
+                // Fallback legado: busca direta apenas quando o tool calling está desligado.
+                // Com tool calling ativo, a IA decide se/como usar web_search.
+                if (webSearchEnabled && !toolCallingAtivo) {
                     const inicioWeb = performance.now()
                     try {
                         const historicoBusca = prepararHistoricoParaModelo(
@@ -567,9 +691,8 @@ export function useSendMessage({
                         )
 
                         let queryBusca = extractSearchQuery(userMsg.content)
-                        let statusMessage = `Vou buscar informações sobre ${truncarTexto(queryBusca, 50)}.`
-
-                        const usarPlanejamentoIA = mensagemBuscaPareceAmbigua(userMsg.content) && tempoRestantePreStream() > 80
+                        const usarPlanejamentoIA = true
+                        let statusMessage = ''
                         if (usarPlanejamentoIA) {
                             const configPlanejamentoBusca = obterConfiguracaoPerfilGeracao(userMsg.content, { forcarPerfil: 'pergunta_curta' })
                             const searchPlan = await generateSearchPlanWithAI(
@@ -579,134 +702,149 @@ export function useSendMessage({
                                     signal,
                                     temperature: configPlanejamentoBusca.temperature,
                                 }),
-                                Math.min(400, Math.max(120, Math.floor(tempoRestantePreStream())))
+                                politica.webQueryPlanTimeoutMs
                             )
-                            queryBusca = searchPlan.query || queryBusca
-                            statusMessage = searchPlan.statusMessage || statusMessage
+                            if (!searchPlan.planejamentoValido) {
+                                queryBusca = ''
+                            } else {
+                                queryBusca = searchPlan.queryPrincipal || searchPlan.query || ''
+                                statusMessage = (searchPlan.statusMessage || '').trim()
+                            }
                         }
 
-                        setConversations(prev => prev.map(c => {
-                            if (c.id === convId) {
-                                return {
-                                    ...c,
-                                    messages: c.messages.map(m =>
-                                        m.id === aiMsgId ? { ...m, content: statusMessage } : m
-                                    )
+                        queryBusca = extractSearchQuery(queryBusca || '')
+                        if (!queryBusca?.trim()) {
+                            queryBusca = ''
+                        }
+
+                        if (queryBusca) {
+                            houveBuscaWeb = true
+                            statusMessage = statusMessage || `Vou buscar informações sobre ${truncarTexto(queryBusca, 50)}.`
+
+                            setConversations(prev => prev.map(c => {
+                                if (c.id === convId) {
+                                    return {
+                                        ...c,
+                                        messages: c.messages.map(m =>
+                                            m.id === aiMsgId ? { ...m, content: statusMessage, raciocinio: undefined } : m
+                                        )
+                                    }
                                 }
-                            }
-                            return c
-                        }))
+                                return c
+                            }))
 
-                        setMessageSearchCards(prev => ({
-                            ...prev,
-                            [aiMsgId]: [{
-                                toolId: 'builtin:web_search',
-                                toolName: 'Busca na Web',
-                                toolIcon: 'Globe',
-                                query: queryBusca,
-                                status: 'executing',
-                                resultCount: 0,
-                                results: []
-                            }]
-                        }))
+                            setMessageSearchCards(prev => ({
+                                ...prev,
+                                [aiMsgId]: [{
+                                    toolId: 'builtin:web_search',
+                                    toolName: 'Busca na Web',
+                                    toolIcon: 'Globe',
+                                    query: queryBusca,
+                                    status: 'executing',
+                                    resultCount: 0,
+                                    results: []
+                                }]
+                            }))
 
-                        const searchResponse = await executarComTimeout(
-                            searchWeb(queryBusca, 5),
-                            1800,
-                            { query: queryBusca, results: [], timestamp: Date.now() }
-                        )
+                            const searchResponse = await executarComTimeout(
+                                searchWeb(queryBusca, 5),
+                                1800,
+                                { query: queryBusca, results: [], timestamp: Date.now() }
+                            )
 
-                        if (searchResponse.results.length > 0) {
-                            const enrichedResults = await Promise.all(
-                                searchResponse.results.slice(0, politica.webMaxPaginasEnriquecimento).map(async (result) => {
-                                    try {
-                                        if (result.content && result.content.length > 0) {
+                            if (searchResponse.results.length > 0) {
+                                buscaWebComResultados = true
+                                const enrichedResults = await Promise.all(
+                                    searchResponse.results.slice(0, politica.webMaxPaginasEnriquecimento).map(async (result) => {
+                                        try {
+                                            if (result.content && result.content.length > 0) {
+                                                return result
+                                            }
+                                            const content = await fetchUrlContent(
+                                                result.url,
+                                                politica.webMaxConteudoChars,
+                                                politica.webFetchTimeoutMs
+                                            )
+                                            return { ...result, content }
+                                        } catch {
                                             return result
                                         }
-                                        const content = await fetchUrlContent(
-                                            result.url,
-                                            politica.webMaxConteudoChars,
-                                            politica.webFetchTimeoutMs
-                                        )
-                                        return { ...result, content }
+                                    })
+                                )
+                                searchResponse.results = enrichedResults
+
+                                const blocoWebAplicado = aplicarOrcamentoPrompt(
+                                    formatSearchResultsForAI(searchResponse),
+                                    ORCAMENTO_PROMPT_PADRAO.ferramentasWebTokens
+                                )
+                                webSearchContext = blocoWebAplicado.texto
+
+                                const cardResults = searchResponse.results.map(r => ({
+                                    type: 'link' as const,
+                                    title: r.title,
+                                    content: r.snippet || '',
+                                    url: r.url,
+                                    favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`
+                                }))
+
+                                searchSources = searchResponse.results.map(r => {
+                                    let dominio = ''
+                                    try {
+                                        dominio = new URL(r.url).hostname.replace('www.', '')
                                     } catch {
-                                        return result
+                                        dominio = ''
+                                    }
+                                    return {
+                                        url: r.url,
+                                        title: r.title,
+                                        favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`,
+                                        resumo: r.content && r.content.length > 0 ? r.content : r.snippet,
+                                        nomeFonte: obterNomeFonte(r.url, r.title),
+                                        dominio
                                     }
                                 })
-                            )
-                            searchResponse.results = enrichedResults
 
-                            const blocoWebAplicado = aplicarOrcamentoPrompt(
-                                formatSearchResultsForAI(searchResponse),
-                                ORCAMENTO_PROMPT_PADRAO.ferramentasWebTokens
-                            )
-                            webSearchContext = blocoWebAplicado.texto
+                                setMessageSearchCards(prev => ({
+                                    ...prev,
+                                    [aiMsgId]: [{
+                                        toolId: 'builtin:web_search',
+                                        toolName: 'Busca na Web',
+                                        toolIcon: 'Globe',
+                                        query: queryBusca,
+                                        status: 'completed',
+                                        resultCount: searchResponse.results.length,
+                                        results: cardResults,
+                                        statusText: statusMessage
+                                    }]
+                                }))
+                            } else {
+                                setMessageSearchCards(prev => ({
+                                    ...prev,
+                                    [aiMsgId]: [{
+                                        toolId: 'builtin:web_search',
+                                        toolName: 'Busca na Web',
+                                        toolIcon: 'Globe',
+                                        query: queryBusca,
+                                        status: 'completed',
+                                        resultCount: 0,
+                                        results: [],
+                                        statusText: statusMessage
+                                    }]
+                                }))
+                            }
 
-                            const cardResults = searchResponse.results.map(r => ({
-                                type: 'link' as const,
-                                title: r.title,
-                                content: r.snippet || '',
-                                url: r.url,
-                                favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`
-                            }))
-
-                            searchSources = searchResponse.results.map(r => {
-                                let dominio = ''
-                                try {
-                                    dominio = new URL(r.url).hostname.replace('www.', '')
-                                } catch {
-                                    dominio = ''
+                            setConversations(prev => prev.map(c => {
+                                if (c.id === convId) {
+                                    return {
+                                        ...c,
+                                        messages: c.messages.map(m =>
+                                            m.id === aiMsgId ? { ...m, content: '', raciocinio: undefined } : m
+                                        )
+                                    }
                                 }
-                                return {
-                                    url: r.url,
-                                    title: r.title,
-                                    favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`,
-                                    resumo: r.content && r.content.length > 0 ? r.content : r.snippet,
-                                    nomeFonte: obterNomeFonte(r.url, r.title),
-                                    dominio
-                                }
-                            })
-
-                            setMessageSearchCards(prev => ({
-                                ...prev,
-                                [aiMsgId]: [{
-                                    toolId: 'builtin:web_search',
-                                    toolName: 'Busca na Web',
-                                    toolIcon: 'Globe',
-                                    query: queryBusca,
-                                    status: 'completed',
-                                    resultCount: searchResponse.results.length,
-                                    results: cardResults,
-                                    statusText: statusMessage
-                                }]
-                            }))
-                        } else {
-                            setMessageSearchCards(prev => ({
-                                ...prev,
-                                [aiMsgId]: [{
-                                    toolId: 'builtin:web_search',
-                                    toolName: 'Busca na Web',
-                                    toolIcon: 'Globe',
-                                    query: queryBusca,
-                                    status: 'completed',
-                                    resultCount: 0,
-                                    results: [],
-                                    statusText: statusMessage
-                                }]
+                                return c
                             }))
                         }
-
-                        setConversations(prev => prev.map(c => {
-                            if (c.id === convId) {
-                                return {
-                                    ...c,
-                                    messages: c.messages.map(m =>
-                                        m.id === aiMsgId ? { ...m, content: '' } : m
-                                    )
-                                }
-                            }
-                            return c
-                        }))
                     } catch (err) {
                         console.warn('[useSendMessage] Web search failed:', err)
                     } finally {
@@ -717,9 +855,9 @@ export function useSendMessage({
                 if (toolCallingAtivo) {
                     const inicioTools = performance.now()
                     try {
-                        const ferramentasDisponiveis = toolRegistry
-                            .getEnabled()
-                            .filter(tool => !(webSearchEnabled && tool.id === 'builtin:web_search'))
+                        // No fluxo de tool calling, a IA decide se usa web_search.
+                        // O toggle "Busca na Web" fica apenas para o fallback legado (sem tool calling).
+                        const ferramentasDisponiveis = toolRegistry.getEnabled()
 
                         if (ferramentasDisponiveis.length > 0) {
                             const historicoChat = prepararHistoricoParaModelo(
@@ -734,7 +872,9 @@ export function useSendMessage({
                                 ferramentasDisponiveis,
                                 {
                                     estrategiaDecisao: politica.estrategiaTools,
-                                    timeoutMs: politica.toolDecisionTimeoutMs
+                                    timeoutMs: politica.toolDecisionTimeoutMs,
+                                    timeoutQueryMs: politica.webQueryPlanTimeoutMs,
+                                    maxBuscasWebPorMensagem: politica.maxBuscasWebPorMensagem,
                                 }
                             )
 
@@ -751,7 +891,7 @@ export function useSendMessage({
                                             return {
                                                 ...c,
                                                 messages: c.messages.map(m =>
-                                                    m.id === aiMsgId ? { ...m, content: progressContent } : m
+                                                    m.id === aiMsgId ? { ...m, content: progressContent, raciocinio: undefined } : m
                                                 )
                                             }
                                         }
@@ -766,8 +906,20 @@ export function useSendMessage({
                                     decisao,
                                     undefined,
                                     undefined,
-                                    { conversationId: convId!, projectId: projectIdForTools }
+                                    { conversationId: convId!, projectId: projectIdForTools, userQuery: userMsg.content }
                                 )
+
+                                const chamadasWeb = calls.filter((call) => call.input.toolId.includes('web_search'))
+                                if (chamadasWeb.length > 0) {
+                                    houveBuscaWeb = true
+                                    const encontrouResultadoWeb = chamadasWeb.some((call) => {
+                                        const data = call.result?.data as { results?: unknown[] } | undefined
+                                        return Array.isArray(data?.results) && data.results.length > 0
+                                    })
+                                    if (encontrouResultadoWeb) {
+                                        buscaWebComResultados = true
+                                    }
+                                }
 
                                 const blocoToolsAplicado = aplicarOrcamentoPrompt(
                                     toolCallingService.formatResultsForAI(calls),
@@ -790,7 +942,7 @@ export function useSendMessage({
                                             return {
                                                 ...c,
                                                 messages: c.messages.map(m =>
-                                                    m.id === aiMsgId ? { ...m, content: '' } : m
+                                                    m.id === aiMsgId ? { ...m, content: '', raciocinio: undefined } : m
                                                 )
                                             }
                                         }
@@ -805,71 +957,81 @@ export function useSendMessage({
                 }
 
                 const inicioPrompt = performance.now()
-                const currentConv = conversations.find(c => c.id === convId)
-                const currentProjectId = currentConv?.projectId
-                const emProjeto = Boolean(currentProjectId)
-                const permitirContextoPessoal = deveInjetarContextoPessoal(userMsg.content, true)
-                const contextoPerfil = getProfileContext({
-                    consulta: userMsg.content,
-                    permitirContextoPessoal: emProjeto ? false : permitirContextoPessoal,
-                    somenteIdentidadeBasica: emProjeto,
-                })
-
-                const { systemPrompt: composedPrompt } = await composePromptComOrcamento(
+                const permitirContextoPessoal = currentProject ? false : deveInjetarContextoPessoal(userMsg.content, true)
+                const { systemPrompt: composedPrompt, metadata: promptMetadata } = await composePromptEfetivo(
                     {
                         systemPrompt: promptBase,
-                        userProfileContext: contextoPerfil,
+                        userProfileContext: currentProject ? '' : getProfileContext({
+                            consulta: userMsg.content,
+                            permitirContextoPessoal,
+                            somenteIdentidadeBasica: false,
+                        }),
                         currentConversationId: convId,
-                        currentProjectId,
+                        currentProjectId: currentProject?.id,
+                        currentProject,
                         currentUserMessage: userMsg.content,
                         permitirContextoPessoal,
+                        permitirMemoriaPerfil: !currentProject,
+                        permitirMemoriasAuto: !currentProject,
+                        permitirCrossChat: !currentProject,
                     },
                     {
                         orcamento: ORCAMENTO_PROMPT_PADRAO,
-                        incluirDataHora: 'auto',
-                        timeoutCrossChatMs: Math.min(
-                            politica.timeoutCrossChatMs,
-                            Math.max(80, Math.floor(tempoRestantePreStream()))
-                        ),
+                        incluirDataHora: currentProject ? false : 'auto',
+                        timeoutCrossChatMs: currentProject
+                            ? 0
+                            : Math.min(
+                                politica.timeoutCrossChatMs,
+                                Math.max(80, Math.floor(tempoRestantePreStream()))
+                            ),
                     }
                 )
                 tempoPrompt = performance.now() - inicioPrompt
 
-                let projectContext = ''
-                let projectInstructions = ''
-                if (currentConv?.projectId) {
-                    const project = projects.find(p => p.id === currentConv.projectId)
-                    if (project) {
-                        if (project.instructions && project.instructions.trim()) {
-                            const instrucaoAplicada = aplicarOrcamentoPrompt(
-                                `[instrucoes_projeto]\n${project.instructions.trim()}`,
-                                Math.floor(ORCAMENTO_PROMPT_PADRAO.projetoTokens / 2)
-                            )
-                            projectInstructions = instrucaoAplicada.texto
-                        }
-                        if (project.files.length > 0) {
-                            const contextoProjetoBruto = buildProjectContext(project, userContent, project.files)
-                            const contextoProjetoAplicado = aplicarOrcamentoPrompt(
-                                contextoProjetoBruto,
-                                Math.floor(ORCAMENTO_PROMPT_PADRAO.projetoTokens / 2)
-                            )
-                            projectContext = contextoProjetoAplicado.texto
-                        }
-                    }
-                }
+                console.log('[useSendMessage] Prompt mode:', {
+                    mode: promptMetadata.mode,
+                    totalArquivosProjeto: promptMetadata.totalArquivosProjeto || 0,
+                    trechosProjetoIncluidos: promptMetadata.trechosProjetoIncluidos || 0,
+                })
+                const contextoArquivosProjeto = currentProject
+                    ? criarContextoArquivosProjeto(currentProject, userMsg.content, {
+                        maxCaracteresTotais: Math.max(1200, ORCAMENTO_PROMPT_PADRAO.projetoTokens * 4),
+                    }).blocoContexto
+                    : ''
+                // Contexto dos arquivos vai no system prompt; web/ferramentas ficam na msg do usuário
+                const mensagemUsuarioParaModelo = currentProject
+                    ? anexarBlocosNaMensagem(userMsg.content, [
+                        webSearchContext,
+                        contextoFerramentas,
+                    ])
+                    : userMsg.content
 
                 const instrucaoRespostaCurta = (configGeracaoChat.perfil === 'saudacao_ack' || configGeracaoChat.perfil === 'pergunta_curta')
                     ? '[formato_resposta]\nResponda de forma curta e completa em português do Brasil, finalizando a última frase.'
                     : ''
+                const solicitouBuscaWeb = shouldSearchWeb(userMsg.content)
+                const instrucaoSemFonteConfiavel = (houveBuscaWeb && !buscaWebComResultados)
+                    ? '[confiabilidade_web]\nA busca na web não retornou fontes confiáveis suficientes. Informe a incerteza de forma explícita, não invente fatos e sugira refinar a busca.'
+                    : ''
+                const instrucaoFalhaBuscaWeb = (solicitouBuscaWeb && !houveBuscaWeb)
+                    ? '[busca_web_indisponivel]\nO usuário pediu pesquisa na web, mas a coleta não foi concluída nesta rodada. Não diga que você nunca tem internet. Informe falha temporária de busca e peça para tentar novamente.'
+                    : ''
 
-                const finalPrompt = [
-                    composedPrompt,
-                    projectInstructions,
-                    webSearchContext,
-                    contextoFerramentas,
-                    projectContext,
-                    instrucaoRespostaCurta,
-                ].filter(Boolean).join('\n\n')
+                // Arquivos do projeto como seção no system, não na mensagem do usuário
+                const secaoArquivosProjeto = contextoArquivosProjeto
+                    ? `[contexto_projeto_arquivos]\n${contextoArquivosProjeto}`
+                    : ''
+
+                const finalPrompt = currentProject
+                    ? [composedPrompt, secaoArquivosProjeto, instrucaoRespostaCurta, instrucaoSemFonteConfiavel, instrucaoFalhaBuscaWeb].filter(Boolean).join('\n\n')
+                    : [
+                        composedPrompt,
+                        webSearchContext,
+                        contextoFerramentas,
+                        instrucaoRespostaCurta,
+                        instrucaoSemFonteConfiavel,
+                        instrucaoFalhaBuscaWeb,
+                    ].filter(Boolean).join('\n\n')
 
                 const historicoParaModelo = prepararHistoricoParaModelo(
                     messages,
@@ -879,7 +1041,7 @@ export function useSendMessage({
 
                 let metaFimPrincipal: MetaFimStream | null = null
                 await servico.streamChat(
-                    userMsg.content,
+                    mensagemUsuarioParaModelo,
                     (chunk: string) => {
                         if (!isGenerationActive()) return
 
@@ -888,23 +1050,19 @@ export function useSendMessage({
                         }
 
                         streamedContent += chunk
-                        setConversations(prev => prev.map(c => {
-                            if (c.id === convId) {
-                                return {
-                                    ...c,
-                                    messages: c.messages.map(m =>
-                                        m.id === aiMsgId ? { ...m, content: streamedContent } : m
-                                    )
-                                }
-                            }
-                            return c
-                        }))
+                        atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
                     },
                     finalPrompt,
                     historicoParaModelo,
                     {
                         signal,
                         temperature: configGeracaoChat.temperature,
+                        onEventoStream: (evento: EventoStreamIA) => {
+                            if (!isGenerationActive()) return
+                            if (evento.tipo !== 'raciocinio' || !evento.texto) return
+                            streamedRaciocinio += evento.texto
+                            atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
+                        },
                         onFimStream: (meta: MetaFimStream) => {
                             metaFimPrincipal = meta
                         },
@@ -930,7 +1088,7 @@ export function useSendMessage({
 
                     const historicoContinuacao = [
                         ...historicoParaModelo,
-                        { role: 'user' as const, content: userMsg.content },
+                        { role: 'user' as const, content: mensagemUsuarioParaModelo },
                         {
                             role: 'assistant' as const,
                             content: truncarTexto(conteudoAntesContinuacao, 1800),
@@ -943,23 +1101,19 @@ export function useSendMessage({
                             if (!isGenerationActive()) return
                             bufferContinuacao += chunk
                             streamedContent += chunk
-                            setConversations(prev => prev.map(c => {
-                                if (c.id === convId) {
-                                    return {
-                                        ...c,
-                                        messages: c.messages.map(m =>
-                                            m.id === aiMsgId ? { ...m, content: streamedContent } : m
-                                        )
-                                    }
-                                }
-                                return c
-                            }))
+                            atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
                         },
                         finalPrompt,
                         historicoContinuacao,
                         {
                             signal,
                             temperature: configGeracaoChat.temperature,
+                            onEventoStream: (evento: EventoStreamIA) => {
+                                if (!isGenerationActive()) return
+                                if (evento.tipo !== 'raciocinio' || !evento.texto) return
+                                streamedRaciocinio += evento.texto
+                                atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
+                            },
                             onFimStream: (meta: MetaFimStream) => {
                                 metaFimContinuacao = meta
                             },
@@ -970,17 +1124,7 @@ export function useSendMessage({
                         const conteudoSemDuplicacao = mesclarComDeduplicacao(conteudoAntesContinuacao, bufferContinuacao)
                         if (conteudoSemDuplicacao !== streamedContent) {
                             streamedContent = conteudoSemDuplicacao
-                            setConversations(prev => prev.map(c => {
-                                if (c.id === convId) {
-                                    return {
-                                        ...c,
-                                        messages: c.messages.map(m =>
-                                            m.id === aiMsgId ? { ...m, content: streamedContent } : m
-                                        )
-                                    }
-                                }
-                                return c
-                            }))
+                            atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
                         }
                     }
 
@@ -991,17 +1135,7 @@ export function useSendMessage({
 
                 if (isGenerationActive() && truncamentoPersistente) {
                     streamedContent = `${streamedContent.trimEnd()}\n\n[Resposta interrompida por limite do modelo.]`
-                    setConversations(prev => prev.map(c => {
-                        if (c.id === convId) {
-                            return {
-                                ...c,
-                                messages: c.messages.map(m =>
-                                    m.id === aiMsgId ? { ...m, content: streamedContent } : m
-                                )
-                            }
-                        }
-                        return c
-                    }))
+                    atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
                 }
 
                 const respostaVazia = !streamedContent.trim()
@@ -1012,8 +1146,8 @@ export function useSendMessage({
                 if (isGenerationActive() && (respostaVazia || respostaCurtaIncompleta)) {
                     try {
                         const promptReparo = respostaVazia
-                            ? userMsg.content
-                            : `${userMsg.content}\n\nResponda novamente de forma curta e completa, sem cortar a frase final.`
+                            ? mensagemUsuarioParaModelo
+                            : `${mensagemUsuarioParaModelo}\n\nResponda novamente de forma curta e completa, sem cortar a frase final.`
 
                         const respostaReparo = await servico.chat(
                             promptReparo,
@@ -1027,17 +1161,7 @@ export function useSendMessage({
 
                         if (respostaReparo?.trim()) {
                             streamedContent = respostaReparo.trim()
-                            setConversations(prev => prev.map(c => {
-                                if (c.id === convId) {
-                                    return {
-                                        ...c,
-                                        messages: c.messages.map(m =>
-                                            m.id === aiMsgId ? { ...m, content: streamedContent } : m
-                                        )
-                                    }
-                                }
-                                return c
-                            }))
+                            atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
                         }
                     } catch (erroReparo) {
                         console.warn('[useSendMessage] Falha no reparo de resposta curta:', erroReparo)
@@ -1142,6 +1266,7 @@ export function useSendMessage({
         politica.maxMensagensHistorico, politica.maxCharsMensagemHistorico, politica.prestreamBudgetMs,
         politica.timeoutCrossChatMs, politica.webMaxPaginasEnriquecimento, politica.webFetchTimeoutMs,
         politica.webMaxConteudoChars, politica.estrategiaTools, politica.toolDecisionTimeoutMs,
+        politica.webQueryPlanTimeoutMs, politica.maxBuscasWebPorMensagem,
     ])
 
     // Stop generation
@@ -1188,31 +1313,54 @@ export function useSendMessage({
         const signal = (abortControllerRef as React.MutableRefObject<AbortController | null>).current?.signal
 
         try {
-            const permitirContextoPessoal = deveInjetarContextoPessoal(userContent, true)
             const currentConv = conversations.find(c => c.id === activeConversationId)
-            const currentProjectId = currentConv?.projectId
-            const emProjeto = Boolean(currentProjectId)
-            const contextoPerfil = getProfileContext({
-                consulta: userContent,
-                permitirContextoPessoal: emProjeto ? false : permitirContextoPessoal,
-                somenteIdentidadeBasica: emProjeto,
-            })
+            const currentProject = currentConv?.projectId
+                ? projects.find(project => project.id === currentConv.projectId) || null
+                : null
+            const permitirContextoPessoal = currentProject ? false : deveInjetarContextoPessoal(userContent, true)
 
-            const { systemPrompt: composedPrompt } = await composePromptComOrcamento(
+            const { systemPrompt: composedPrompt, metadata: promptMetadata } = await composePromptEfetivo(
                 {
                     systemPrompt: promptBase,
-                    userProfileContext: contextoPerfil,
+                    userProfileContext: currentProject ? '' : getProfileContext({
+                        consulta: userContent,
+                        permitirContextoPessoal,
+                        somenteIdentidadeBasica: false,
+                    }),
                     currentConversationId: activeConversationId,
-                    currentProjectId,
+                    currentProjectId: currentProject?.id,
+                    currentProject,
                     currentUserMessage: userContent,
                     permitirContextoPessoal,
+                    permitirMemoriaPerfil: !currentProject,
+                    permitirMemoriasAuto: !currentProject,
+                    permitirCrossChat: !currentProject,
                 },
                 {
                     orcamento: ORCAMENTO_PROMPT_PADRAO,
-                    incluirDataHora: 'auto',
-                    timeoutCrossChatMs: politica.timeoutCrossChatMs,
+                    incluirDataHora: currentProject ? false : 'auto',
+                    timeoutCrossChatMs: currentProject ? 0 : politica.timeoutCrossChatMs,
                 }
             )
+
+            console.log('[useSendMessage] Prompt mode regenerate:', {
+                mode: promptMetadata.mode,
+                totalArquivosProjeto: promptMetadata.totalArquivosProjeto || 0,
+                trechosProjetoIncluidos: promptMetadata.trechosProjetoIncluidos || 0,
+            })
+            const contextoArquivosProjeto = currentProject
+                ? criarContextoArquivosProjeto(currentProject, userContent, {
+                    maxCaracteresTotais: Math.max(1200, ORCAMENTO_PROMPT_PADRAO.projetoTokens * 4),
+                }).blocoContexto
+                : ''
+            // Contexto dos arquivos vai no system prompt, não na mensagem do usuário
+            const secaoArquivosProjeto = contextoArquivosProjeto
+                ? `[contexto_projeto_arquivos]\n${contextoArquivosProjeto}`
+                : ''
+            const mensagemUsuarioParaModelo = userContent
+            const finalPromptRegen = secaoArquivosProjeto
+                ? [composedPrompt, secaoArquivosProjeto].filter(Boolean).join('\n\n')
+                : composedPrompt
 
             const historicoParaModelo = prepararHistoricoParaModelo(
                 messagesUpToUser.slice(0, -1),
@@ -1222,15 +1370,21 @@ export function useSendMessage({
 
             const configGeracaoRegen = obterConfiguracaoPerfilGeracao(userContent, { investigateMode })
             let response = ''
+            let responseRaciocinio = ''
             let metaFimPrincipal: MetaFimStream | null = null
             await servico.streamChat(
-                userContent,
+                mensagemUsuarioParaModelo,
                 (chunk: string) => { response += chunk },
-                composedPrompt,
+                finalPromptRegen,
                 historicoParaModelo,
                 {
                     signal,
                     temperature: configGeracaoRegen.temperature,
+                    onEventoStream: (evento: EventoStreamIA) => {
+                        if (evento.tipo === 'raciocinio' && evento.texto) {
+                            responseRaciocinio += evento.texto
+                        }
+                    },
                     onFimStream: (meta: MetaFimStream) => {
                         metaFimPrincipal = meta
                     },
@@ -1256,7 +1410,7 @@ export function useSendMessage({
 
                 const historicoContinuacao = [
                     ...historicoParaModelo,
-                    { role: 'user' as const, content: userContent },
+                    { role: 'user' as const, content: mensagemUsuarioParaModelo },
                     {
                         role: 'assistant' as const,
                         content: truncarTexto(conteudoAntesContinuacao, 1800),
@@ -1266,11 +1420,16 @@ export function useSendMessage({
                 await servico.streamChat(
                     instrucaoContinuacao,
                     (chunk: string) => { bufferContinuacao += chunk },
-                    composedPrompt,
+                    finalPromptRegen,
                     historicoContinuacao,
                     {
                         signal,
                         temperature: configGeracaoRegen.temperature,
+                        onEventoStream: (evento: EventoStreamIA) => {
+                            if (evento.tipo === 'raciocinio' && evento.texto) {
+                                responseRaciocinio += evento.texto
+                            }
+                        },
                         onFimStream: (meta: MetaFimStream) => {
                             metaFimContinuacao = meta
                         },
@@ -1291,6 +1450,7 @@ export function useSendMessage({
                 id: uuidv4(),
                 role: 'assistant',
                 content: response,
+                raciocinio: responseRaciocinio.trim() || undefined,
                 timestamp: Date.now()
             }
             updateConversationMessages(activeConversationId, [...messagesUpToUser, aiMsg])
