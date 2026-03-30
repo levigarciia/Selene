@@ -1,9 +1,10 @@
-// Document Processing Service
-// Handles extraction of text from PDF, DOCX, TXT, MD files
+// Serviço de processamento de documentos
+// Extrai texto de arquivos PDF, DOCX, TXT e MD
 
 import type { ProjectFile } from '../types/project'
+import caminhoWorkerPdf from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
-// Supported file types
+// Tipos de arquivo suportados
 export const SUPPORTED_FILE_TYPES = [
     'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
@@ -47,7 +48,7 @@ export function obterLimiteMaximoArquivo(file: File): number {
     return LIMITES_TAMANHO_ARQUIVO[tipo] ?? LIMITES_TAMANHO_ARQUIVO.other
 }
 
-// Extract text from a file
+// Extrai texto de um arquivo suportado
 export async function extractTextFromFile(file: File): Promise<string> {
     const type = getFileType(file)
     
@@ -64,19 +65,19 @@ export async function extractTextFromFile(file: File): Promise<string> {
     }
 }
 
-// Extract from plain text files
+// Extrai conteúdo de arquivos de texto simples
 async function extractFromText(file: File): Promise<string> {
     return await file.text()
 }
 
-// Extract from PDF using pdfjs-dist
+// Extrai conteúdo de PDF usando pdfjs-dist
 async function extractFromPDF(file: File): Promise<string> {
     try {
-        // Dynamic import to avoid bundling if not needed
+        // Import dinâmico para carregar o parser só quando necessário
         const pdfjs = await import('pdfjs-dist')
         
-        // Set worker source
-        pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+        // Usa o worker empacotado localmente para funcionar no Electron sem depender de CDN
+        pdfjs.GlobalWorkerOptions.workerSrc = caminhoWorkerPdf
         
         const arrayBuffer = await file.arrayBuffer()
         const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
@@ -98,7 +99,7 @@ async function extractFromPDF(file: File): Promise<string> {
     }
 }
 
-// Extract from DOCX using mammoth
+// Extrai conteúdo de DOCX usando mammoth
 async function extractFromDOCX(file: File): Promise<string> {
     try {
         const mammoth = await import('mammoth')
@@ -111,7 +112,7 @@ async function extractFromDOCX(file: File): Promise<string> {
     }
 }
 
-// Create a ProjectFile from a File
+// Cria um ProjectFile a partir de um File
 export async function processFileForProject(file: File): Promise<ProjectFile> {
     const content = await extractTextFromFile(file)
     
@@ -125,7 +126,7 @@ export async function processFileForProject(file: File): Promise<ProjectFile> {
     }
 }
 
-// Get a readable file size string
+// Retorna o tamanho do arquivo em formato legível
 export function formatFileSize(bytes: number): string {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`

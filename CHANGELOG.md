@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.3] - 2026-03-30
+
+### Corrigido
+
+- Processamento de PDFs em projetos usando worker local do `pdf.js`, evitando falha de importação via `file://` no Electron
+
+---
+
 ## [0.2.1] - 2025-12-29
 
 ### Corrigido
