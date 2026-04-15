@@ -10,7 +10,8 @@ import {
     MEMORY_AUTOPILOT_CONFIG,
     CATEGORY_BLACKLIST,
     INTERNAL_PROMPTS,
-    FEATURE_FLAGS
+    FEATURE_FLAGS,
+    type MemoryCategory
 } from '../../config/memoryConfig'
 import type {
     ExtractedMemory,
@@ -146,7 +147,7 @@ ${messages.map((m, i) => `[${i + 1}] ${m}`).join('\n\n')}`
             const text = mem.text.slice(0, MEMORY_AUTOPILOT_CONFIG.MAX_MEMORY_TEXT_LENGTH)
 
             const extracted: ExtractedMemory = {
-                category: mem.category as any,
+                category: mem.category as MemoryCategory,
                 text,
                 tags: mem.tags.slice(0, 5), // Máximo 5 tags
                 confidence: Math.min(Math.max(mem.confidence, 0), 1), // Clamp 0-1
@@ -215,7 +216,7 @@ function extractLocally(messages: string[]): ExtractedMemory[] {
 
                 if (text.length > 10 && !isCategoryBlacklisted(pattern.category, text)) {
                     memories.push({
-                        category: pattern.category as any,
+                        category: pattern.category as MemoryCategory,
                         text,
                         tags: [],
                         confidence: pattern.confidence,

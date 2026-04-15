@@ -7,6 +7,7 @@ export interface UserProfile {
     name: string
     occupation: string
     aboutMe: string
+    fotoPerfil?: string
 }
 
 export interface Memory {
@@ -54,18 +55,37 @@ function filtrarMemoriasPorRelevancia(memorias: Memory[], consulta?: string): Me
 const PROFILE_KEY = 'selene_user_profile'
 const MEMORIES_KEY = 'selene_memories'
 
+function criarPerfilVazio(): UserProfile {
+    return { name: '', occupation: '', aboutMe: '', fotoPerfil: '' }
+}
+
+function normalizarPerfil(valor: unknown): UserProfile {
+    if (!valor || typeof valor !== 'object') {
+        return criarPerfilVazio()
+    }
+
+    const perfil = valor as Partial<UserProfile>
+
+    return {
+        name: perfil.name || '',
+        occupation: perfil.occupation || '',
+        aboutMe: perfil.aboutMe || '',
+        fotoPerfil: perfil.fotoPerfil || '',
+    }
+}
+
 export function useUserProfile() {
     // Profile state
     const [profile, setProfileState] = useState<UserProfile>(() => {
         const saved = localStorage.getItem(PROFILE_KEY)
         if (saved) {
             try {
-                return JSON.parse(saved)
+                return normalizarPerfil(JSON.parse(saved))
             } catch {
-                return { name: '', occupation: '', aboutMe: '' }
+                return criarPerfilVazio()
             }
         }
-        return { name: '', occupation: '', aboutMe: '' }
+        return criarPerfilVazio()
     })
 
     // Memories state
@@ -83,8 +103,9 @@ export function useUserProfile() {
 
     // Persist profile
     const setProfile = useCallback((newProfile: UserProfile) => {
-        setProfileState(newProfile)
-        localStorage.setItem(PROFILE_KEY, JSON.stringify(newProfile))
+        const perfilNormalizado = normalizarPerfil(newProfile)
+        setProfileState(perfilNormalizado)
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(perfilNormalizado))
     }, [])
 
     // Persist memories
@@ -115,13 +136,17 @@ export function useUserProfile() {
         const handleStorage = (e: StorageEvent) => {
             if (e.key === PROFILE_KEY && e.newValue) {
                 try {
-                    setProfileState(JSON.parse(e.newValue))
-                } catch { }
+                    setProfileState(normalizarPerfil(JSON.parse(e.newValue)))
+                } catch {
+                    console.warn('[useUserProfile] Falha ao sincronizar profile do storage')
+                }
             }
             if (e.key === MEMORIES_KEY && e.newValue) {
                 try {
                     setMemoriesState(JSON.parse(e.newValue))
-                } catch { }
+                } catch {
+                    console.warn('[useUserProfile] Falha ao sincronizar memórias do storage')
+                }
             }
         }
         window.addEventListener('storage', handleStorage)

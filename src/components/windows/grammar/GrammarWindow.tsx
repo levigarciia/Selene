@@ -8,6 +8,13 @@ import { useAI } from '../../../hooks/useAI'
 export type AcaoAssistente = 'corrigir' | 'markdown' | 'resumir' | 'detalhar' | 'reescrever'
 export type TomReescrita = 'formal' | 'casual' | 'tecnico'
 
+function obterMensagemErro(erro: unknown, fallback: string): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return fallback
+}
+
 export default function GrammarWindow() {
     const { criarOuObterServico } = useAI()
 
@@ -66,17 +73,16 @@ export default function GrammarWindow() {
             const resultado = await servico.transformarTexto(alvo, acao, tomReescrita)
             setTextoEditavel(resultado.trim())
             setStatus('ocioso')
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error)
-            setErro(error?.message || 'Erro ao processar texto.')
+            setErro(obterMensagemErro(error, 'Erro ao processar texto.'))
             setStatus('erro')
         }
     }, [criarOuObterServico, textoOriginal, tomReescrita])
 
     // Listener de Atalho (IPC)
     useEffect(() => {
-        // @ts-ignore
-        const removeListener = window.electronAPI?.onAtalhoGramatical?.((texto: string) => {
+        const removeListener = window.electronAPI?.onAtalhoGramatical?.((texto) => {
             console.log('[GrammarWindow] Recebido texto via atalho:', texto)
             if (texto) {
                 executarAcao('corrigir', texto)
@@ -102,9 +108,9 @@ export default function GrammarWindow() {
             //    - Esconder a janela
             //    - Aguardar app original recuperar foco
             //    - Simular Ctrl+V
-            // @ts-ignore
             window.electronAPI?.aplicarTextoGramatical?.()
         } catch (err) {
+            console.error('[GrammarWindow] Falha ao aplicar texto:', err)
             setErro('Falha ao aplicar texto.')
         }
     }

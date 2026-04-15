@@ -8,9 +8,9 @@ import * as path from 'path'
 import * as fs from 'fs'
 import * as crypto from 'crypto'
 import { fileURLToPath } from 'url'
-import { app, BrowserWindow, ipcMain } from 'electron'
-import { WhisperSession, WhisperSessionConfig } from './WhisperSession.js'
-import { whisperModelManager, WhisperModelName, WHISPER_MODELS } from './WhisperModelManager.js'
+import { app, BrowserWindow, WebContents, ipcMain } from 'electron'
+import { WhisperSession } from './WhisperSession.js'
+import { whisperModelManager, WhisperModelName } from './WhisperModelManager.js'
 
 // ES Module __dirname equivalent
 const __filename = fileURLToPath(import.meta.url)
@@ -23,9 +23,19 @@ export interface LocalWhisperSessionConfig {
     noGpu?: boolean
 }
 
+type InformacoesSessaoWhisper = ReturnType<WhisperSession['getInfo']>
+
+function obterMensagemErro(erro: unknown): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return 'Erro desconhecido'
+}
+
 export class LocalWhisperService {
     private sessions = new Map<string, WhisperSession>()
     private mainWindow: BrowserWindow | null = null
+    private sessionTargets = new Map<string, WebContents>()
     private isInitialized = false
 
     /**
@@ -106,7 +116,7 @@ export class LocalWhisperService {
     /**
      * Start a new transcription session
      */
-    async startSession(config: LocalWhisperSessionConfig): Promise<{
+    async startSession(config: LocalWhisperSessionConfig, targetContents?: WebContents): Promise<{
         sessionId: string
         model: WhisperModelName
         language: string
@@ -166,19 +176,25 @@ export class LocalWhisperService {
 
         // Set up event handlers
         session.on('delta', (data) => {
-            this.sendToRenderer('whisper-local:transcription-delta', data)
+            this.sendToRenderer('whisper-local:transcription-delta', data, sessionId)
         })
 
         session.on('complete', (data) => {
-            this.sendToRenderer('whisper-local:transcription-complete', data)
+            this.sendToRenderer('whisper-local:transcription-complete', data, sessionId)
         })
 
         session.on('error', (data) => {
-            this.sendToRenderer('whisper-local:transcription-error', data)
+            this.sendToRenderer('whisper-local:transcription-error', data, sessionId)
         })
 
         // Store session
         this.sessions.set(sessionId, session)
+        if (targetContents && !targetContents.isDestroyed()) {
+            this.sessionTargets.set(sessionId, targetContents)
+            console.log(
+                `[LocalWhisperService] Session ${sessionId} bound to webContents ${targetContents.id}`
+            )
+        }
 
         console.log(`[LocalWhisperService] Started session ${sessionId} with model ${modelName}`)
 
@@ -210,7 +226,7 @@ export class LocalWhisperService {
     /**
      * Stop a transcription session
      */
-    async stopSession(sessionId: string, options: { suppressComplete?: boolean } = {}): Promise<any> {
+    async stopSession(sessionId: string, options: { suppressComplete?: boolean } = {}): Promise<InformacoesSessaoWhisper> {
         const session = this.sessions.get(sessionId)
         if (!session) {
             throw new Error(`Session not found: ${sessionId}`)
@@ -219,6 +235,7 @@ export class LocalWhisperService {
         await session.stop(options)
         const info = session.getInfo()
         this.sessions.delete(sessionId)
+        this.sessionTargets.delete(sessionId)
         
         console.log(`[LocalWhisperService] Stopped session ${sessionId}`)
         return info
@@ -227,7 +244,7 @@ export class LocalWhisperService {
     /**
      * Get info about a session
      */
-    getSessionInfo(sessionId: string): any {
+    getSessionInfo(sessionId: string): InformacoesSessaoWhisper | null {
         const session = this.sessions.get(sessionId)
         if (!session) {
             return null
@@ -259,9 +276,40 @@ export class LocalWhisperService {
     /**
      * Send event to renderer process
      */
-    private sendToRenderer(channel: string, data: any): void {
+    private sendToRenderer(channel: string, data: unknown, sessionId?: string): void {
+        const conteudosEnviados = new Set<number>()
+
+        const enviarParaConteudo = (targetContents: WebContents | null | undefined, origem: string) => {
+            if (!targetContents || targetContents.isDestroyed()) {
+                return
+            }
+
+            if (conteudosEnviados.has(targetContents.id)) {
+                return
+            }
+
+            console.log(
+                `[LocalWhisperService] Sending ${channel}${sessionId ? ` for session ${sessionId}` : ''} to webContents ${targetContents.id} (${origem})`
+            )
+            targetContents.send(channel, data)
+            conteudosEnviados.add(targetContents.id)
+        }
+
+        if (sessionId) {
+            const targetContents = this.sessionTargets.get(sessionId)
+            enviarParaConteudo(targetContents, 'session-target')
+        }
+
+        for (const janela of BrowserWindow.getAllWindows()) {
+            enviarParaConteudo(janela.webContents, 'broadcast')
+        }
+
+        if (conteudosEnviados.size > 0) {
+            return
+        }
+
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-            this.mainWindow.webContents.send(channel, data)
+            enviarParaConteudo(this.mainWindow.webContents, 'main-window-fallback')
         }
     }
 }
@@ -288,9 +336,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
         try {
             const models = whisperModelManager.getAvailableModels()
             return { success: true, models }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error listing models:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -301,9 +349,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
         try {
             const status = whisperModelManager.getModelStatus(modelName)
             return { success: true, ...status }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error getting model status:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -336,18 +384,18 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
             }
 
             return { success: true, modelName: result.modelName, path: result.path }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error downloading model:', error)
 
             const senderWebContents = event.sender
             if (senderWebContents && !senderWebContents.isDestroyed()) {
                 senderWebContents.send('whisper-local:download-error', {
                     modelName,
-                    error: error.message
+                    error: obterMensagemErro(error)
                 })
             }
 
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -358,9 +406,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
         try {
             const cancelled = whisperModelManager.cancelDownload(modelName)
             return { success: true, cancelled }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error cancelling download:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -371,9 +419,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
         try {
             const deleted = whisperModelManager.deleteModel(modelName)
             return { success: true, deleted }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error deleting model:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -391,9 +439,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
                 downloadedCount: downloadedModels.length,
                 downloadedModels
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error getting storage info:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -406,12 +454,12 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
      */
     ipcMain.handle('whisper-local:start-session', async (_event, config: LocalWhisperSessionConfig) => {
         try {
-            console.log('[LocalWhisper:IPC] Starting session with config:', config)
-            const result = await localWhisperService.startSession(config)
+            console.log('[LocalWhisper:IPC] Starting session with config:', config, 'sender:', _event.sender.id)
+            const result = await localWhisperService.startSession(config, _event.sender)
             return { success: true, ...result }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error starting session:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -422,9 +470,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
         try {
             localWhisperService.processAudio(sessionId, audioData)
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error sending audio:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -435,9 +483,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
         try {
             const result = await localWhisperService.stopSession(sessionId)
             return { success: true, ...result }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error stopping session:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -451,9 +499,9 @@ export function setupLocalWhisperIPC(mainWindow: BrowserWindow): void {
                 success: true,
                 ...availability
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[LocalWhisper:IPC] Error checking availability:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 

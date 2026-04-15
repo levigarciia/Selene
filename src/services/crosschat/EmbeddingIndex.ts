@@ -22,6 +22,7 @@ import {
 } from './CrossChatTypes'
 import { getEmbeddingService } from './EmbeddingService'
 import { pertenceAoEscopo } from '../memory/escopoMemoria'
+import { carregarMapaProjetosPorConversa } from '../conversasPersistidas'
 
 // ============================================================================
 // ESTADO
@@ -56,17 +57,7 @@ function loadIndex(): EmbeddingIndex {
 
 function migrarIndicePorProjeto(index: EmbeddingIndex): EmbeddingIndex {
     try {
-        const conversasSalvas = localStorage.getItem('selene_conversations')
-        if (!conversasSalvas) return index
-
-        const conversas = JSON.parse(conversasSalvas) as Array<{ id: string; projectId?: string }>
-        const mapaProjetos = new Map<string, string>()
-        for (const conversa of conversas) {
-            if (conversa.projectId) {
-                mapaProjetos.set(conversa.id, conversa.projectId)
-            }
-        }
-
+        const mapaProjetos = carregarMapaProjetosPorConversa()
         if (mapaProjetos.size === 0) return index
 
         let alterou = false

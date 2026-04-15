@@ -3,7 +3,7 @@ export { default as ChatWindow } from './windows/chat'
 export { default as GrammarWindow } from './windows/grammar'
 
 // Modals
-export { AssistentesModal, FloatingModal, ModalConfiguracoes } from './modals'
+export { AssistentesModal, FloatingModal, OverlayProativoModal, ModalConfiguracoes } from './modals'
 
 // Config
 export { VoiceSettings } from './config'

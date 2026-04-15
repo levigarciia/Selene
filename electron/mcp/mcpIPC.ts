@@ -8,6 +8,13 @@ import { ipcMain } from 'electron'
 import { mcpService } from './MCPService.js'
 import type { MCPServerConfig } from './MCPService.js'
 
+function obterMensagemErro(erro: unknown): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return 'Erro desconhecido'
+}
+
 export function setupMCPIPC(): void {
     console.log('[MCP] Setting up IPC handlers...')
 
@@ -18,7 +25,7 @@ export function setupMCPIPC(): void {
     ipcMain.handle('mcp:get-servers', async () => {
         try {
             return mcpService.getAllServers()
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[MCP IPC] get-servers error:', error)
             return []
         }
@@ -27,7 +34,7 @@ export function setupMCPIPC(): void {
     ipcMain.handle('mcp:get-config', async () => {
         try {
             return await mcpService.loadConfig()
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[MCP IPC] get-config error:', error)
             return []
         }
@@ -37,9 +44,9 @@ export function setupMCPIPC(): void {
         try {
             await mcpService.addServer(config)
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[MCP IPC] add-server error:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -47,9 +54,9 @@ export function setupMCPIPC(): void {
         try {
             await mcpService.removeServer(serverId)
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[MCP IPC] remove-server error:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -61,9 +68,9 @@ export function setupMCPIPC(): void {
         try {
             await mcpService.connect(serverId)
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[MCP IPC] connect error:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -71,9 +78,9 @@ export function setupMCPIPC(): void {
         try {
             await mcpService.disconnect(serverId)
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[MCP IPC] disconnect error:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -97,9 +104,9 @@ export function setupMCPIPC(): void {
         try {
             const result = await mcpService.callTool(serverId, toolName, args)
             return { success: true, result }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[MCP IPC] call-tool error:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 

@@ -1,5 +1,43 @@
 export { };
 
+type MensagemChatIPC = {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+    timestamp: number
+    images?: string[]
+    imagensContexto?: Array<{
+        src: string
+        resumo?: string
+        statusResumo?: 'pendente' | 'gerando' | 'concluido' | 'falhou'
+    }>
+    raciocinio?: string
+}
+
+type StatusAtualizacaoIPC = {
+    status: string
+    version?: string
+    progress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
+    error?: string
+    currentVersion?: string
+    releaseNotes?: string
+    releaseDate?: string
+}
+
+type RespostaBuscaWebIPC = { success: boolean; data?: Record<string, unknown>; error?: string }
+type ConfigWhisperLegadoIPC = Record<string, unknown>
+type RespostaAtualizacaoIPC = { success: boolean; message?: string; updateInfo?: Record<string, unknown> }
+type ModeloWhisperLocalIPC = {
+    name: string
+    displayName: string
+    size: number
+    description: string
+    ramRequired: string
+    downloaded: boolean
+    downloading: boolean
+    path: string
+}
+
 declare global {
     interface Window {
         electronAPI: {
@@ -23,37 +61,31 @@ declare global {
             setAreaSelectionMode?: (enabled: boolean) => void;
             enviarScreenshotParaChat?: (dataUrl: string) => Promise<boolean>;
             onScreenshotChat?: (callback: (dataUrl: string) => void) => (() => void) | void;
-            openExpandedChat?: (messages: any[]) => void;
-            onHydrateChat?: (callback: (messages: any[]) => void) => (() => void) | void;
+            openExpandedChat?: (messages: MensagemChatIPC[]) => void;
+            onHydrateChat?: (callback: (messages: MensagemChatIPC[]) => void) => (() => void) | void;
+            isWindowMaximized?: () => Promise<boolean>;
             minimizeWindow?: () => void;
             toggleMaximizeWindow?: () => void;
             closeWindow?: () => void;
+            onWindowMaximizedChange?: (callback: (maximizada: boolean) => void) => (() => void) | void;
             onCollapseToolbar?: (callback: () => void) => (() => void) | void;
             // Auto-update API
             setAutoUpdate?: (enabled: boolean) => void;
             getAutoUpdateStatus?: () => Promise<{ enabled: boolean; currentVersion: string; isPackaged: boolean }>;
-            checkForUpdates?: () => Promise<{ success: boolean; message?: string; updateInfo?: any }>;
+            checkForUpdates?: () => Promise<RespostaAtualizacaoIPC>;
             installUpdate?: () => void;
             getAppVersion?: () => Promise<string>;
-            onUpdateStatus?: (callback: (status: {
-                status: string;
-                version?: string;
-                progress?: { percent: number; bytesPerSecond: number; transferred: number; total: number };
-                error?: string;
-                currentVersion?: string;
-                releaseNotes?: string;
-                releaseDate?: string;
-            }) => void) => (() => void) | void;
+            onUpdateStatus?: (callback: (status: StatusAtualizacaoIPC) => void) => (() => void) | void;
             // Whisper local API
             getUserDataPath?: () => Promise<string>;
             whisperBinaryExists?: (binaryPath?: string) => Promise<boolean>;
             whisperModelExists?: (modelSize: string) => Promise<boolean>;
             whisperDownloadModel?: (modelSize: string) => Promise<{ success: boolean; error?: string }>;
-            whisperInitialize?: (config: any) => Promise<{ success: boolean; error?: string }>;
-            whisperTranscribe?: (audioBuffer: Buffer, config: any) => Promise<{ success: boolean; text?: string; error?: string }>;
+            whisperInitialize?: (config: ConfigWhisperLegadoIPC) => Promise<{ success: boolean; error?: string }>;
+            whisperTranscribe?: (audioBuffer: Buffer, config: ConfigWhisperLegadoIPC) => Promise<{ success: boolean; text?: string; error?: string }>;
             onWhisperDownloadProgress?: (callback: (progress: { percent: number; downloaded: number; total: number }) => void) => (() => void) | void;
             // Web search
-            webSearch?: (query: string, maxResults?: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+            webSearch?: (query: string, maxResults?: number) => Promise<RespostaBuscaWebIPC>;
             webFetchPage?: (url: string) => Promise<{ success: boolean; content?: string; error?: string }>;
             // Open external URL
             openExternal?: (url: string) => Promise<{ success: boolean; error?: string }>;
@@ -61,7 +93,7 @@ declare global {
             // Local Whisper Streaming API
             localWhisper?: {
                 // Model management
-                listModels: () => Promise<{ success: boolean; models?: any[]; error?: string }>;
+                listModels: () => Promise<{ success: boolean; models?: ModeloWhisperLocalIPC[]; error?: string }>;
                 getModelStatus: (modelName: string) => Promise<{ success: boolean; downloaded?: boolean; downloading?: boolean; error?: string }>;
                 downloadModel: (modelName: string) => Promise<{ success: boolean; modelName?: string; path?: string; error?: string }>;
                 cancelDownload: (modelName: string) => Promise<{ success: boolean; cancelled?: boolean; error?: string }>;

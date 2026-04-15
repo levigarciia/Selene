@@ -3,18 +3,11 @@ import { useState, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import type { ChatMessage } from '../../../../types/chat'
 import type { Conversation } from '../types'
+import { carregarConversasPersistidas } from '../../../../services/conversasPersistidas'
 
 export function useConversations() {
     const [conversations, setConversations] = useState<Conversation[]>(() => {
-        const saved = localStorage.getItem('selene_conversations')
-        if (saved) {
-            try {
-                return JSON.parse(saved)
-            } catch {
-                return []
-            }
-        }
-        return []
+        return carregarConversasPersistidas()
     })
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
 

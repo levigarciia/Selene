@@ -153,11 +153,11 @@ class MCPToolBridge {
                     data: result.result
                 }
 
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error(`[MCPToolBridge] Tool ${toolName} error:`, error)
                 return {
                     success: false,
-                    error: error.message || 'Unknown error calling MCP tool'
+                    error: error instanceof Error ? error.message : 'Unknown error calling MCP tool'
                 }
             }
         }
@@ -175,7 +175,7 @@ class MCPToolBridge {
             return parameters
         }
 
-        const properties = (schema.properties || {}) as Record<string, any>
+        const properties = (schema.properties || {}) as Record<string, { type?: string | string[]; description?: string; default?: unknown }>
         const required = (schema.required || []) as string[]
 
         for (const [name, prop] of Object.entries(properties)) {

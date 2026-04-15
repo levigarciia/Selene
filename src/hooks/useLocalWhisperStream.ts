@@ -35,6 +35,13 @@ export interface LocalWhisperStreamState {
     sessionId: string | null
 }
 
+function obterMensagemErro(erro: unknown, fallback: string): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return fallback
+}
+
 export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
     const [state, setState] = useState<LocalWhisperStreamState>({
         isAvailable: false,
@@ -246,11 +253,11 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
 
             console.log('[useLocalWhisperStream] Recording started, session:', sessionResult.sessionId)
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[useLocalWhisperStream] Failed to start recording:', error)
             setState(prev => ({
                 ...prev,
-                error: error.message || 'Failed to start recording',
+                error: obterMensagemErro(error, 'Failed to start recording'),
                 isRecording: false
             }))
             
@@ -305,11 +312,11 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
 
             console.log('[useLocalWhisperStream] Recording stopped')
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[useLocalWhisperStream] Failed to stop recording:', error)
             setState(prev => ({
                 ...prev,
-                error: error.message || 'Failed to stop recording',
+                error: obterMensagemErro(error, 'Failed to stop recording'),
                 isRecording: false,
                 isSessionActive: false
             }))
@@ -326,13 +333,13 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
     }, [])
 
     // Get full transcript (final + current)
+    const { finalTranscript, currentTranscript } = state
     const getFullTranscript = useCallback(() => {
-        const { finalTranscript, currentTranscript } = state
         if (!finalTranscript && !currentTranscript) return ''
         if (!currentTranscript) return finalTranscript
         if (!finalTranscript) return currentTranscript
         return `${finalTranscript} ${currentTranscript}`
-    }, [state.finalTranscript, state.currentTranscript])
+    }, [currentTranscript, finalTranscript])
 
     // Cleanup on unmount
     useEffect(() => {

@@ -14,7 +14,7 @@ export interface MCPServerInfo {
 
 export function useChatUI() {
     // Sidebar state
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+    const [sidebarExpandida, setSidebarExpandida] = useState(true)
     const [showSettings, setShowSettings] = useState(false)
     const [showAssistantsPanel, setShowAssistantsPanel] = useState(false)
     const [showAssistantEditor, setShowAssistantEditor] = useState(false)
@@ -61,6 +61,7 @@ export function useChatUI() {
     const [newProjectName, setNewProjectName] = useState('')
     const newProjectInputRef = useRef<HTMLInputElement>(null)
     const [projectChatInput, setProjectChatInput] = useState('')
+    const [projectPendingScreenshots, setProjectPendingScreenshots] = useState<string[]>([])
     const projectChatInputRef = useRef<HTMLInputElement>(null)
 
     // Scroll refs
@@ -69,7 +70,7 @@ export function useChatUI() {
 
     return {
         // Sidebar
-        sidebarCollapsed, setSidebarCollapsed,
+        sidebarExpandida, setSidebarExpandida,
         showSettings, setShowSettings,
         showAssistantsPanel, setShowAssistantsPanel,
         showAssistantEditor, setShowAssistantEditor,
@@ -112,6 +113,7 @@ export function useChatUI() {
         newProjectName, setNewProjectName,
         newProjectInputRef,
         projectChatInput, setProjectChatInput,
+        projectPendingScreenshots, setProjectPendingScreenshots,
         projectChatInputRef,
 
         // Scroll

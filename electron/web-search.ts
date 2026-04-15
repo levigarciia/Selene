@@ -22,6 +22,13 @@ export interface WebSearchResponse {
     timestamp: number
 }
 
+function obterMensagemErro(erro: unknown): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return 'Erro desconhecido'
+}
+
 /**
  * Fetch URL content with proper handling
  */
@@ -164,8 +171,8 @@ async function fetchPageContent(url: string): Promise<string> {
         const content = extractTextFromHtml(html)
         console.log('[WebSearch] Got page content, length:', content.length)
         return content
-    } catch (error: any) {
-        console.warn('[WebSearch] Failed to fetch page:', url, error.message)
+    } catch (error: unknown) {
+        console.warn('[WebSearch] Failed to fetch page:', url, obterMensagemErro(error))
         return ''
     }
 }
@@ -249,7 +256,7 @@ async function searchDuckDuckGo(query: string, maxResults = 3, fetchContents = t
         const html = await fetchUrl(searchUrl)
         console.log('[WebSearch] Got HTML response, length:', html.length)
         
-        let results = parseHtmlDuckDuckGo(html, maxResults)
+        const results = parseHtmlDuckDuckGo(html, maxResults)
         console.log(`[WebSearch] Found ${results.length} results`)
         
         // Fetch content for top results
@@ -281,8 +288,8 @@ async function searchDuckDuckGo(query: string, maxResults = 3, fetchContents = t
             results,
             timestamp: Date.now()
         }
-    } catch (error: any) {
-        console.error('[WebSearch] Search failed:', error.message)
+    } catch (error: unknown) {
+        console.error('[WebSearch] Search failed:', obterMensagemErro(error))
         return {
             query,
             results: [],
@@ -301,9 +308,9 @@ export function setupWebSearchIPC(): void {
         try {
             const results = await searchDuckDuckGo(query, maxResults || 3, true)
             return { success: true, data: results }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[WebSearch] IPC error:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
     
@@ -312,8 +319,8 @@ export function setupWebSearchIPC(): void {
         try {
             const content = await fetchPageContent(url)
             return { success: true, content }
-        } catch (error: any) {
-            return { success: false, error: error.message }
+        } catch (error: unknown) {
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
     
@@ -322,9 +329,9 @@ export function setupWebSearchIPC(): void {
         try {
             await shell.openExternal(url)
             return { success: true }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[WebSearch] Failed to open external URL:', error)
-            return { success: false, error: error.message }
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
     

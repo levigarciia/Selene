@@ -8,6 +8,7 @@
 import { describe, test, expect } from 'vitest'
 import { areSimilar, deduplicateMemories } from '../MemoryExtractor'
 import type { ExtractedMemory } from '../AutoMemoryTypes'
+import type { MemoryCategory } from '../../../config/memoryConfig'
 
 describe('areSimilar', () => {
     test('should detect identical texts as similar', () => {
@@ -58,7 +59,7 @@ describe('areSimilar', () => {
 
 describe('deduplicateMemories', () => {
     const createMemory = (text: string): ExtractedMemory => ({
-        category: 'preference' as any,
+        category: 'preference' as MemoryCategory,
         text,
         tags: [],
         confidence: 0.8,

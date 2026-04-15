@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { AnimatePresence } from 'framer-motion'
-import { Minus, Square, X } from 'lucide-react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { v4 as uuidv4 } from 'uuid'
 
 // Types
@@ -13,12 +12,25 @@ import { useAppConfig } from '../../../hooks/useAppConfig'
 import { useCrossChatContext } from '../../../hooks/useCrossChatContext'
 import { useMemoryAutopilot } from '../../../hooks/useMemoryAutopilot'
 import { useAssistants } from '../../../hooks/useAssistants'
-import { useChatUI } from './hooks'
+import { useChatUI, useChatShell } from './hooks'
 import { useSendMessage } from './hooks'
 
 // Components
-import { Sidebar, ProjectView, MessageList, InputArea, ClarificationCard } from './components'
+import {
+    Sidebar,
+    ProjectView,
+    MessageList,
+    InputArea,
+    ClarificationCard,
+    BarraSuperiorChat,
+    RailChat,
+    PainelInicialChat,
+    DrawerNavegacaoChat,
+    HubContextoChat,
+    SeletorProjetosChat,
+} from './components'
 import { SettingsPanel } from '../../config/SettingsPanel'
+import type { SecaoConfiguracoes } from '../../config/SettingsPanel'
 import { AssistantsPanel } from './AssistantsPanel'
 import { AssistantEditor } from './AssistantEditor'
 import { MCPPanel } from '../../config/MCPPanel'
@@ -30,10 +42,31 @@ import { toolCallingService } from '../../../services/tools/ToolCallingService'
 import { mcpToolBridge } from '../../../services/tools/MCPToolBridge'
 import { obterConfiguracaoPerfilGeracao } from '../../../services/ai/politicaGeracao'
 import { processFileForProject, isFileSupported, formatFileSize, obterLimiteMaximoArquivo, getFileType } from '../../../services/DocumentService'
-import { indexProjectFile, removeFileEmbeddings } from '../../../services/ProjectContextService'
+import { indexProjectFile } from '../../../services/ProjectContextService'
+import { carregarConversasPersistidas, normalizarMensagensChat } from '../../../services/conversasPersistidas'
 import type { Project } from '../../../types/project'
 import { createProject } from '../../../types/project'
 import { setProjectUpdateCallback, clearProjectUpdateCallback } from '../../../services/tools/builtin'
+import type { AcaoHomeChat } from './tiposShellChat'
+
+const MENSAGENS_VAZIAS: ChatMessage[] = []
+
+function obterTituloAutomaticoConversa(content: string) {
+    const conteudoNormalizado = content.trim()
+    if (!conteudoNormalizado) return 'Nova conversa'
+    return conteudoNormalizado.slice(0, 30) + (conteudoNormalizado.length > 30 ? '...' : '')
+}
+
+async function lerArquivosComoBase64(files: File[]) {
+    const leituras = files.map((file) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (evento) => resolve(evento.target?.result as string)
+        reader.onerror = () => reject(reader.error ?? new Error(`Falha ao ler ${file.name}`))
+        reader.readAsDataURL(file)
+    }))
+
+    return Promise.all(leituras)
+}
 
 const ChatWindow: React.FC = () => {
     // ============================================
@@ -53,9 +86,15 @@ const ChatWindow: React.FC = () => {
         modeloLmStudio, setModeloLmStudio,
         baseUrlLmStudio, setBaseUrlLmStudio,
         provedorAtivo, setProvedorAtivo,
+        perfilLatencia, setPerfilLatencia,
+        modeloAtivo,
         systemPrompt,
         criarOuObterServico,
         voiceInput,
+        overlayProativoConfig,
+        setOverlayProativoHabilitado,
+        setOverlayProativoNivelIntervencao,
+        setOverlayProativoSonecaAte,
     } = useAppConfig()
 
     const crossChat = useCrossChatContext()
@@ -67,7 +106,7 @@ const ChatWindow: React.FC = () => {
     // ============================================
     const chatUI = useChatUI()
     const {
-        sidebarCollapsed, setSidebarCollapsed,
+        sidebarExpandida, setSidebarExpandida,
         showSettings, setShowSettings,
         showAssistantsPanel, setShowAssistantsPanel,
         showAssistantEditor, setShowAssistantEditor,
@@ -96,6 +135,7 @@ const ChatWindow: React.FC = () => {
         newProjectName, setNewProjectName,
         newProjectInputRef,
         projectChatInput, setProjectChatInput,
+        projectPendingScreenshots, setProjectPendingScreenshots,
         projectChatInputRef,
         messagesEndRef,
         messagesContainerRef,
@@ -105,20 +145,13 @@ const ChatWindow: React.FC = () => {
     // Conversation State
     // ============================================
     const [conversations, setConversations] = useState<Conversation[]>(() => {
-        const saved = localStorage.getItem('selene_conversations')
-        if (saved) {
-            try {
-                return JSON.parse(saved)
-            } catch {
-                return []
-            }
-        }
-        return []
+        return carregarConversasPersistidas()
     })
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+    const ultimaTranscricaoSincronizadaRef = useRef('')
 
-    const activeConversation = conversations.find(c => c.id === activeConversationId)
-    const messages = activeConversation?.messages ?? []
+    const activeConversation = conversations.find(c => c.id === activeConversationId) || null
+    const messages = activeConversation?.messages ?? MENSAGENS_VAZIAS
 
     // ============================================
     // Projects State
@@ -137,6 +170,38 @@ const ChatWindow: React.FC = () => {
     const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
     const [editingAssistant, setEditingAssistant] = useState<AssistantConfig | null>(null)
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+    const shouldAutoScrollRef = useRef(true)
+    const autoScrollTravadoManualmenteRef = useRef(false)
+    const [selecaoTextoAtiva, setSelecaoTextoAtiva] = useState(false)
+    const selecaoTextoAtivaRef = useRef(false)
+    const ultimoScrollTopRef = useRef(0)
+    const toqueScrollYRef = useRef<number | null>(null)
+    const [viewportDesktop, setViewportDesktop] = useState(() => (
+        typeof window === 'undefined' ? true : window.innerWidth >= 1024
+    ))
+    const [janelaMaximizada, setJanelaMaximizada] = useState(false)
+    const [secaoConfiguracoesAtiva, setSecaoConfiguracoesAtiva] = useState<SecaoConfiguracoes>('configuracao')
+    const [origemEditorAssistente, setOrigemEditorAssistente] = useState<'assistentes' | 'configuracoes'>('assistentes')
+    const [conversaPendenteRegeneracaoPosEdicao, setConversaPendenteRegeneracaoPosEdicao] = useState<string | null>(null)
+    const currentProjectContextId = activeProjectId || activeConversation?.projectId || null
+
+    const shell = useChatShell({
+        conversations,
+        projects,
+        activeConversationId,
+        currentProjectContextId,
+        assistants,
+        mcpServers,
+        pendingScreenshots,
+        webSearchEnabled,
+        investigateMode,
+        toolCallingAtivo,
+        provedorAtivo,
+        modeloAtivo,
+        perfilLatencia,
+    })
+    const drawerAberto = shell.drawerAberto
+    const fecharOverlays = shell.fecharOverlays
 
     // ============================================
     // Send Message Hook
@@ -171,14 +236,22 @@ const ChatWindow: React.FC = () => {
         promptBase: assistants.effectiveSystemPrompt || systemPrompt,
         getProfileContext,
         criarOuObterServico,
+        provedorAtivo,
+        modeloAtivo,
+        perfilLatencia,
     })
 
     // ============================================
     // Persistence Effects
     // ============================================
     useEffect(() => {
-        localStorage.setItem('selene_conversations', JSON.stringify(conversations))
-    }, [conversations])
+        const atrasoPersistencia = isGenerating ? 1200 : 250
+        const timeoutId = window.setTimeout(() => {
+            localStorage.setItem('selene_conversations', JSON.stringify(conversations))
+        }, atrasoPersistencia)
+
+        return () => window.clearTimeout(timeoutId)
+    }, [conversations, isGenerating])
 
     useEffect(() => {
         localStorage.setItem('selene_projects', JSON.stringify(projects))
@@ -205,12 +278,13 @@ const ChatWindow: React.FC = () => {
     // ============================================
     useEffect(() => {
         const removeListener = window.electronAPI?.onHydrateChat?.((msgs: ChatMessage[]) => {
-            console.log('[ChatWindow] Hydrating with', msgs.length, 'messages')
-            if (msgs.length > 0) {
+            const mensagensNormalizadas = normalizarMensagensChat(msgs)
+            console.log('[ChatWindow] Hydrating with', mensagensNormalizadas.length, 'messages')
+            if (mensagensNormalizadas.length > 0) {
                 const newConv: Conversation = {
                     id: uuidv4(),
-                    title: msgs[0].content.slice(0, 30) + (msgs[0].content.length > 30 ? '...' : ''),
-                    messages: msgs,
+                    title: mensagensNormalizadas[0].content.slice(0, 30) + (mensagensNormalizadas[0].content.length > 30 ? '...' : ''),
+                    messages: mensagensNormalizadas,
                     createdAt: Date.now(),
                     updatedAt: Date.now()
                 }
@@ -230,27 +304,161 @@ const ChatWindow: React.FC = () => {
         return () => remover?.()
     }, [setPendingScreenshots, setShowSettings, setInput])
 
+    useEffect(() => {
+        window.electronAPI?.isWindowMaximized?.().then((maximizada) => {
+            setJanelaMaximizada(!!maximizada)
+        }).catch((erro) => {
+            console.warn('[ChatWindow] Falha ao ler estado da janela:', erro)
+        })
+
+        const remover = window.electronAPI?.onWindowMaximizedChange?.((maximizada) => {
+            setJanelaMaximizada(maximizada)
+        })
+
+        return () => remover?.()
+    }, [])
+
     // ============================================
     // Scroll Handling
     // ============================================
     useEffect(() => {
+        shouldAutoScrollRef.current = shouldAutoScroll
+    }, [shouldAutoScroll])
+
+    useEffect(() => {
+        selecaoTextoAtivaRef.current = selecaoTextoAtiva
+
+        if (!selecaoTextoAtiva) return
+
+        autoScrollTravadoManualmenteRef.current = true
+        shouldAutoScrollRef.current = false
+        setShouldAutoScroll(false)
+    }, [selecaoTextoAtiva])
+
+    useEffect(() => {
         const container = messagesContainerRef.current
         if (!container) return
 
-        const handleScroll = () => {
-            const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100
-            setShouldAutoScroll(isNearBottom)
+        const definirAutoScroll = (ativo: boolean) => {
+            shouldAutoScrollRef.current = ativo
+            setShouldAutoScroll((valorAtual) => (valorAtual === ativo ? valorAtual : ativo))
         }
 
+        const estaNoBottomAbsoluto = () => {
+            const distanciaDoFim = container.scrollHeight - container.scrollTop - container.clientHeight
+            return Math.abs(distanciaDoFim) <= 1
+        }
+
+        const atualizarAutoScroll = () => {
+            if (selecaoTextoAtivaRef.current) {
+                definirAutoScroll(false)
+                return
+            }
+
+            if (estaNoBottomAbsoluto()) {
+                autoScrollTravadoManualmenteRef.current = false
+                definirAutoScroll(true)
+                return
+            }
+
+            if (autoScrollTravadoManualmenteRef.current) {
+                definirAutoScroll(false)
+                return
+            }
+
+            definirAutoScroll(false)
+        }
+
+        const interromperAutoScroll = () => {
+            autoScrollTravadoManualmenteRef.current = true
+
+            if (!shouldAutoScrollRef.current) return
+
+            definirAutoScroll(false)
+
+            // Interrompe qualquer smooth scroll em andamento assim que o usuário tenta subir.
+            container.scrollTo({ top: container.scrollTop, behavior: 'auto' })
+        }
+
+        const handleScroll = () => {
+            if (container.scrollTop < ultimoScrollTopRef.current - 1) {
+                interromperAutoScroll()
+            }
+
+            ultimoScrollTopRef.current = container.scrollTop
+            atualizarAutoScroll()
+        }
+
+        const handleWheel = (event: WheelEvent) => {
+            if (event.deltaY < 0) {
+                interromperAutoScroll()
+            }
+        }
+
+        const handlePointerDown = (event: PointerEvent) => {
+            if (!isGenerating) return
+
+            const alvo = event.target as HTMLElement | null
+            const iniciouSelecaoEmMensagemAssistente = Boolean(alvo?.closest('[data-bloco-mensagem-assistente="true"]'))
+
+            if (iniciouSelecaoEmMensagemAssistente) {
+                autoScrollTravadoManualmenteRef.current = true
+                shouldAutoScrollRef.current = false
+                return
+            }
+
+            interromperAutoScroll()
+        }
+
+        const handleTouchStart = (event: TouchEvent) => {
+            toqueScrollYRef.current = event.touches[0]?.clientY ?? null
+        }
+
+        const handleTouchMove = (event: TouchEvent) => {
+            const toqueAtual = event.touches[0]?.clientY
+            const toqueAnterior = toqueScrollYRef.current
+
+            if (toqueAtual == null || toqueAnterior == null) return
+
+            if (toqueAtual > toqueAnterior) {
+                interromperAutoScroll()
+            }
+
+            toqueScrollYRef.current = toqueAtual
+        }
+
+        const handleTouchEnd = () => {
+            toqueScrollYRef.current = null
+        }
+
+        ultimoScrollTopRef.current = container.scrollTop
+        atualizarAutoScroll()
         container.addEventListener('scroll', handleScroll)
-        return () => container.removeEventListener('scroll', handleScroll)
-    }, [messagesContainerRef])
+        container.addEventListener('wheel', handleWheel, { passive: true })
+        container.addEventListener('pointerdown', handlePointerDown, { passive: true })
+        container.addEventListener('touchstart', handleTouchStart, { passive: true })
+        container.addEventListener('touchmove', handleTouchMove, { passive: true })
+        container.addEventListener('touchend', handleTouchEnd, { passive: true })
+
+        return () => {
+            container.removeEventListener('scroll', handleScroll)
+            container.removeEventListener('wheel', handleWheel)
+            container.removeEventListener('pointerdown', handlePointerDown)
+            container.removeEventListener('touchstart', handleTouchStart)
+            container.removeEventListener('touchmove', handleTouchMove)
+            container.removeEventListener('touchend', handleTouchEnd)
+        }
+    }, [isGenerating, messagesContainerRef])
 
     useEffect(() => {
-        if (shouldAutoScroll) {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-        }
-    }, [messages, shouldAutoScroll, messagesEndRef])
+        const container = messagesContainerRef.current
+        if (!container || !shouldAutoScrollRef.current || selecaoTextoAtivaRef.current) return
+
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: isGenerating ? 'auto' : 'smooth',
+        })
+    }, [isGenerating, messages, messagesContainerRef, selecaoTextoAtiva])
 
     // ============================================
     // Service Configuration
@@ -329,9 +537,14 @@ const ChatWindow: React.FC = () => {
     // Conversation Actions
     // ============================================
     const createNewConversation = useCallback(() => {
+        ultimaTranscricaoSincronizadaRef.current = ''
+        voiceInput.setTranscription('')
+        autoScrollTravadoManualmenteRef.current = false
+        shouldAutoScrollRef.current = true
+        setShouldAutoScroll(true)
         setActiveConversationId(null)
         setInput('')
-    }, [setInput])
+    }, [setInput, voiceInput])
 
     const deleteConversation = useCallback((convId: string) => {
         setConversations(prev => prev.filter(c => c.id !== convId))
@@ -439,15 +652,6 @@ const ChatWindow: React.FC = () => {
         }
     }, [])
 
-    const removeFileFromProject = useCallback((projectId: string, fileId: string) => {
-        removeFileEmbeddings(fileId)
-        setProjects(prev => prev.map(p =>
-            p.id === projectId
-                ? { ...p, files: p.files.filter(f => f.id !== fileId), updatedAt: Date.now() }
-                : p
-        ))
-    }, [])
-
     const handleProjectFileUpload = useCallback((projectId: string) => {
         const input = document.createElement('input')
         input.type = 'file'
@@ -464,7 +668,7 @@ const ChatWindow: React.FC = () => {
         input.click()
     }, [addFileToProject])
 
-    const createNewConversationInProject = useCallback((projectId: string, initialMessage?: string) => {
+    const createNewConversationInProject = useCallback((projectId: string, initialMessage?: string, initialImages: string[] = []) => {
         const newConv: Conversation = {
             id: uuidv4(),
             title: initialMessage?.slice(0, 30) || 'Nova conversa',
@@ -474,11 +678,15 @@ const ChatWindow: React.FC = () => {
             projectId
         }
         setConversations(prev => [newConv, ...prev])
+        autoScrollTravadoManualmenteRef.current = false
+        shouldAutoScrollRef.current = true
+        setShouldAutoScroll(true)
         setActiveConversationId(newConv.id)
         setActiveProjectId(null)
+        setPendingScreenshots(initialImages)
+        setInput(initialMessage || '')
 
-        if (initialMessage) {
-            setInput(initialMessage)
+        if (initialMessage || initialImages.length > 0) {
             setTimeout(() => {
                 const sendButton = document.querySelector('[data-send-button]') as HTMLButtonElement
                 sendButton?.click()
@@ -486,15 +694,18 @@ const ChatWindow: React.FC = () => {
         }
 
         return newConv.id
-    }, [setInput])
+    }, [setInput, setPendingScreenshots])
 
     const abrirProjeto = useCallback((projectId: string) => {
+        shell.fecharOverlays()
         setActiveConversationId(null)
         setActiveProjectId(projectId)
         setShowSettings(false)
         setShowAssistantsPanel(false)
+        setShowAssistantEditor(false)
         setShowMCPPanel(false)
-    }, [setShowAssistantsPanel, setShowMCPPanel, setShowSettings])
+        setEditingAssistant(null)
+    }, [setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
 
     // ============================================
     // Message Actions
@@ -505,14 +716,120 @@ const ChatWindow: React.FC = () => {
         setTimeout(() => setCopiedMessageId(null), 2000)
     }, [setCopiedMessageId])
 
+    const limparMetadadosMensagens = useCallback((messageIds: string[]) => {
+        if (messageIds.length === 0) return
+
+        const ids = new Set(messageIds)
+        setMessageSources((prev) => Object.fromEntries(
+            Object.entries(prev).filter(([messageId]) => !ids.has(messageId))
+        ))
+        setMessageSearchCards((prev) => Object.fromEntries(
+            Object.entries(prev).filter(([messageId]) => !ids.has(messageId))
+        ))
+
+        if (expandedSources && ids.has(expandedSources)) {
+            setExpandedSources(null)
+        }
+
+        if (copiedMessageId && ids.has(copiedMessageId)) {
+            setCopiedMessageId(null)
+        }
+    }, [
+        copiedMessageId,
+        expandedSources,
+        setCopiedMessageId,
+        setExpandedSources,
+        setMessageSearchCards,
+        setMessageSources,
+    ])
+
+    const editarMensagemUsuario = useCallback((msgId: string, novoConteudo: string) => {
+        if (!activeConversation) return
+
+        const indiceMensagem = activeConversation.messages.findIndex((message) => (
+            message.id === msgId && message.role === 'user'
+        ))
+
+        if (indiceMensagem === -1) return
+
+        const mensagemAtual = activeConversation.messages[indiceMensagem]
+        const conteudoNormalizado = novoConteudo.trim()
+
+        if (!conteudoNormalizado && !(mensagemAtual.images?.length || 0)) return
+        if (conteudoNormalizado === mensagemAtual.content) return
+
+        const mensagensPosteriores = activeConversation.messages.slice(indiceMensagem + 1)
+        if (
+            mensagensPosteriores.length > 0 &&
+            !confirm('Editar esta mensagem vai remover as respostas posteriores para manter o contexto consistente. Deseja continuar?')
+        ) {
+            return
+        }
+
+        const primeiraMensagemUsuario = activeConversation.messages.find((message) => message.role === 'user')
+        const tituloAtualAutomatico = primeiraMensagemUsuario
+            ? obterTituloAutomaticoConversa(primeiraMensagemUsuario.content)
+            : 'Nova conversa'
+        const deveAtualizarTitulo = primeiraMensagemUsuario?.id === msgId && (
+            activeConversation.title === 'Nova conversa' ||
+            activeConversation.title === tituloAtualAutomatico
+        )
+
+        setConversations((prev) => prev.map((conversation) => {
+            if (conversation.id !== activeConversation.id) return conversation
+
+            const mensagensAtualizadas = [
+                ...conversation.messages.slice(0, indiceMensagem),
+                {
+                    ...mensagemAtual,
+                    content: conteudoNormalizado,
+                },
+            ]
+
+            return {
+                ...conversation,
+                messages: mensagensAtualizadas,
+                title: deveAtualizarTitulo
+                    ? obterTituloAutomaticoConversa(conteudoNormalizado)
+                    : conversation.title,
+                updatedAt: Date.now(),
+            }
+        }))
+
+        limparMetadadosMensagens(mensagensPosteriores.map((message) => message.id))
+
+        if (mensagensPosteriores.length > 0) {
+            setConversaPendenteRegeneracaoPosEdicao(activeConversation.id)
+        }
+    }, [activeConversation, limparMetadadosMensagens])
+
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
-            handleSend()
+            ultimaTranscricaoSincronizadaRef.current = ''
+            voiceInput.setTranscription('')
+            void handleSend()
         }
-    }, [handleSend])
+    }, [handleSend, voiceInput])
 
-    const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const handleInputChange = useCallback((value: string) => {
+        if (!value) {
+            ultimaTranscricaoSincronizadaRef.current = ''
+            voiceInput.setTranscription('')
+        }
+        setInput(value)
+    }, [setInput, voiceInput])
+
+    const handleSendChat = useCallback(() => {
+        ultimaTranscricaoSincronizadaRef.current = ''
+        voiceInput.setTranscription('')
+        autoScrollTravadoManualmenteRef.current = false
+        shouldAutoScrollRef.current = true
+        setShouldAutoScroll(true)
+        void handleSend()
+    }, [handleSend, voiceInput])
+
+    const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
         const items = e.clipboardData?.items
         if (!items) return
 
@@ -522,17 +839,67 @@ const ChatWindow: React.FC = () => {
                 e.preventDefault()
                 const file = item.getAsFile()
                 if (file) {
-                    const reader = new FileReader()
-                    reader.onload = (ev) => {
-                        const base64 = ev.target?.result as string
+                    try {
+                        const [base64] = await lerArquivosComoBase64([file])
                         setPendingScreenshots(prev => [...prev, base64])
+                    } catch (error) {
+                        console.error('[ChatWindow] Falha ao colar imagem no chat:', error)
                     }
-                    reader.readAsDataURL(file)
                 }
                 break
             }
         }
     }, [setPendingScreenshots])
+
+    const handleProjectChatPaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
+        const items = e.clipboardData?.items
+        if (!items) return
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i]
+            if (item.type.startsWith('image/')) {
+                e.preventDefault()
+                const file = item.getAsFile()
+                if (file) {
+                    try {
+                        const [base64] = await lerArquivosComoBase64([file])
+                        setProjectPendingScreenshots((prev) => [...prev, base64])
+                    } catch (error) {
+                        console.error('[ChatWindow] Falha ao colar imagem no projeto:', error)
+                    }
+                }
+                break
+            }
+        }
+    }, [setProjectPendingScreenshots])
+
+    const handleProjectChatImagesSelected = useCallback(async (files: File[]) => {
+        try {
+            const imagens = await lerArquivosComoBase64(files)
+            setProjectPendingScreenshots((prev) => [...prev, ...imagens])
+        } catch (error) {
+            console.error('[ChatWindow] Falha ao anexar imagens no projeto:', error)
+        }
+    }, [setProjectPendingScreenshots])
+
+    const handleCreateProjectChat = useCallback((projectId: string) => {
+        const mensagemInicial = projectChatInput.trim()
+        const imagensIniciais = [...projectPendingScreenshots]
+
+        if (!mensagemInicial && imagensIniciais.length === 0) {
+            return
+        }
+
+        createNewConversationInProject(projectId, mensagemInicial, imagensIniciais)
+        setProjectChatInput('')
+        setProjectPendingScreenshots([])
+    }, [
+        createNewConversationInProject,
+        projectChatInput,
+        projectPendingScreenshots,
+        setProjectChatInput,
+        setProjectPendingScreenshots,
+    ])
 
     const handleConnectMCPServer = useCallback(async (serverId: string) => {
         try {
@@ -553,301 +920,638 @@ const ChatWindow: React.FC = () => {
         }
     }, [setMcpServers])
 
+    useEffect(() => {
+        if (
+            !conversaPendenteRegeneracaoPosEdicao ||
+            conversaPendenteRegeneracaoPosEdicao !== activeConversationId ||
+            isGenerating ||
+            !activeConversation
+        ) {
+            return
+        }
+
+        const ultimaMensagem = activeConversation.messages[activeConversation.messages.length - 1]
+        setConversaPendenteRegeneracaoPosEdicao(null)
+
+        if (ultimaMensagem?.role === 'user') {
+            regenerateLastResponse()
+        }
+    }, [
+        activeConversation,
+        activeConversationId,
+        conversaPendenteRegeneracaoPosEdicao,
+        isGenerating,
+        regenerateLastResponse,
+    ])
+
+    useEffect(() => {
+        const transcricaoAtual = voiceInput.transcription
+        const transcricaoAnterior = ultimaTranscricaoSincronizadaRef.current
+
+        if (!transcricaoAtual && transcricaoAnterior && input === transcricaoAnterior) {
+            setInput('')
+            if (textareaRef.current) {
+                textareaRef.current.value = ''
+                textareaRef.current.style.height = 'auto'
+            }
+        } else if (transcricaoAtual && (!input || input === transcricaoAnterior)) {
+            console.log('[ChatWindow] Sincronizando transcrição no input:', transcricaoAtual)
+            setInput(transcricaoAtual)
+            if (textareaRef.current) {
+                textareaRef.current.value = transcricaoAtual
+                textareaRef.current.style.height = 'auto'
+                textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`
+            }
+        }
+
+        ultimaTranscricaoSincronizadaRef.current = transcricaoAtual
+    }, [input, setInput, textareaRef, voiceInput.transcription])
+
+    useEffect(() => {
+        ultimaTranscricaoSincronizadaRef.current = ''
+        voiceInput.setTranscription('')
+    }, [activeConversationId, activeProjectId, voiceInput])
+
+    useEffect(() => {
+        const atualizarViewport = () => {
+            setViewportDesktop(window.innerWidth >= 1024)
+        }
+
+        atualizarViewport()
+        window.addEventListener('resize', atualizarViewport)
+
+        return () => window.removeEventListener('resize', atualizarViewport)
+    }, [])
+
+    useEffect(() => {
+        if (viewportDesktop && drawerAberto) {
+            fecharOverlays()
+        }
+    }, [viewportDesktop, drawerAberto, fecharOverlays])
+
     // ============================================
     // Render
     // ============================================
     const activeProject = projects.find(p => p.id === activeProjectId)
+    const visualizacaoPrincipalAtiva = showAssistantEditor
+        ? 'editor-assistente'
+        : showSettings
+        ? 'configuracoes'
+        : showAssistantsPanel
+        ? 'assistentes'
+        : showMCPPanel
+        ? 'mcp'
+        : activeProject
+        ? 'projeto'
+        : 'chat'
+
+    const abrirConfiguracoesPorSecao = useCallback((secao: SecaoConfiguracoes) => {
+        shell.fecharOverlays()
+        setInputMenuOpen(false)
+        setSecaoConfiguracoesAtiva(secao)
+        setShowSettings(true)
+        setShowAssistantsPanel(false)
+        setShowAssistantEditor(false)
+        setShowMCPPanel(false)
+        setEditingAssistant(null)
+        setActiveProjectId(null)
+    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+
+    const abrirConfiguracoes = useCallback(() => {
+        abrirConfiguracoesPorSecao('configuracao')
+    }, [abrirConfiguracoesPorSecao])
+
+    const abrirPainelAssistentes = useCallback(() => {
+        shell.fecharOverlays()
+        setInputMenuOpen(false)
+        setShowAssistantsPanel(true)
+        setShowSettings(false)
+        setShowAssistantEditor(false)
+        setShowMCPPanel(false)
+        setEditingAssistant(null)
+        setActiveProjectId(null)
+    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+
+    const abrirEditorAssistente = useCallback((assistant: AssistantConfig | null, origem: 'assistentes' | 'configuracoes' = 'assistentes') => {
+        shell.fecharOverlays()
+        setInputMenuOpen(false)
+        setOrigemEditorAssistente(origem)
+        setEditingAssistant(assistant)
+        setShowAssistantEditor(true)
+        setShowAssistantsPanel(false)
+        setShowSettings(false)
+        setShowMCPPanel(false)
+        setActiveProjectId(null)
+    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+
+    const abrirPainelMcp = useCallback(() => {
+        shell.fecharOverlays()
+        setInputMenuOpen(false)
+        setShowMCPPanel(true)
+        setShowSettings(false)
+        setShowAssistantsPanel(false)
+        setShowAssistantEditor(false)
+        setEditingAssistant(null)
+        setActiveProjectId(null)
+    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+
+    const abrirChatPrincipal = useCallback(() => {
+        shell.fecharOverlays()
+        setInputMenuOpen(false)
+        setActiveProjectId(null)
+        setShowSettings(false)
+        setShowAssistantsPanel(false)
+        setShowAssistantEditor(false)
+        setShowMCPPanel(false)
+        setEditingAssistant(null)
+    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+
+    const fecharEditorAssistente = useCallback(() => {
+        setShowAssistantEditor(false)
+        setEditingAssistant(null)
+        setShowAssistantsPanel(origemEditorAssistente === 'assistentes')
+        setShowSettings(origemEditorAssistente === 'configuracoes')
+    }, [origemEditorAssistente, setShowAssistantsPanel, setShowAssistantEditor, setShowSettings])
+
+    const salvarAssistenteEditado = useCallback((config: AssistantConfig) => {
+        if (editingAssistant) {
+            assistants.updateAssistant(editingAssistant.id, config)
+        } else {
+            assistants.addAssistant(config)
+        }
+
+        setShowAssistantEditor(false)
+        setEditingAssistant(null)
+        setShowAssistantsPanel(origemEditorAssistente === 'assistentes')
+        setShowSettings(origemEditorAssistente === 'configuracoes')
+    }, [assistants, editingAssistant, origemEditorAssistente, setShowAssistantsPanel, setShowAssistantEditor, setShowSettings])
+
+    const alternarNavegacaoChat = useCallback(() => {
+        if (viewportDesktop) {
+            setSidebarExpandida((atual) => !atual)
+            return
+        }
+
+        shell.alternarOverlay('drawer')
+    }, [viewportDesktop, setSidebarExpandida, shell])
+
+    const iniciarNovaConversa = useCallback(() => {
+        createNewConversation()
+        abrirChatPrincipal()
+        setPendingScreenshots([])
+        shell.fecharOverlays()
+        setTimeout(() => textareaRef.current?.focus(), 0)
+    }, [abrirChatPrincipal, createNewConversation, setPendingScreenshots, shell, textareaRef])
+
+    const alternarToolCalling = useCallback((valor?: boolean) => {
+        const novoValor = typeof valor === 'boolean' ? valor : !toolCallingAtivo
+        setToolCallingAtivo(novoValor)
+        localStorage.setItem('selene_tool_calling', String(novoValor))
+    }, [toolCallingAtivo, setToolCallingAtivo])
+
+    const prepararRascunhoProjeto = useCallback((projectId: string, prompt?: string) => {
+        const newConv: Conversation = {
+            id: uuidv4(),
+            title: prompt?.slice(0, 30) || 'Nova conversa',
+            messages: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            projectId,
+        }
+
+        setConversations((prev) => [newConv, ...prev])
+        setActiveConversationId(newConv.id)
+        setActiveProjectId(null)
+        setInput(prompt || '')
+        shell.fecharOverlays()
+        setTimeout(() => textareaRef.current?.focus(), 0)
+    }, [setConversations, setInput, shell, textareaRef])
+
+    const selecionarAssistenteContexto = useCallback((assistantId: string | null) => {
+        if (assistantId === null) {
+            assistants.selectAssistant(null)
+            if (!assistants.useDefaultPrompt) {
+                assistants.toggleDefaultPrompt()
+            }
+            shell.fecharOverlays()
+            return
+        }
+
+        assistants.selectAssistant(assistantId)
+        assistants.incrementUsage(assistantId)
+        shell.fecharOverlays()
+    }, [assistants, shell])
+
+    const aplicarAcaoHome = useCallback((acao: AcaoHomeChat) => {
+        if (acao.assistantId !== undefined) {
+            selecionarAssistenteContexto(acao.assistantId)
+        }
+
+        if (acao.ativarWeb !== undefined) {
+            setWebSearchEnabled(acao.ativarWeb)
+        }
+
+        if (acao.ativarInvestigacao !== undefined) {
+            setInvestigateMode(acao.ativarInvestigacao)
+        }
+
+        if (acao.ativarToolCalling !== undefined) {
+            alternarToolCalling(acao.ativarToolCalling)
+        }
+
+        if (acao.projectId) {
+            prepararRascunhoProjeto(acao.projectId, acao.prompt)
+            return
+        }
+
+        setInput(acao.prompt)
+        shell.fecharOverlays()
+        setTimeout(() => textareaRef.current?.focus(), 0)
+    }, [alternarToolCalling, prepararRascunhoProjeto, selecionarAssistenteContexto, setInput, setInvestigateMode, setWebSearchEnabled, shell, textareaRef])
+
+    const criarProjetoRapido = useCallback(() => {
+        const novoId = addProject('Novo projeto')
+        shell.fecharOverlays()
+        abrirProjeto(novoId)
+    }, [addProject, abrirProjeto, shell])
+
+    const propsPainelConfiguracoes = {
+        profile,
+        setProfile,
+        memories,
+        addMemory,
+        removeMemory,
+        autoMemories: memoryAutopilot.memories.map((memory) => ({
+            id: memory.id,
+            text: memory.text,
+            category: memory.category,
+            confidence: memory.confidence,
+            createdAt: memory.createdAt
+        })),
+        removeAutoMemory: memoryAutopilot.removeMemory,
+        clearAutoMemories: memoryAutopilot.clearMemories,
+        apiKey,
+        setApiKey,
+        geminiKey,
+        setGeminiKey,
+        openRouterKey,
+        setOpenRouterKey,
+        modeloOpenRouter,
+        setModeloOpenRouter,
+        modeloLmStudio,
+        setModeloLmStudio,
+        baseUrlLmStudio,
+        setBaseUrlLmStudio,
+        perfilLatencia,
+        setPerfilLatencia,
+        provedorAtivo,
+        setProvedorAtivo,
+        overlayProativoConfig,
+        setOverlayProativoHabilitado,
+        setOverlayProativoNivelIntervencao,
+        setOverlayProativoSonecaAte,
+        crossChatEnabled: crossChat.enabled,
+        setCrossChatEnabled: crossChat.setEnabled,
+        memoryAutopilotEnabled: memoryAutopilot.enabled,
+        setMemoryAutopilotEnabled: memoryAutopilot.setEnabled,
+        voiceInput,
+        secaoInicial: secaoConfiguracoesAtiva,
+        assistentes: assistants,
+        onAbrirEditorAssistente: (assistant: AssistantConfig | null) => abrirEditorAssistente(assistant, 'configuracoes'),
+    }
+
+    const navegacaoChatAberta = viewportDesktop ? sidebarExpandida : shell.drawerAberto
+    const classeCanvasPrincipal = 'mt-3 relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-tl-[18px] border-t border-white/[0.05] bg-[#141416]'
+    const transicaoLayoutNavegacao = {
+        type: 'spring' as const,
+        stiffness: 320,
+        damping: 34,
+        mass: 0.9,
+    }
 
     return (
         <>
-            <div className="flex h-screen w-full bg-[#0a0a0c] text-neutral-100 font-sans overflow-hidden selection:bg-purple-500/30">
-                {/* Sidebar */}
-                <Sidebar
-                    collapsed={sidebarCollapsed}
-                    onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
-                    projects={projects}
-                    activeProjectId={activeProjectId}
-                    onSelectProject={abrirProjeto}
-                    onDeleteProject={deleteProject}
-                    isCreatingProject={isCreatingProject}
-                    newProjectName={newProjectName}
-                    onSetNewProjectName={setNewProjectName}
-                    onSetIsCreatingProject={setIsCreatingProject}
-                    onAddProject={addProject}
-                    newProjectInputRef={newProjectInputRef}
-                    conversations={conversations}
-                    activeConversationId={activeConversationId}
-                    onSelectConversation={(id) => {
-                        setActiveConversationId(id)
-                        setActiveProjectId(null) // Close project view when selecting conversation
-                        setShowSettings(false)
-                        setShowAssistantsPanel(false)
-                        setShowMCPPanel(false)
-                    }}
-                    onDeleteConversation={deleteConversation}
-                    onRenameConversation={renameConversation}
-                    onMoveConversationToProject={moveConversationToProject}
-                    onCreateNewConversation={() => {
-                        createNewConversation()
-                        setActiveProjectId(null)
-                        setShowAssistantsPanel(false)
-                        setShowSettings(false)
-                        setShowMCPPanel(false)
-                    }}
-                    showAssistantsPanel={showAssistantsPanel}
-                    onOpenAssistantsPanel={() => {
-                        setShowAssistantsPanel(true)
-                        setActiveProjectId(null)
-                        setShowSettings(false)
-                        setShowMCPPanel(false)
-                    }}
-                    onOpenMCPPanel={() => {
-                        setShowMCPPanel(true)
-                        setActiveProjectId(null)
-                        setShowSettings(false)
-                        setShowAssistantsPanel(false)
-                    }}
-                    onOpenSettings={() => {
-                        setShowSettings(true)
-                        setActiveProjectId(null)
-                        setShowAssistantsPanel(false)
-                        setShowMCPPanel(false)
-                    }}
-                    showMCPPanel={showMCPPanel}
-                    activeAssistant={assistants.activeAssistant}
-                    hasActiveAssistant={assistants.hasActiveAssistant}
-                />
+            <div className="flex h-screen w-full min-w-0 overflow-hidden bg-[#090a0c] text-[#f2f3f7] font-sans selection:bg-[#4b479f]/30">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                    <BarraSuperiorChat
+                        janelaMaximizada={janelaMaximizada}
+                        onMinimizarJanela={() => window.electronAPI?.minimizeWindow?.()}
+                        onAlternarMaximizacaoJanela={() => window.electronAPI?.toggleMaximizeWindow?.()}
+                        onFecharJanela={() => window.electronAPI?.closeWindow?.()}
+                    />
 
-                {/* Main Chat Area */}
-                <div className="flex-1 flex flex-col relative">
-                    {/* Settings Panel */}
-                    <AnimatePresence>
-                        {showSettings && (
-                            <SettingsPanel
-                                profile={profile}
-                                setProfile={setProfile}
-                                memories={memories}
-                                addMemory={addMemory}
-                                removeMemory={removeMemory}
-                                autoMemories={memoryAutopilot.memories.map(m => ({
-                                    id: m.id,
-                                    text: m.text,
-                                    category: m.category,
-                                    confidence: m.confidence,
-                                    createdAt: m.createdAt
-                                }))}
-                                removeAutoMemory={memoryAutopilot.removeMemory}
-                                clearAutoMemories={memoryAutopilot.clearMemories}
-                                apiKey={apiKey}
-                                setApiKey={setApiKey}
-                                geminiKey={geminiKey}
-                                setGeminiKey={setGeminiKey}
-                                openRouterKey={openRouterKey}
-                                setOpenRouterKey={setOpenRouterKey}
-                                modeloOpenRouter={modeloOpenRouter}
-                                setModeloOpenRouter={setModeloOpenRouter}
-                                modeloLmStudio={modeloLmStudio}
-                                setModeloLmStudio={setModeloLmStudio}
-                                baseUrlLmStudio={baseUrlLmStudio}
-                                setBaseUrlLmStudio={setBaseUrlLmStudio}
-                                provedorAtivo={provedorAtivo}
-                                setProvedorAtivo={setProvedorAtivo}
-                                crossChatEnabled={crossChat.enabled}
-                                setCrossChatEnabled={crossChat.setEnabled}
-                                memoryAutopilotEnabled={memoryAutopilot.enabled}
-                                setMemoryAutopilotEnabled={memoryAutopilot.setEnabled}
-                                voiceInput={voiceInput}
-                                onClose={() => setShowSettings(false)}
-                            />
-                        )}
-                    </AnimatePresence>
-
-                    {/* Assistants Panel */}
-                    <AnimatePresence>
-                        {showAssistantsPanel && (
-                            <AssistantsPanel
-                                assistants={assistants}
-                                onOpenEditor={(assistant) => {
-                                    setEditingAssistant(assistant)
-                                    setShowAssistantEditor(true)
-                                }}
-                                onClose={() => setShowAssistantsPanel(false)}
-                            />
-                        )}
-                    </AnimatePresence>
-
-                    {/* Assistant Editor */}
-                    <AnimatePresence>
-                        {showAssistantEditor && (
-                            <AssistantEditor
-                                isOpen={showAssistantEditor}
-                                assistant={editingAssistant}
-                                onSave={(config) => {
-                                    if (editingAssistant) {
-                                        assistants.updateAssistant(editingAssistant.id, config)
-                                    } else {
-                                        assistants.addAssistant(config)
-                                    }
-                                    setShowAssistantEditor(false)
-                                    setEditingAssistant(null)
-                                }}
-                                onClose={() => {
-                                    setShowAssistantEditor(false)
-                                    setEditingAssistant(null)
-                                }}
-                            />
-                        )}
-                    </AnimatePresence>
-
-                    {/* MCP Panel */}
-                    <AnimatePresence>
-                        {showMCPPanel && (
-                            <MCPPanel onClose={() => setShowMCPPanel(false)} />
-                        )}
-                    </AnimatePresence>
-
-                    {/* Project View */}
-                    {activeProject && (
-                        <ProjectView
-                            project={activeProject}
-                            conversations={conversations}
-                            onClose={() => setActiveProjectId(null)}
-                            onRenameProject={(newName) => renameProject(activeProjectId!, newName)}
-                            onUpdateProject={(updates) => updateProject(activeProjectId!, updates)}
-                            onDeleteFile={(fileId) => removeFileFromProject(activeProjectId!, fileId)}
-                            onDeleteConversation={deleteConversation}
-                            onUploadFiles={() => handleProjectFileUpload(activeProjectId!)}
-                            onSelectConversation={(convId) => {
-                                setActiveConversationId(convId)
-                                setActiveProjectId(null)
-                            }}
-                            chatInput={projectChatInput}
-                            onChatInputChange={setProjectChatInput}
-                            onCreateChat={(initialMessage) => {
-                                createNewConversationInProject(activeProjectId!, initialMessage)
-                                setProjectChatInput('')
-                            }}
-                            chatInputRef={projectChatInputRef}
+                    <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[#090a0c]">
+                        <RailChat
+                            onAlternarSidebar={alternarNavegacaoChat}
+                            onNovaConversa={iniciarNovaConversa}
+                            sidebarExpandida={navegacaoChatAberta}
+                            mostrarNovaConversa={!viewportDesktop || !sidebarExpandida}
                         />
-                    )}
 
-                    {/* Header */}
-                    <header
-                        className="flex-none h-14 flex items-center justify-between px-5 bg-neutral-900/80 border-b border-white/5 backdrop-blur-xl"
-                        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-                    >
-                        <div>
-                            <h1 className="font-medium text-sm text-neutral-200">
-                                {activeConversation?.title || 'Selene Chat'}
-                            </h1>
-                            <p className="text-[10px] text-neutral-500 flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                {profile.name ? `Olá, ${profile.name}` : 'Online'}
-                            </p>
-                        </div>
+                        <Sidebar
+                            collapsed={!sidebarExpandida}
+                            projects={projects}
+                            activeProjectId={activeProjectId}
+                            onSelectProject={abrirProjeto}
+                            isCreatingProject={isCreatingProject}
+                            newProjectName={newProjectName}
+                            onSetNewProjectName={setNewProjectName}
+                            onSetIsCreatingProject={setIsCreatingProject}
+                            onAddProject={addProject}
+                            newProjectInputRef={newProjectInputRef}
+                            conversations={conversations}
+                            activeConversationId={activeConversationId}
+                            onSelectConversation={(id) => {
+                                setActiveConversationId(id)
+                                setActiveProjectId(null)
+                                setShowSettings(false)
+                                setShowAssistantsPanel(false)
+                                setShowAssistantEditor(false)
+                                setShowMCPPanel(false)
+                                setEditingAssistant(null)
+                            }}
+                            onDeleteConversation={deleteConversation}
+                            onRenameConversation={renameConversation}
+                            onMoveConversationToProject={moveConversationToProject}
+                            onCreateNewConversation={iniciarNovaConversa}
+                            className="hidden lg:block"
+                            busca={shell.buscaSidebar}
+                            onBuscaChange={shell.setBuscaSidebar}
+                            onAbrirContexto={() => shell.alternarOverlay('hub-contexto')}
+                            nomePerfil={profile.name}
+                            fotoPerfil={profile.fotoPerfil}
+                            perfilAberto={shell.perfilAberto}
+                            onAlternarPerfil={() => shell.alternarOverlay('perfil')}
+                            onFecharPerfil={shell.fecharOverlays}
+                            onAbrirPerfil={() => {
+                                shell.fecharOverlays()
+                                abrirConfiguracoesPorSecao('perfil')
+                            }}
+                            onAbrirPersonalizacao={() => {
+                                shell.fecharOverlays()
+                                abrirConfiguracoesPorSecao('personalizacao')
+                            }}
+                            onAbrirConfiguracao={() => {
+                                shell.fecharOverlays()
+                                abrirConfiguracoesPorSecao('configuracao')
+                            }}
+                        />
 
-                        <div
-                            className="flex items-center gap-1"
+                        <motion.div
+                            layout
+                            transition={transicaoLayoutNavegacao}
+                            className="flex min-h-0 min-w-0 flex-1 flex-col"
                             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                         >
-                            <button
-                                onClick={() => window.electronAPI?.minimizeWindow?.()}
-                                className="p-2 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                            >
-                                <Minus size={16} />
-                            </button>
-                            <button
-                                onClick={() => window.electronAPI?.toggleMaximizeWindow?.()}
-                                className="p-2 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                            >
-                                <Square size={14} />
-                            </button>
-                            <button
-                                onClick={() => window.electronAPI?.closeWindow?.()}
-                                className="p-2 text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                            >
-                                <X size={16} />
-                            </button>
-                        </div>
-                    </header>
+                            <div className={classeCanvasPrincipal}>
+                                <AnimatePresence mode="wait">
+                                    {visualizacaoPrincipalAtiva === 'chat' && (
+                                        <motion.div
+                                            key="conteudo-chat"
+                                            initial={{ opacity: 0, x: 12 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0, x: -12 }}
+                                            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                                        >
+                                            {messages.length === 0 ? (
+                                                <PainelInicialChat
+                                                    acoesPrincipais={shell.acoesHome}
+                                                    promptsRapidos={shell.promptsRapidos}
+                                                    onSelecionarAcao={aplicarAcaoHome}
+                                                />
+                                            ) : (
+                                                <MessageList
+                                                    messages={messages}
+                                                    messagesContainerRef={messagesContainerRef}
+                                                    messagesEndRef={messagesEndRef}
+                                                    isGenerating={isGenerating}
+                                                    isAnalyzingImage={isAnalyzingImage}
+                                                    messageSources={messageSources}
+                                                    messageSearchCards={messageSearchCards}
+                                                    expandedSources={expandedSources}
+                                                    onToggleSources={(msgId) => setExpandedSources(expandedSources === msgId ? null : msgId)}
+                                                    copiedMessageId={copiedMessageId}
+                                                    onCopyMessage={copyMessage}
+                                                    onEditUserMessage={editarMensagemUsuario}
+                                                    onRegenerateResponse={regenerateLastResponse}
+                                                    onSelecaoTextoAtivaChange={setSelecaoTextoAtiva}
+                                                    profileName={profile.name}
+                                                    hasInvestigationTrace={!!currentTrace}
+                                                    onShowReasoning={() => setShowReasoningTrail(true)}
+                                                />
+                                            )}
 
-                    {/* Message List */}
-                    <MessageList
-                        messages={messages}
-                        messagesContainerRef={messagesContainerRef}
-                        messagesEndRef={messagesEndRef}
-                        isGenerating={isGenerating}
-                        isAnalyzingImage={isAnalyzingImage}
-                        messageSources={messageSources}
-                        messageSearchCards={messageSearchCards}
-                        expandedSources={expandedSources}
-                        onToggleSources={(msgId) => setExpandedSources(expandedSources === msgId ? null : msgId)}
-                        copiedMessageId={copiedMessageId}
-                        onCopyMessage={copyMessage}
-                        onRegenerateResponse={regenerateLastResponse}
-                        profileName={profile.name}
-                        hasInvestigationTrace={!!currentTrace}
-                        onShowReasoning={() => setShowReasoningTrail(true)}
-                    />
+                                            {currentTrace?.state === 'awaiting_clarification' && currentTrace.alignmentCheckpoint && (
+                                                <div className="px-6 pb-2">
+                                                    <ClarificationCard
+                                                        checkpoint={currentTrace.alignmentCheckpoint}
+                                                        onSubmit={async (clarification) => {
+                                                            try {
+                                                                await investigateService.provideClarification(clarification)
+                                                            } catch (error) {
+                                                                console.error('[ChatWindow] Error providing clarification:', error)
+                                                            }
+                                                        }}
+                                                        onSkip={async () => {
+                                                            try {
+                                                                await investigateService.provideClarification({
+                                                                    answers: {},
+                                                                    skipClarification: true
+                                                                })
+                                                            } catch (error) {
+                                                                console.error('[ChatWindow] Error skipping clarification:', error)
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
 
-                    {/* Clarification Card - quando aguardando esclarecimento */}
-                    {currentTrace?.state === 'awaiting_clarification' && currentTrace.alignmentCheckpoint && (
-                        <div className="px-4 pb-2">
-                            <ClarificationCard
-                                checkpoint={currentTrace.alignmentCheckpoint}
-                                onSubmit={async (clarification) => {
-                                    try {
-                                        await investigateService.provideClarification(clarification)
-                                        // O trace será atualizado via subscription no useSendMessage
-                                    } catch (error) {
-                                        console.error('[ChatWindow] Error providing clarification:', error)
-                                    }
+                                            <InputArea
+                                                input={input}
+                                                onInputChange={handleInputChange}
+                                                onSend={handleSendChat}
+                                                onKeyDown={handleKeyDown}
+                                                onPaste={handlePaste}
+                                                textareaRef={textareaRef}
+                                                isGenerating={isGenerating}
+                                                onStopGeneration={stopGeneration}
+                                                pendingMessage={pendingMessage}
+                                                pendingScreenshots={pendingScreenshots}
+                                                onRemoveScreenshot={(idx) => setPendingScreenshots((prev) => prev.filter((_, i) => i !== idx))}
+                                                onAddScreenshot={(base64) => setPendingScreenshots((prev) => [...prev, base64])}
+                                                inputMenuOpen={inputMenuOpen}
+                                                onToggleInputMenu={() => {
+                                                    if (shell.resumoContextoAberto) {
+                                                        shell.fecharOverlays()
+                                                    }
+
+                                                    setInputMenuOpen(!inputMenuOpen)
+                                                }}
+                                                webSearchEnabled={webSearchEnabled}
+                                                onToggleWebSearch={() => setWebSearchEnabled(!webSearchEnabled)}
+                                                investigateMode={investigateMode}
+                                                onToggleInvestigateMode={() => setInvestigateMode(!investigateMode)}
+                                                isInvestigating={isInvestigating}
+                                                toolCallingAtivo={toolCallingAtivo}
+                                                onToggleToolCalling={() => {
+                                                    const novoValor = !toolCallingAtivo
+                                                    setToolCallingAtivo(novoValor)
+                                                    localStorage.setItem('selene_tool_calling', String(novoValor))
+                                                }}
+                                                mcpServers={mcpServers}
+                                                onOpenMCPPanel={abrirPainelMcp}
+                                                onConnectMCPServer={handleConnectMCPServer}
+                                                voiceInput={voiceInput}
+                                                resumoContextoAtivo={shell.resumoContextoAtivo}
+                                                resumoContextoAberto={shell.resumoContextoAberto}
+                                                onToggleResumoContexto={() => {
+                                                    if (inputMenuOpen) {
+                                                        setInputMenuOpen(false)
+                                                    }
+
+                                                    shell.alternarOverlay('resumo-contexto')
+                                                }}
+                                                onFecharResumoContexto={shell.fecharOverlays}
+                                            />
+                                        </motion.div>
+                                    )}
+
+                                    {visualizacaoPrincipalAtiva === 'configuracoes' && (
+                                        <SettingsPanel
+                                            key="painel-configuracoes"
+                                            {...propsPainelConfiguracoes}
+                                            onClose={abrirChatPrincipal}
+                                        />
+                                    )}
+
+                                    {visualizacaoPrincipalAtiva === 'assistentes' && (
+                                        <AssistantsPanel
+                                            key="painel-assistentes"
+                                            assistants={assistants}
+                                            onOpenEditor={abrirEditorAssistente}
+                                            onClose={abrirChatPrincipal}
+                                        />
+                                    )}
+
+                                    {visualizacaoPrincipalAtiva === 'editor-assistente' && (
+                                        <AssistantEditor
+                                            key={`editor-assistente-${editingAssistant?.id ?? 'novo'}`}
+                                            isOpen={showAssistantEditor}
+                                            assistant={editingAssistant}
+                                            onSave={salvarAssistenteEditado}
+                                            onClose={fecharEditorAssistente}
+                                        />
+                                    )}
+
+                                    {visualizacaoPrincipalAtiva === 'mcp' && (
+                                        <MCPPanel
+                                            key="painel-mcp"
+                                            onClose={abrirChatPrincipal}
+                                        />
+                                    )}
+
+                                    {visualizacaoPrincipalAtiva === 'projeto' && activeProject && (
+                                        <ProjectView
+                                            key={`projeto-${activeProject.id}`}
+                                            project={activeProject}
+                                            conversations={conversations}
+                                            onClose={abrirChatPrincipal}
+                                            onDeleteProject={() => deleteProject(activeProject.id)}
+                                            onRenameProject={(newName) => renameProject(activeProject.id, newName)}
+                                            onUpdateProject={(updates) => updateProject(activeProject.id, updates)}
+                                            onDeleteConversation={deleteConversation}
+                                            onRenameConversation={renameConversation}
+                                            onUploadFiles={() => handleProjectFileUpload(activeProject.id)}
+                                            onSelectConversation={(convId) => {
+                                                setActiveConversationId(convId)
+                                                setActiveProjectId(null)
+                                            }}
+                                            chatInput={projectChatInput}
+                                            onChatInputChange={setProjectChatInput}
+                                            onCreateChat={() => handleCreateProjectChat(activeProject.id)}
+                                            chatInputRef={projectChatInputRef}
+                                            pendingScreenshots={projectPendingScreenshots}
+                                            onRemoveScreenshot={(index) => setProjectPendingScreenshots((prev) => prev.filter((_, idx) => idx !== index))}
+                                            onAddImages={handleProjectChatImagesSelected}
+                                            onChatPaste={handleProjectChatPaste}
+                                        />
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </motion.div>
+
+                        <div className="lg:hidden">
+                            <DrawerNavegacaoChat
+                                aberto={shell.drawerAberto}
+                                conversations={shell.conversasRecentes}
+                                projects={shell.projetosRecentes}
+                                activeConversationId={activeConversationId}
+                                currentProjectId={currentProjectContextId}
+                                onClose={shell.fecharOverlays}
+                                onNovaConversa={iniciarNovaConversa}
+                                onSelecionarConversa={(conversationId) => {
+                                    shell.fecharOverlays()
+                                    setActiveConversationId(conversationId)
+                                    setActiveProjectId(null)
+                                    setShowSettings(false)
+                                    setShowAssistantsPanel(false)
+                                    setShowAssistantEditor(false)
+                                    setShowMCPPanel(false)
+                                    setEditingAssistant(null)
                                 }}
-                                onSkip={async () => {
-                                    try {
-                                        await investigateService.provideClarification({
-                                            answers: {},
-                                            skipClarification: true
-                                        })
-                                    } catch (error) {
-                                        console.error('[ChatWindow] Error skipping clarification:', error)
-                                    }
+                                onSelecionarProjeto={(projectId) => {
+                                    shell.fecharOverlays()
+                                    abrirProjeto(projectId)
+                                }}
+                                onAbrirAssistentes={() => {
+                                    shell.fecharOverlays()
+                                    abrirPainelAssistentes()
+                                }}
+                                onAbrirApps={() => {
+                                    shell.fecharOverlays()
+                                    abrirPainelMcp()
+                                }}
+                                onAbrirConfiguracoes={() => {
+                                    shell.fecharOverlays()
+                                    abrirConfiguracoes()
                                 }}
                             />
                         </div>
-                    )}
 
-                    {/* Input Area */}
-                    <InputArea
-                        input={input}
-                        onInputChange={setInput}
-                        onSend={handleSend}
-                        onKeyDown={handleKeyDown}
-                        onPaste={handlePaste}
-                        textareaRef={textareaRef}
-                        isGenerating={isGenerating}
-                        onStopGeneration={stopGeneration}
-                        pendingMessage={pendingMessage}
-                        pendingScreenshots={pendingScreenshots}
-                        onRemoveScreenshot={(idx) => setPendingScreenshots(prev => prev.filter((_, i) => i !== idx))}
-                        onAddScreenshot={(base64) => setPendingScreenshots(prev => [...prev, base64])}
-                        inputMenuOpen={inputMenuOpen}
-                        onToggleInputMenu={() => setInputMenuOpen(!inputMenuOpen)}
-                        webSearchEnabled={webSearchEnabled}
-                        onToggleWebSearch={() => setWebSearchEnabled(!webSearchEnabled)}
-                        investigateMode={investigateMode}
-                        onToggleInvestigateMode={() => setInvestigateMode(!investigateMode)}
-                        isInvestigating={isInvestigating}
-                        toolCallingAtivo={toolCallingAtivo}
-                        onToggleToolCalling={() => {
-                            const novoValor = !toolCallingAtivo
-                            setToolCallingAtivo(novoValor)
-                            localStorage.setItem('selene_tool_calling', String(novoValor))
-                        }}
-                        mcpServers={mcpServers}
-                        onOpenMCPPanel={() => setShowMCPPanel(true)}
-                        onConnectMCPServer={handleConnectMCPServer}
-                    />
+                        <HubContextoChat
+                            aberto={shell.hubContextoAberto}
+                            itens={shell.itensHubContexto}
+                            provedor={shell.resumoContextoAtivo.provedor}
+                            modelo={shell.resumoContextoAtivo.modelo}
+                            perfilLatencia={shell.resumoContextoAtivo.perfilLatencia}
+                            onClose={shell.fecharOverlays}
+                            onSelecionarAssistente={selecionarAssistenteContexto}
+                            onSelecionarProjeto={(projectId) => {
+                                shell.fecharOverlays()
+                                abrirProjeto(projectId)
+                            }}
+                            onAbrirAssistentes={() => {
+                                shell.fecharOverlays()
+                                abrirPainelAssistentes()
+                            }}
+                            onAbrirProjetos={() => shell.alternarOverlay('seletor-projetos')}
+                            onAbrirConfiguracoes={() => {
+                                shell.fecharOverlays()
+                                abrirConfiguracoes()
+                            }}
+                        />
+
+                        <SeletorProjetosChat
+                            aberto={shell.seletorProjetosAberto}
+                            projects={shell.projetosRecentes}
+                            onClose={shell.fecharOverlays}
+                            onSelecionarProjeto={(projectId) => {
+                                shell.fecharOverlays()
+                                abrirProjeto(projectId)
+                            }}
+                            onCriarProjeto={criarProjetoRapido}
+                        />
+                    </div>
                 </div>
             </div>
 

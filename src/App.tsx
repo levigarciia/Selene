@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import {
   ChatWindow,
   FloatingModal,
+  OverlayProativoModal,
   BottomToolbar,
   AssistentesModal,
   ModalConfiguracoes,
@@ -12,6 +13,7 @@ import {
 import { ASSISTENTES_PADRAO } from './utils/assistentesPadrao'
 import type { AssistenteConfig } from './utils/assistentesPadrao'
 import { useAppConfig } from './hooks/useAppConfig'
+import { useOverlayProativo } from './hooks/useOverlayProativo'
 import { useWindowManagement } from './hooks/useWindowManagement'
 import { useAutoDismiss } from './hooks/useAutoDismiss'
 import type { ChatMessage } from './types/chat'
@@ -21,6 +23,8 @@ import { mcpToolBridge } from './services/tools/MCPToolBridge'
 import { toolCallingService } from './services/tools/ToolCallingService'
 import { toolRegistry } from './services/tools/ToolRegistry'
 import { obterConfiguracaoPerfilGeracao } from './services/ai/politicaGeracao'
+import { prepararHistoricoMultimodalParaModelo } from './services/ai/historicoMultimodal'
+import { criarMensagensExpansaoIntervencao } from './services/overlay/overlayProativo'
 
 // Initialize built-in tools on app start
 initializeBuiltInTools()
@@ -30,19 +34,14 @@ mcpToolBridge.syncAllTools().catch(err =>
     console.warn('[App] Failed to sync MCP tools:', err)
 )
 
-function App() {
-  const [isChatMode, setIsChatMode] = useState(window.location.hash === '#chat')
-
-  useEffect(() => {
-    const checkHash = () => setIsChatMode(window.location.hash === '#chat')
-    window.addEventListener('hashchange', checkHash)
-    return () => window.removeEventListener('hashchange', checkHash)
-  }, [])
-
-  if (isChatMode) {
-    return <ChatWindow />
+function obterMensagemErro(erro: unknown, fallback: string): string {
+  if (erro instanceof Error && erro.message) {
+    return erro.message
   }
+  return fallback
+}
 
+function AppOverlay() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [showPreview, setShowPreview] = useState(true)
   const [mostrarAssistentes, setMostrarAssistentes] = useState(false)
@@ -84,6 +83,67 @@ function App() {
   const [isAreaMode, setIsAreaMode] = useState(false)
   const perguntasPendentesRef = useRef<boolean>(false)
 
+  // ============================================
+  // Centralized Config Hook
+  // ============================================
+  
+  const appConfig = useAppConfig({
+    onTriggerGrammar: () => {},
+    onTriggerScreenshot: () => perguntarComScreenshot(),
+    exibirToast: (msg) => exibirToast(msg),
+  })
+  
+  const {
+    // API Keys & Provider
+    apiKey, setApiKey,
+    geminiKey, setGeminiKey,
+    openRouterKey, setOpenRouterKey,
+    modeloOpenRouter, setModeloOpenRouter,
+    modeloLmStudio, setModeloLmStudio,
+    baseUrlLmStudio, setBaseUrlLmStudio,
+    provedorAtivo, setProvedorAtivo,
+    perfilLatencia, setPerfilLatencia,
+    systemPrompt, setSystemPrompt,
+    criarOuObterServico,
+    
+    // Shortcuts
+    atalhoGramatical, setAtalhoGramatical,
+    atalhoScreenshot, setAtalhoScreenshot,
+    
+    // Screenshots
+    pendingScreenshots, setPendingScreenshots,
+    
+    // Profile & Memories
+    profile, setProfile,
+    memories, addMemory, removeMemory,
+    getProfileContext,
+    
+    // Voice Input
+    voiceInput,
+    isRecording, transcription, transcriptionConfirmada, transcriptionParcial,
+    ultimaAtualizacaoTranscricaoEm, ultimaParadaGravacaoEm,
+    setTranscription, toggleRecording,
+    overlayProativoConfig,
+    setOverlayProativoHabilitado,
+    setOverlayProativoNivelIntervencao,
+    setOverlayProativoSonecaAte,
+  } = appConfig
+
+  const tentarEnviarParaChat = useCallback(async (dataUrl: string) => {
+    try {
+      const entregue = await window.electronAPI?.enviarScreenshotParaChat?.(dataUrl)
+      if (entregue) {
+        exibirToast('Screenshot enviada para o chat expandido.', 'info')
+        setChatAberto(true)
+        setToolbarCollapsed(true)
+        return true
+      }
+    } catch (erro) {
+      console.warn('Falha ao enviar screenshot para chat expandido', erro)
+    }
+    return false
+  }, [exibirToast])
+
   const perguntarComScreenshot = useCallback(
     async () => {
       console.log('[screenshot] iniciar captura')
@@ -110,52 +170,13 @@ function App() {
         } else {
           setToolbarCollapsed(true)
         }
-      } catch (error: any) {
-        console.error('Erro ao capturar screenshot', error)
+      } catch (erro) {
+        console.error('Erro ao capturar screenshot', erro)
         exibirToast('Falha ao capturar screenshot.', 'erro')
       }
     },
-    [exibirToast]
+    [exibirToast, setPendingScreenshots, tentarEnviarParaChat]
   )
-
-  // ============================================
-  // Centralized Config Hook
-  // ============================================
-  
-  const appConfig = useAppConfig({
-    onTriggerGrammar: () => {},
-    onTriggerScreenshot: () => perguntarComScreenshot(),
-    exibirToast: (msg) => exibirToast(msg),
-  })
-  
-  const {
-    // API Keys & Provider
-    apiKey, setApiKey,
-    geminiKey, setGeminiKey,
-    openRouterKey, setOpenRouterKey,
-    modeloOpenRouter, setModeloOpenRouter,
-    modeloLmStudio, setModeloLmStudio,
-    baseUrlLmStudio, setBaseUrlLmStudio,
-    provedorAtivo, setProvedorAtivo,
-    systemPrompt, setSystemPrompt,
-    criarOuObterServico,
-    
-    // Shortcuts
-    atalhoGramatical, setAtalhoGramatical,
-    atalhoScreenshot, setAtalhoScreenshot,
-    
-    // Screenshots
-    pendingScreenshots, setPendingScreenshots,
-    
-    // Profile & Memories
-    profile, setProfile,
-    memories, addMemory, removeMemory,
-    getProfileContext,
-    
-    // Voice Input
-    voiceInput,
-    isRecording, transcription, setTranscription, toggleRecording,
-  } = appConfig
 
   useEffect(() => {
     if (!voiceInput.error) {
@@ -190,29 +211,44 @@ function App() {
     toolCallingService.setChatFunction(chatFn)
   }, [criarOuObterServico])
 
-  const adicionarMensagem = (role: 'user' | 'assistant', content: string) => {
+  const contextoPerfilUsuario = getProfileContext()
+  const overlayProativoPausado = chatAberto || isAreaMode || mostrarAssistentes || mostrarConfiguracoes
+  const {
+    intervencao: intervencaoOverlay,
+    dispensarIntervencao,
+    sonecarIntervencao,
+    limparIntervencao,
+  } = useOverlayProativo({
+    configuracao: overlayProativoConfig,
+    atualizarSonecaAte: setOverlayProativoSonecaAte,
+    transcription,
+    transcriptionConfirmada,
+    transcriptionParcial,
+    ultimaAtualizacaoTranscricaoEm,
+    ultimaParadaGravacaoEm,
+    isRecording,
+    messages,
+    pausadoExternamente: overlayProativoPausado,
+    criarOuObterServico,
+    perfilLatencia,
+    contextoPerfilUsuario,
+  })
+
+  const abrirChatExpandido = useCallback((mensagens: ChatMessage[]) => {
+    setChatAberto(true)
+    setToolbarCollapsed(true)
+    window.electronAPI?.openExpandedChat?.(mensagens)
+  }, [])
+
+  const adicionarMensagem = (role: 'user' | 'assistant', content: string, images?: string[]) => {
     setMessages(prev => [...prev, {
       id: uuidv4(),
       role,
       content,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      images
     }])
   }
-
-  const tentarEnviarParaChat = useCallback(async (dataUrl: string) => {
-    try {
-      const entregue = await window.electronAPI?.enviarScreenshotParaChat?.(dataUrl)
-      if (entregue) {
-        exibirToast('Screenshot enviada para o chat expandido.', 'info')
-        setChatAberto(true)
-        setToolbarCollapsed(true)
-        return true
-      }
-    } catch (e) {
-      console.warn('Falha ao enviar screenshot para chat expandido', e)
-    }
-    return false
-  }, [exibirToast])
 
   const finalizarSelecaoArea = useCallback(() => {
     setIsAreaMode(false)
@@ -264,8 +300,8 @@ function App() {
       }
       img.src = fullDataUrl
 
-    } catch (e: any) {
-      console.error('Erro no crop', e)
+    } catch (erro) {
+      console.error('Erro no crop', erro)
       exibirToast('Erro ao processar área.', 'erro')
     } finally {
       finalizarSelecaoArea()
@@ -297,6 +333,7 @@ function App() {
       return
     }
     const texto = transcription.trim()
+    limparIntervencao()
 
     const juntarScreenshots = async (imagens: string[]) => {
       if (imagens.length === 1) return imagens[0]
@@ -328,7 +365,7 @@ function App() {
         exibirToast('Falha ao preparar imagens.', 'erro')
         return
       }
-      adicionarMensagem('user', `[Screenshot] ${prompt}`)
+      adicionarMensagem('user', `[Screenshot] ${prompt}`, [...pendingScreenshots])
       setTranscription('')
       setPendingScreenshots([])
       perguntasPendentesRef.current = true
@@ -344,18 +381,29 @@ function App() {
 
       try {
         const configGeracaoImagem = obterConfiguracaoPerfilGeracao(prompt, { ehImagem: true })
+        const historicoImagem = prepararHistoricoMultimodalParaModelo(
+          messages,
+          provedorAtivo === 'lmstudio' && perfilLatencia === 'rapido' ? 420 : 500,
+          {
+            consultaAtual: prompt,
+            perfilLatencia,
+          }
+        )
         const resposta = await servico.analisarImagem(prompt, imagemUnica, {
           temperature: configGeracaoImagem.temperature,
+          perfilLatencia,
+          historico: historicoImagem,
         })
         setMessages(prev => prev.map(msg => 
           msg.id === aiMsgId ? { ...msg, content: resposta } : msg
         ))
         setShowPreview(true)
-      } catch (error: any) {
-        console.error('Erro ao analisar imagem', error)
-        exibirToast(error?.message || 'Falha ao analisar imagem.', 'erro')
+      } catch (erro) {
+        const mensagemErro = obterMensagemErro(erro, 'Falha ao analisar imagem.')
+        console.error('Erro ao analisar imagem', erro)
+        exibirToast(mensagemErro, 'erro')
         setMessages(prev => prev.map(msg => 
-          msg.id === aiMsgId ? { ...msg, content: `⚠️ Erro: ${error?.message}` } : msg
+          msg.id === aiMsgId ? { ...msg, content: `⚠️ Erro: ${mensagemErro}` } : msg
         ))
       } finally {
         perguntasPendentesRef.current = false
@@ -384,6 +432,14 @@ function App() {
     try {
       let contextoFerramentas = ''
       const toolCallingAtivo = localStorage.getItem('selene_tool_calling') !== 'false'
+      const historicoParaModelo = prepararHistoricoMultimodalParaModelo(
+        messages,
+        provedorAtivo === 'lmstudio' && perfilLatencia === 'rapido' ? 420 : 500,
+        {
+          consultaAtual: texto,
+          perfilLatencia,
+        }
+      )
 
       if (toolCallingAtivo) {
         try {
@@ -395,14 +451,9 @@ function App() {
         const ferramentasDisponiveis = toolRegistry.getEnabled()
 
         if (ferramentasDisponiveis.length > 0) {
-          const historicoChat = messages.map(m => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content
-          }))
-
           const decisao = await toolCallingService.decideToolUsage(
             texto,
-            historicoChat,
+            historicoParaModelo,
             ferramentasDisponiveis
           )
 
@@ -436,13 +487,14 @@ function App() {
           ))
         },
         enhancedPrompt,
-        messages,
+        historicoParaModelo,
         {
           temperature: configGeracaoChat.temperature,
+          perfilLatencia,
         }
       )
-    } catch (e: any) {
-      const mensagem = e?.message || 'Falha ao enviar'
+    } catch (erro) {
+      const mensagem = obterMensagemErro(erro, 'Falha ao enviar')
       exibirToast(mensagem, 'erro')
       setMessages(prev => prev.map(msg => 
         msg.id === aiMsgId ? { ...msg, content: `⚠️ Erro: ${mensagem}` } : msg
@@ -497,6 +549,7 @@ function App() {
     }
     const texto = transcription.trim()
     if (!texto) return
+    limparIntervencao()
 
     adicionarMensagem('user', `[Analise] ${texto}`)
     setTranscription('')
@@ -505,8 +558,8 @@ function App() {
     try {
       const result = await servico.analyze(texto)
       adicionarMensagem('assistant', result)
-    } catch (e: any) {
-      const mensagem = e?.message || 'Falha ao analisar'
+    } catch (erro) {
+      const mensagem = obterMensagemErro(erro, 'Falha ao analisar')
       exibirToast(mensagem, 'erro')
       adicionarMensagem('assistant', `[Erro] ${mensagem}`)
     } finally {
@@ -518,10 +571,19 @@ function App() {
   const transcricaoTemConteudo = transcription.trim().length > 0
 
   const deveExibirModalFlutuante = isRecording || transcricaoTemConteudo || houveInteracaoRecentemente
+  const deveExibirOverlayProativo = Boolean(
+    intervencaoOverlay
+    && !chatAberto
+    && !isAreaMode
+    && !mostrarAssistentes
+    && !mostrarConfiguracoes
+    && (intervencaoOverlay.status === 'respondendo' || intervencaoOverlay.status === 'pronto')
+  )
   const algumaJanelaAberta = mostrarAssistentes || mostrarConfiguracoes
 
   const {
     modalRef,
+    overlayProativoRef,
     toolbarRef,
     assistentesRef,
     configuracoesRef,
@@ -529,8 +591,8 @@ function App() {
   } = useWindowManagement([
     mostrarAssistentes,
     mostrarConfiguracoes,
-    false,
-    deveExibirModalFlutuante
+    deveExibirModalFlutuante,
+    deveExibirOverlayProativo
   ])
 
   useEffect(() => {
@@ -574,15 +636,39 @@ function App() {
     setDismissed(true)
   })
 
+  const expandirIntervencaoOverlay = useCallback(() => {
+    if (!intervencaoOverlay) return
+
+    const mensagensHidratadas = criarMensagensExpansaoIntervencao({
+      messages,
+      resumo: intervencaoOverlay.resumo,
+      resposta: intervencaoOverlay.resposta,
+      textoContexto: transcription.trim() || transcriptionParcial.trim() || transcriptionConfirmada.trim(),
+    })
+
+    limparIntervencao()
+    abrirChatExpandido(mensagensHidratadas)
+  }, [
+    abrirChatExpandido,
+    intervencaoOverlay,
+    limparIntervencao,
+    messages,
+    transcription,
+    transcriptionConfirmada,
+    transcriptionParcial,
+  ])
+
   return (
     <div className={`h-screen w-screen relative overflow-hidden transition-colors duration-200 ${debugInteractive ? 'bg-black/20' : 'bg-transparent'} pointer-events-none`}>
-      <ScreenshotOverlay
-        isActive={isAreaMode}
-        onComplete={handleAreaCaptureComplete}
-        onCancel={() => {
-          finalizarSelecaoArea()
-        }}
-      />
+      {isAreaMode && (
+        <ScreenshotOverlay
+          isActive={isAreaMode}
+          onComplete={handleAreaCaptureComplete}
+          onCancel={() => {
+            finalizarSelecaoArea()
+          }}
+        />
+      )}
       
       <AnimatePresence>
         {deveExibirModalFlutuante && !dismissed && (
@@ -603,6 +689,19 @@ function App() {
         )}
       </AnimatePresence>
 
+      <OverlayProativoModal
+        ref={overlayProativoRef}
+        intervencao={deveExibirOverlayProativo ? intervencaoOverlay : null}
+        onExpandir={expandirIntervencaoOverlay}
+        onDispensar={() => {
+          dispensarIntervencao()
+        }}
+        onSonecar={() => {
+          sonecarIntervencao()
+          exibirToast('Overlay inteligente em soneca por 15 minutos.', 'info')
+        }}
+      />
+
       {!isAreaMode && !chatAberto && (
         <BottomToolbar
           ref={toolbarRef}
@@ -619,14 +718,15 @@ function App() {
           aoAbrirAssistenteGramatical={() => window.electronAPI?.abrirAssistenteGramatical?.()}
           aoAbrirConfiguracoes={() => setMostrarConfiguracoes(true)}
           aoAbrirChatWindow={() => {
-            setChatAberto(true)
-            setToolbarCollapsed(true)
-            window.electronAPI?.openExpandedChat?.(messages)
+            abrirChatExpandido(messages)
+          }}
+          aoExpandirToolbar={() => {
+            setToolbarCollapsed(false)
           }}
           aoFecharAplicacao={fecharAplicacao}
           menuDropdownRef={menuDropdownRef}
           initialCollapsed={toolbarCollapsed}
-          forceCollapse={toolbarCollapsed}
+          forceCollapse={toolbarCollapsed ? true : undefined}
           nivelAudio={voiceInput.nivelAudio}
           barrasAudio={voiceInput.barrasAudio}
         />
@@ -655,6 +755,7 @@ function App() {
         modeloOpenRouter={modeloOpenRouter}
         modeloLmStudio={modeloLmStudio}
         baseUrlLmStudio={baseUrlLmStudio}
+        perfilLatencia={perfilLatencia}
         aoAlterarApiKey={setApiKey}
         aoAlterarGeminiKey={setGeminiKey}
         openRouterKey={openRouterKey}
@@ -662,8 +763,13 @@ function App() {
         aoAlterarModeloOpenRouter={setModeloOpenRouter}
         aoAlterarModeloLmStudio={setModeloLmStudio}
         aoAlterarBaseUrlLmStudio={setBaseUrlLmStudio}
+        aoAlterarPerfilLatencia={setPerfilLatencia}
         provedorAtivo={provedorAtivo}
         aoAlterarProvedorAtivo={setProvedorAtivo}
+        overlayProativoConfig={overlayProativoConfig}
+        aoAlterarOverlayProativoHabilitado={setOverlayProativoHabilitado}
+        aoAlterarOverlayProativoNivel={setOverlayProativoNivelIntervencao}
+        aoAlterarOverlayProativoSonecaAte={setOverlayProativoSonecaAte}
         atalhoGramatical={atalhoGramatical}
         atalhoScreenshot={atalhoScreenshot}
         aoAlterarAtalho={setAtalhoGramatical}
@@ -689,6 +795,18 @@ function App() {
       )}
     </div>
   )
+}
+
+function App() {
+  const [isChatMode, setIsChatMode] = useState(window.location.hash === '#chat')
+
+  useEffect(() => {
+    const checkHash = () => setIsChatMode(window.location.hash === '#chat')
+    window.addEventListener('hashchange', checkHash)
+    return () => window.removeEventListener('hashchange', checkHash)
+  }, [])
+
+  return isChatMode ? <ChatWindow /> : <AppOverlay />
 }
 
 export default App

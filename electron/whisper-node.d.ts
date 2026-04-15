@@ -23,7 +23,7 @@ declare module 'whisper-node/dist/whisper.js' {
         filePath: string
         modelName?: string | null
         modelPath?: string | null
-        options?: Record<string, any>
+        options?: Record<string, unknown>
     }): string
 }
 

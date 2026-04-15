@@ -15,11 +15,6 @@ export const ScreenshotOverlay: React.FC<ScreenshotOverlayProps> = ({ isActive, 
 
     useEffect(() => {
         if (isActive) {
-            // Reset estado a cada ativação para limpar retângulo antigo
-            setStartPos(null)
-            setCurrentPos(null)
-            setIsDragging(false)
-
             // Force interactive mode when active
             window.electronAPI?.setIgnoreMouseEvents(false)
             if (window.electronAPI?.requestWindowFocus) {
@@ -33,12 +28,12 @@ export const ScreenshotOverlay: React.FC<ScreenshotOverlayProps> = ({ isActive, 
             document.body.style.cursor = 'crosshair'
             
             // Force focus on container
-            setTimeout(() => {
+            window.setTimeout(() => {
                 containerRef.current?.focus()
             }, 50)
             
             // Reinforce interactive mode after a short delay
-            setTimeout(() => {
+            window.setTimeout(() => {
                  window.electronAPI?.setIgnoreMouseEvents(false)
             }, 100)
 

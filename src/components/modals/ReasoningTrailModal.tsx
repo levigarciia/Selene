@@ -34,7 +34,8 @@ import type {
     InvestigationPhase, 
     SubQuestion,
     Evidence,
-    ConfidenceAssessment
+    ConfidenceAssessment,
+    ValidationResult
 } from '../../services/investigate'
 
 interface ReasoningTrailModalProps {
@@ -487,12 +488,7 @@ const EvidenceCard: React.FC<EvidenceCardProps> = ({ evidence, index }) => {
 }
 
 interface ValidationResultCardProps {
-    result: {
-        consistencies: string[]
-        contradictions: { topic: string; claim1: any; claim2: any }[]
-        gaps: string[]
-        shouldContinue: boolean
-    }
+    result: Pick<ValidationResult, 'consistencies' | 'contradictions' | 'gaps' | 'shouldContinue'>
 }
 
 const ValidationResultCard: React.FC<ValidationResultCardProps> = ({ result }) => {

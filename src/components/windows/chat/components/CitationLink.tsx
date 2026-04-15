@@ -173,46 +173,4 @@ export const CitationLink: React.FC<CitationLinkProps> = ({
     )
 }
 
-/**
- * Processa texto e substitui citações [n] por componentes clicáveis
- */
-export function renderTextWithCitations(
-    text: string, 
-    citations: Citation[]
-): React.ReactNode[] {
-    const citationRegex = /\[(\d+)\]/g
-    const parts: React.ReactNode[] = []
-    let lastIndex = 0
-    let match
-
-    while ((match = citationRegex.exec(text)) !== null) {
-        // Adiciona texto antes da citação
-        if (match.index > lastIndex) {
-            parts.push(text.slice(lastIndex, match.index))
-        }
-
-        // Encontra a citação correspondente
-        const number = parseInt(match[1])
-        const citation = citations.find(c => c.marker === `[${number}]`)
-
-        // Adiciona o componente de citação
-        parts.push(
-            <CitationLink 
-                key={`citation-${match.index}`}
-                marker={match[0]}
-                citation={citation}
-            />
-        )
-
-        lastIndex = match.index + match[0].length
-    }
-
-    // Adiciona texto restante
-    if (lastIndex < text.length) {
-        parts.push(text.slice(lastIndex))
-    }
-
-    return parts
-}
-
 export default CitationLink

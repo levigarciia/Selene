@@ -1,8 +1,9 @@
 /**
  * useVoiceInput Hook
- * 
- * Enhanced audio hook that supports both cloud-based (OpenAI Whisper API)
- * and local (Whisper.cpp streaming) transcription.
+ *
+ * Centraliza captura e transcrição de voz para:
+ * - `local`: streaming em tempo real via Whisper local
+ * - `cloud`: envio progressivo por chunks para a API configurada
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
@@ -11,6 +12,8 @@ import type { AIService } from '../services/AIService'
 import type { WhisperModelSize } from '../services/whisper'
 
 export type TranscriptionProvider = 'cloud' | 'local'
+export type StatusCapturaVoz = 'ocioso' | 'gravando_local' | 'gravando_cloud' | 'transcrevendo_cloud'
+export type ModoTranscricaoVoz = 'local_realtime' | 'cloud_chunked'
 
 export interface VoiceInputConfig {
     provider: TranscriptionProvider
@@ -24,13 +27,19 @@ export interface UseVoiceInputReturn {
     isRecording: boolean
     isTranscribing: boolean
     transcription: string
+    transcriptionConfirmada: string
+    transcriptionParcial: string
+    ultimaAtualizacaoTranscricaoEm: number
+    ultimaParadaGravacaoEm: number | null
     setTranscription: (text: string) => void
     toggleRecording: () => Promise<void>
-    
+    statusCaptura: StatusCapturaVoz
+    modoTranscricao: ModoTranscricaoVoz
+
     // Provider management
     provider: TranscriptionProvider
     setProvider: (provider: TranscriptionProvider) => void
-    
+
     // Local Whisper config
     whisperConfig: {
         modelSize: WhisperModelSize
@@ -46,7 +55,7 @@ export interface UseVoiceInputReturn {
     setMicrofoneId: (microfoneId: string) => void
     nivelAudio: number
     barrasAudio: number[]
-    
+
     // Errors
     error: string | null
     clearError: () => void
@@ -55,17 +64,37 @@ export interface UseVoiceInputReturn {
 const STORAGE_KEY = 'selene_voice_input_config'
 const QTD_BARRAS_AUDIO = 24
 
+function obterMensagemErro(erro: unknown, fallback: string): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return fallback
+}
+
+function juntarTrechos(...trechos: string[]): string {
+    return trechos
+        .map((trecho) => trecho.trim())
+        .filter(Boolean)
+        .join(' ')
+        .trim()
+}
+
 export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn {
     const [isRecording, setIsRecording] = useState(false)
     const [isTranscribing, setIsTranscribing] = useState(false)
-    const [transcription, setTranscription] = useState('')
+    const [transcription, setTranscriptionState] = useState('')
+    const [statusCaptura, setStatusCaptura] = useState<StatusCapturaVoz>('ocioso')
     const [error, setError] = useState<string | null>(null)
     const [isWhisperReady, setIsWhisperReady] = useState(false)
+    const [transcriptionConfirmada, setTranscriptionConfirmada] = useState('')
+    const [transcriptionParcial, setTranscriptionParcial] = useState('')
+    const [ultimaAtualizacaoTranscricaoEm, setUltimaAtualizacaoTranscricaoEm] = useState(0)
+    const [ultimaParadaGravacaoEm, setUltimaParadaGravacaoEm] = useState<number | null>(null)
     const [nivelAudio, setNivelAudio] = useState(0)
     const [barrasAudio, setBarrasAudio] = useState<number[]>(
         () => new Array(QTD_BARRAS_AUDIO).fill(0)
     )
-    
+
     // Load config from storage
     const [config, setConfig] = useState<VoiceInputConfig>(() => {
         try {
@@ -84,163 +113,279 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             microfoneId: ''
         }
     })
-    
+
     // Refs
     const serviceRef = useRef<AIService | null>(aiService)
     const audioServiceRef = useRef<AudioService | null>(null)
-    const chunksRef = useRef<Blob[]>([])
-    
+
+    // Refs de transcrição
+    const transcricaoConfirmadaRef = useRef('')
+    const transcricaoParcialRef = useRef('')
+
+    // Refs do modo cloud
+    const sessaoCloudAtualRef = useRef(0)
+    const gravandoCloudRef = useRef(false)
+    const pendenciasCloudPorSessaoRef = useRef(new Map<number, number>())
+
     // Local Whisper streaming refs
     const sessionIdRef = useRef<string | null>(null)
     const mediaStreamRef = useRef<MediaStream | null>(null)
     const audioContextRef = useRef<AudioContext | null>(null)
     const processorRef = useRef<ScriptProcessorNode | null>(null)
     const analyserRef = useRef<AnalyserNode | null>(null)
-    const freqDataRef = useRef<Uint8Array | null>(null)
-    const timeDataRef = useRef<Uint8Array | null>(null)
+    const freqDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
+    const timeDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
     const rafAudioRef = useRef<number | null>(null)
     const cleanupListenersRef = useRef<(() => void)[]>([])
-    const accumulatedTextRef = useRef<string>('') // Keeps confirmed transcriptions
     const nivelSuavizadoRef = useRef(0)
     const barrasSuavizadasRef = useRef<number[]>([])
-    
+    const sessoesLocaisValidasRef = useRef<Set<string>>(new Set())
+    const timeoutLimpezaSessaoLocalRef = useRef<number | null>(null)
+
     // Update AI service ref
     useEffect(() => {
         serviceRef.current = aiService
     }, [aiService])
-    
+
     // Persist config
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
     }, [config])
-    
+
+    const atualizarTranscricaoExibida = useCallback(() => {
+        setTranscriptionState(juntarTrechos(
+            transcricaoConfirmadaRef.current,
+            transcricaoParcialRef.current
+        ))
+    }, [])
+
+    const resetarEstadoTranscricao = useCallback(() => {
+        transcricaoConfirmadaRef.current = ''
+        transcricaoParcialRef.current = ''
+        setTranscriptionState('')
+        setTranscriptionConfirmada('')
+        setTranscriptionParcial('')
+        setUltimaAtualizacaoTranscricaoEm(Date.now())
+    }, [])
+
+    const setTranscription = useCallback((text: string) => {
+        const normalizado = text.trim()
+        transcricaoConfirmadaRef.current = normalizado
+        transcricaoParcialRef.current = ''
+        setTranscriptionState(normalizado)
+        setTranscriptionConfirmada(normalizado)
+        setTranscriptionParcial('')
+        setUltimaAtualizacaoTranscricaoEm(Date.now())
+    }, [])
+
+    const confirmarTrechoTranscricao = useCallback((text: string) => {
+        const normalizado = text.trim()
+        if (!normalizado) return
+
+        transcricaoConfirmadaRef.current = juntarTrechos(
+            transcricaoConfirmadaRef.current,
+            normalizado
+        )
+        transcricaoParcialRef.current = ''
+        atualizarTranscricaoExibida()
+        setTranscriptionConfirmada(transcricaoConfirmadaRef.current)
+        setTranscriptionParcial('')
+        setUltimaAtualizacaoTranscricaoEm(Date.now())
+    }, [atualizarTranscricaoExibida])
+
+    const atualizarTrechoParcial = useCallback((text: string) => {
+        transcricaoParcialRef.current = text.trim()
+        atualizarTranscricaoExibida()
+        setTranscriptionParcial(transcricaoParcialRef.current)
+        setUltimaAtualizacaoTranscricaoEm(Date.now())
+    }, [atualizarTranscricaoExibida])
+
+    const atualizarStatusCloud = useCallback((sessaoId: number) => {
+        if (sessaoId !== sessaoCloudAtualRef.current) return
+
+        const pendencias = pendenciasCloudPorSessaoRef.current.get(sessaoId) || 0
+        const transcrevendo = pendencias > 0
+
+        setIsRecording(gravandoCloudRef.current)
+        setIsTranscribing(transcrevendo)
+
+        if (gravandoCloudRef.current) {
+            setStatusCaptura('gravando_cloud')
+            return
+        }
+
+        if (transcrevendo) {
+            setStatusCaptura('transcrevendo_cloud')
+            return
+        }
+
+        setStatusCaptura('ocioso')
+    }, [])
+
+    const ajustarPendenciasCloud = useCallback((sessaoId: number, delta: number) => {
+        const mapa = pendenciasCloudPorSessaoRef.current
+        const atual = mapa.get(sessaoId) || 0
+        const proximo = Math.max(0, atual + delta)
+
+        if (proximo === 0) {
+            mapa.delete(sessaoId)
+        } else {
+            mapa.set(sessaoId, proximo)
+        }
+
+        atualizarStatusCloud(sessaoId)
+    }, [atualizarStatusCloud])
+
+    const invalidarSessaoCloudAtual = useCallback(() => {
+        pendenciasCloudPorSessaoRef.current.clear()
+        sessaoCloudAtualRef.current += 1
+        gravandoCloudRef.current = false
+        setIsRecording(false)
+        setIsTranscribing(false)
+        setStatusCaptura('ocioso')
+    }, [])
+
+    const sessaoLocalEhValida = useCallback((sessionId: string) => {
+        return sessoesLocaisValidasRef.current.has(sessionId)
+    }, [])
+
+    const registrarSessaoLocal = useCallback((sessionId: string) => {
+        if (timeoutLimpezaSessaoLocalRef.current) {
+            window.clearTimeout(timeoutLimpezaSessaoLocalRef.current)
+            timeoutLimpezaSessaoLocalRef.current = null
+        }
+        sessoesLocaisValidasRef.current.add(sessionId)
+    }, [])
+
+    const agendarLimpezaSessaoLocal = useCallback((sessionId: string) => {
+        if (timeoutLimpezaSessaoLocalRef.current) {
+            window.clearTimeout(timeoutLimpezaSessaoLocalRef.current)
+        }
+        timeoutLimpezaSessaoLocalRef.current = window.setTimeout(() => {
+            sessoesLocaisValidasRef.current.delete(sessionId)
+            if (sessionIdRef.current === sessionId) {
+                sessionIdRef.current = null
+            }
+            timeoutLimpezaSessaoLocalRef.current = null
+        }, 2000)
+    }, [])
+
+    const checkLocalWhisperAvailability = useCallback(async () => {
+        try {
+            const result = await window.electronAPI?.localWhisper?.checkAvailability()
+            setIsWhisperReady(Boolean(result?.success && result.available))
+        } catch (err) {
+            console.error('[useVoiceInput] Failed to check local whisper:', err)
+            setIsWhisperReady(false)
+        }
+    }, [])
+
     // Check local whisper availability on mount
     useEffect(() => {
-        checkLocalWhisperAvailability()
-    }, [])
-    
+        void checkLocalWhisperAvailability()
+    }, [checkLocalWhisperAvailability])
+
     // Setup streaming transcription listeners
     useEffect(() => {
         const api = window.electronAPI?.localWhisper
         if (!api) return
-        
-        // Listen for transcription deltas (real-time updates)
-        // data.text contains the accumulated transcript from current utterance
+
         const unsubDelta = api.onTranscriptionDelta((data) => {
-            if (data.sessionId === sessionIdRef.current) {
-                // Show confirmed text + current utterance in progress
-                const fullText = accumulatedTextRef.current 
-                    ? `${accumulatedTextRef.current} ${data.text}`
-                    : data.text
-                setTranscription(fullText)
-            }
+            if (!sessaoLocalEhValida(data.sessionId)) return
+            console.log('[useVoiceInput] Delta local recebido:', data.sessionId, data.text)
+            atualizarTrechoParcial(data.text)
         })
         cleanupListenersRef.current.push(unsubDelta)
-        
-        // Listen for transcription completion (utterance finished)
-        // When utterance completes, add it to the accumulated confirmed text
+
         const unsubComplete = api.onTranscriptionComplete((data) => {
-            if (data.sessionId === sessionIdRef.current && data.text) {
-                // Add completed utterance to accumulated text
-                accumulatedTextRef.current = accumulatedTextRef.current 
-                    ? `${accumulatedTextRef.current} ${data.text}`
-                    : data.text
-                setTranscription(accumulatedTextRef.current)
-                console.log('[useVoiceInput] Transcription complete, accumulated:', accumulatedTextRef.current)
-            }
+            if (!sessaoLocalEhValida(data.sessionId) || !data.text) return
+            confirmarTrechoTranscricao(data.text)
+            console.log('[useVoiceInput] Transcription complete:', data.text)
         })
         cleanupListenersRef.current.push(unsubComplete)
-        
-        // Listen for errors
+
         const unsubError = api.onTranscriptionError((data) => {
-            if (data.sessionId === sessionIdRef.current) {
-                console.error('[useVoiceInput] Streaming error:', data.error)
-                setError(data.error)
-            }
+            if (!sessaoLocalEhValida(data.sessionId)) return
+            console.error('[useVoiceInput] Streaming error:', data.error)
+            setError(data.error)
         })
         cleanupListenersRef.current.push(unsubError)
-        
+
         return () => {
             cleanupListenersRef.current.forEach(unsub => unsub())
             cleanupListenersRef.current = []
         }
-    }, [])
-    
-    const checkLocalWhisperAvailability = async () => {
-        try {
-            const result = await window.electronAPI?.localWhisper?.checkAvailability()
-            if (result?.success && result.available) {
-                setIsWhisperReady(true)
-            }
-        } catch (err) {
-            console.error('[useVoiceInput] Failed to check local whisper:', err)
-        }
-    }
-    
+    }, [atualizarTrechoParcial, confirmarTrechoTranscricao, sessaoLocalEhValida])
+
     // Initialize (check availability)
     const initializeWhisper = useCallback(async () => {
         try {
             setError(null)
             console.log('[useVoiceInput] Checking local whisper availability...')
-            
+
             const result = await window.electronAPI?.localWhisper?.checkAvailability()
-            
+
             if (!result?.success) {
-                throw new Error(result?.error || 'Failed to check availability')
+                throw new Error(result?.error || 'Falha ao verificar disponibilidade do Whisper local')
             }
-            
+
             if (!result.binaryAvailable) {
-                throw new Error('Binário do Whisper não encontrado. Compile whisper.cpp ou copie para native/whisper/bin/')
+                throw new Error('Binário do Whisper não encontrado. Compile whisper.cpp ou copie para native/whisper/bin/.')
             }
-            
+
             if (!result.hasModels) {
-                throw new Error('Nenhum modelo baixado. Baixe pelo menos um modelo.')
+                throw new Error('Nenhum modelo baixado. Baixe pelo menos um modelo do Whisper local.')
             }
-            
+
             setIsWhisperReady(true)
             console.log('[useVoiceInput] Local whisper is ready')
-            
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('[useVoiceInput] Whisper init failed:', e)
-            setError(e.message || 'Falha ao inicializar Whisper')
+            setError(obterMensagemErro(e, 'Falha ao inicializar Whisper'))
             setIsWhisperReady(false)
         }
     }, [])
-    
+
     // Handle cloud transcription
-    const handleCloudTranscription = useCallback(async (audioBlob: Blob) => {
-        setIsTranscribing(true)
+    const handleCloudTranscription = useCallback(async (audioBlob: Blob, sessaoId: number) => {
+        ajustarPendenciasCloud(sessaoId, 1)
         setError(null)
-        
+
         try {
             if (!serviceRef.current) {
                 throw new Error('Serviço de IA não disponível')
             }
-            
+
             const text = await serviceRef.current.transcribe(audioBlob)
-            
-            if (text) {
-                setTranscription(prev => prev ? `${prev} ${text}` : text)
+
+            if (sessaoId !== sessaoCloudAtualRef.current) {
+                return
             }
-        } catch (e: any) {
+
+            if (text?.trim()) {
+                confirmarTrechoTranscricao(text)
+            }
+        } catch (e: unknown) {
             console.error('[useVoiceInput] Cloud transcription error:', e)
-            setError(e.message || 'Falha na transcrição')
+            if (sessaoId === sessaoCloudAtualRef.current) {
+                setError(obterMensagemErro(e, 'Falha na transcrição'))
+            }
         } finally {
-            setIsTranscribing(false)
+            ajustarPendenciasCloud(sessaoId, -1)
         }
-    }, [])
-    
+    }, [ajustarPendenciasCloud, confirmarTrechoTranscricao])
+
     // Initialize audio service for cloud mode
     useEffect(() => {
-        if (config.provider === 'cloud') {
-            audioServiceRef.current = new AudioService((blob: Blob) => {
-                chunksRef.current.push(blob)
-                void handleCloudTranscription(blob)
-            }, (nivel) => setNivelAudio(nivel), (barras) => setBarrasAudio(barras))
-        }
+        if (config.provider !== 'cloud') return
+
+        audioServiceRef.current = new AudioService((blob: Blob) => {
+            const sessaoId = sessaoCloudAtualRef.current
+            void handleCloudTranscription(blob, sessaoId)
+        }, (nivel) => setNivelAudio(nivel), (barras) => setBarrasAudio(barras))
     }, [config.provider, handleCloudTranscription])
 
-    const calcularBarrasFrequencia = useCallback((dados: Uint8Array, qtd: number): number[] => {
+    const calcularBarrasFrequencia = useCallback((dados: Uint8Array<ArrayBuffer>, qtd: number): number[] => {
         const barras = new Array(qtd).fill(0)
         const tamanho = dados.length
         if (!tamanho) return barras
@@ -278,20 +423,28 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         barrasSuavizadasRef.current = []
         setBarrasAudio(new Array(QTD_BARRAS_AUDIO).fill(0))
     }, [])
-    
+
     // Start local streaming recording
     const startLocalStreaming = useCallback(async () => {
         try {
             setError(null)
-            accumulatedTextRef.current = '' // Reset accumulated text for new session
-            
-            // Check availability
+            setIsTranscribing(false)
+            resetarEstadoTranscricao()
+
             const availability = await window.electronAPI?.localWhisper?.checkAvailability()
-            if (!availability?.available) {
-                throw new Error('Whisper local não está disponível. Baixe um modelo primeiro.')
+            if (!availability?.success) {
+                throw new Error(availability?.error || 'Falha ao verificar Whisper local')
             }
-            
-            // Get microphone access
+            if (!availability.binaryAvailable) {
+                throw new Error('Binário do Whisper local não encontrado. Confira a pasta native/whisper/bin/.')
+            }
+            if (!availability.hasModels) {
+                throw new Error('Nenhum modelo local baixado. Baixe um modelo para usar transcrição em tempo real.')
+            }
+            if (!availability.available) {
+                throw new Error('Whisper local não está disponível no momento.')
+            }
+
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     channelCount: 1,
@@ -302,21 +455,20 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 }
             })
             mediaStreamRef.current = stream
-            
-            // Start transcription session
+
             console.log('[useVoiceInput] Starting session with model:', config.whisperModel)
             const sessionResult = await window.electronAPI?.localWhisper?.startSession({
                 model: config.whisperModel || 'base',
                 language: config.language || 'pt'
             })
-            
+
             if (!sessionResult?.success || !sessionResult.sessionId) {
                 throw new Error(sessionResult?.error || 'Falha ao iniciar sessão')
             }
-            
+
             sessionIdRef.current = sessionResult.sessionId
-            
-            // Create audio context
+            registrarSessaoLocal(sessionResult.sessionId)
+
             audioContextRef.current = new AudioContext({ sampleRate: 16000 })
             const source = audioContextRef.current.createMediaStreamSource(stream)
             const analyser = audioContextRef.current.createAnalyser()
@@ -325,27 +477,23 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
             timeDataRef.current = new Uint8Array(analyser.fftSize)
 
-            // Create processor to capture audio data
             const processor = audioContextRef.current.createScriptProcessor(4096, 1, 1)
             processorRef.current = processor
 
             if (audioContextRef.current.state === 'suspended') {
                 await audioContextRef.current.resume()
             }
-            
+
             processor.onaudioprocess = (e) => {
                 if (!sessionIdRef.current) return
-                
+
                 const inputData = e.inputBuffer.getChannelData(0)
-                
-                // Convert Float32 to Int16 PCM
                 const pcmData = new Int16Array(inputData.length)
                 for (let i = 0; i < inputData.length; i++) {
                     const s = Math.max(-1, Math.min(1, inputData[i]))
                     pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
                 }
-                
-                // Send audio to main process
+
                 window.electronAPI?.localWhisper?.sendAudio(
                     sessionIdRef.current,
                     pcmData.buffer
@@ -353,7 +501,7 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                     console.error('[useVoiceInput] Failed to send audio:', err)
                 })
             }
-            
+
             source.connect(analyser)
             analyser.connect(processor)
             processor.connect(audioContextRef.current.destination)
@@ -382,15 +530,16 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 cancelAnimationFrame(rafAudioRef.current)
             }
             rafAudioRef.current = requestAnimationFrame(atualizarVisual)
-            
+
             setIsRecording(true)
+            setStatusCaptura('gravando_local')
             console.log('[useVoiceInput] Local streaming started, session:', sessionResult.sessionId)
-            
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('[useVoiceInput] Failed to start local streaming:', e)
-            setError(e.message || 'Falha ao iniciar gravação')
-            
-            // Cleanup on error
+            setError(obterMensagemErro(e, 'Falha ao iniciar gravação'))
+            setIsRecording(false)
+            setStatusCaptura('ocioso')
+
             if (mediaStreamRef.current) {
                 mediaStreamRef.current.getTracks().forEach(track => track.stop())
                 mediaStreamRef.current = null
@@ -403,17 +552,18 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             }
             throw e
         }
-    }, [config.whisperModel, config.language, config.microfoneId, calcularBarrasFrequencia, suavizarBarras, limparBarrasAudio])
-    
+    }, [config.whisperModel, config.language, config.microfoneId, calcularBarrasFrequencia, suavizarBarras, limparBarrasAudio, resetarEstadoTranscricao, registrarSessaoLocal])
+
     // Stop local streaming recording
     const stopLocalStreaming = useCallback(async () => {
         try {
-            // Stop audio processing
+            const sessionIdEncerrando = sessionIdRef.current
+
             if (processorRef.current) {
                 processorRef.current.disconnect()
                 processorRef.current = null
             }
-            
+
             if (audioContextRef.current) {
                 await audioContextRef.current.close()
                 audioContextRef.current = null
@@ -421,33 +571,33 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             analyserRef.current = null
             freqDataRef.current = null
             timeDataRef.current = null
-            
-            // Stop media stream
+
             if (mediaStreamRef.current) {
                 mediaStreamRef.current.getTracks().forEach(track => track.stop())
                 mediaStreamRef.current = null
             }
-            
-            // Stop transcription session
-            if (sessionIdRef.current) {
-                await window.electronAPI?.localWhisper?.stopSession(sessionIdRef.current)
+
+            if (sessionIdEncerrando) {
+                await window.electronAPI?.localWhisper?.stopSession(sessionIdEncerrando)
+                agendarLimpezaSessaoLocal(sessionIdEncerrando)
             }
-            
-            sessionIdRef.current = null
             setIsRecording(false)
+            setStatusCaptura('ocioso')
+            setUltimaParadaGravacaoEm(Date.now())
             setNivelAudio(0)
             limparBarrasAudio()
             if (rafAudioRef.current) {
                 cancelAnimationFrame(rafAudioRef.current)
                 rafAudioRef.current = null
             }
-            
+
             console.log('[useVoiceInput] Local streaming stopped')
-            
-        } catch (e: any) {
+        } catch (e: unknown) {
             console.error('[useVoiceInput] Failed to stop local streaming:', e)
-            setError(e.message || 'Falha ao parar gravação')
+            setError(obterMensagemErro(e, 'Falha ao parar gravação'))
             setIsRecording(false)
+            setStatusCaptura('ocioso')
+            setUltimaParadaGravacaoEm(Date.now())
             setNivelAudio(0)
             limparBarrasAudio()
             if (rafAudioRef.current) {
@@ -455,55 +605,80 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 rafAudioRef.current = null
             }
         }
-    }, [limparBarrasAudio])
-    
+    }, [agendarLimpezaSessaoLocal, limparBarrasAudio])
+
     // Toggle recording
     const toggleRecording = useCallback(async () => {
         if (!isRecording) {
-            // Clear previous state
-            setTranscription('')
-            chunksRef.current = []
+            resetarEstadoTranscricao()
             setError(null)
-            
+
             if (config.provider === 'local') {
-                // Use local streaming
+                invalidarSessaoCloudAtual()
                 await startLocalStreaming()
-            } else {
-                // Use cloud mode
-                try {
-                    await audioServiceRef.current?.start(config.microfoneId)
-                    setIsRecording(true)
-                } catch (e: any) {
-                    console.error('[useVoiceInput] Failed to start recording:', e)
-                    setError('Permissão de microfone negada ou erro ao iniciar.')
-                    throw e
-                }
+                return
             }
-        } else {
-            if (config.provider === 'local') {
-                await stopLocalStreaming()
-            } else {
-                audioServiceRef.current?.stop()
+
+            try {
+                const novaSessaoCloud = sessaoCloudAtualRef.current + 1
+                sessaoCloudAtualRef.current = novaSessaoCloud
+                pendenciasCloudPorSessaoRef.current.set(novaSessaoCloud, 0)
+                gravandoCloudRef.current = true
+                setIsTranscribing(false)
+                setStatusCaptura('gravando_cloud')
+                await audioServiceRef.current?.start(config.microfoneId)
+                setIsRecording(true)
+            } catch (e: unknown) {
+                console.error('[useVoiceInput] Failed to start recording:', e)
+                gravandoCloudRef.current = false
                 setIsRecording(false)
-                setNivelAudio(0)
-                limparBarrasAudio()
+                setStatusCaptura('ocioso')
+                setError('Permissão de microfone negada ou erro ao iniciar.')
+                throw e
             }
+            return
         }
-    }, [isRecording, config.provider, config.microfoneId, startLocalStreaming, stopLocalStreaming, limparBarrasAudio])
-    
-    // Set provider
-    const setProvider = useCallback((provider: TranscriptionProvider) => {
-        setConfig(prev => ({ ...prev, provider }))
-        setIsRecording(false)
+
+        if (config.provider === 'local') {
+            await stopLocalStreaming()
+            return
+        }
+
+        gravandoCloudRef.current = false
+        audioServiceRef.current?.stop()
         setNivelAudio(0)
         limparBarrasAudio()
-    }, [limparBarrasAudio])
-    
+        atualizarStatusCloud(sessaoCloudAtualRef.current)
+        setUltimaParadaGravacaoEm(Date.now())
+    }, [
+        isRecording,
+        config.provider,
+        config.microfoneId,
+        startLocalStreaming,
+        stopLocalStreaming,
+        limparBarrasAudio,
+        resetarEstadoTranscricao,
+        invalidarSessaoCloudAtual,
+        atualizarStatusCloud
+    ])
+
+    // Set provider
+    const setProvider = useCallback((provider: TranscriptionProvider) => {
+        audioServiceRef.current?.stop()
+        invalidarSessaoCloudAtual()
+        sessionIdRef.current = null
+        setConfig(prev => ({ ...prev, provider }))
+        resetarEstadoTranscricao()
+        setError(null)
+        setNivelAudio(0)
+        limparBarrasAudio()
+    }, [invalidarSessaoCloudAtual, limparBarrasAudio, resetarEstadoTranscricao])
+
     // Set Whisper model
     const setWhisperModel = useCallback((model: WhisperModelSize) => {
         setConfig(prev => ({ ...prev, whisperModel: model }))
     }, [])
-    
+
     // Set binary path
     const setWhisperBinaryPath = useCallback((path: string) => {
         setConfig(prev => ({ ...prev, whisperBinaryPath: path }))
@@ -512,18 +687,25 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
     const setMicrofoneId = useCallback((microfoneId: string) => {
         setConfig(prev => ({ ...prev, microfoneId }))
     }, [])
-    
+
     // Clear error
     const clearError = useCallback(() => {
         setError(null)
     }, [])
-    
+
     // Cleanup on unmount
     useEffect(() => {
         return () => {
+            audioServiceRef.current?.stop()
+            invalidarSessaoCloudAtual()
+
             if (sessionIdRef.current) {
                 window.electronAPI?.localWhisper?.stopSession(sessionIdRef.current)
                     .catch(err => console.error('[useVoiceInput] Cleanup error:', err))
+            }
+            if (timeoutLimpezaSessaoLocalRef.current) {
+                window.clearTimeout(timeoutLimpezaSessaoLocalRef.current)
+                timeoutLimpezaSessaoLocalRef.current = null
             }
             if (mediaStreamRef.current) {
                 mediaStreamRef.current.getTracks().forEach(track => track.stop())
@@ -536,7 +718,7 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 rafAudioRef.current = null
             }
         }
-    }, [])
+    }, [invalidarSessaoCloudAtual])
 
     useEffect(() => {
         if (!isRecording) return
@@ -551,13 +733,19 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         }, 1200)
         return () => window.clearInterval(intervalo)
     }, [isRecording, config.provider])
-    
+
     return {
         isRecording,
         isTranscribing,
         transcription,
+        transcriptionConfirmada,
+        transcriptionParcial,
+        ultimaAtualizacaoTranscricaoEm,
+        ultimaParadaGravacaoEm,
         setTranscription,
         toggleRecording,
+        statusCaptura,
+        modoTranscricao: config.provider === 'local' ? 'local_realtime' : 'cloud_chunked',
         provider: config.provider,
         setProvider,
         whisperConfig: {

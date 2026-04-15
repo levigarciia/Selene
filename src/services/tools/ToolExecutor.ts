@@ -9,7 +9,6 @@ import { v4 as uuidv4 } from 'uuid'
 import type {
     ToolCall,
     ToolCallInput,
-    ToolCallResult,
     ToolHandler,
     ToolCallStatus
 } from '../../types/tools'
@@ -122,13 +121,13 @@ class ToolExecutor {
 
             console.log(`[ToolExecutor] ${input.toolId} ${call.status} in ${call.result?.metadata?.durationMs}ms`)
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(`[ToolExecutor] Error executing ${input.toolId}:`, error)
             call.status = 'failed'
             call.completedAt = Date.now()
             call.result = {
                 success: false,
-                error: error.message || 'Unknown error during tool execution',
+                error: error instanceof Error ? error.message : 'Unknown error during tool execution',
                 metadata: {
                     durationMs: Date.now() - call.startedAt
                 }

@@ -808,7 +808,7 @@ respond:{"a":"respond"}`
             }
 
             if (call.result?.data) {
-                const data = call.result.data as any
+                const data = call.result.data as Record<string, unknown>
                 
                 // Check if it has formatted content
                 if (data.formattedForAI) {
@@ -833,7 +833,7 @@ respond:{"a":"respond"}`
     toolCallsToCardData(calls: ToolCall[], statusText?: string): ToolCardData[] {
         return calls.map((call, index) => {
             const toolDef = toolRegistry.getById(call.input.toolId)
-            const data = call.result?.data as any
+            const data = call.result?.data as Record<string, unknown> | undefined
 
             // Extract results for display
             let displayResults: ToolResultItem[] = []
@@ -852,7 +852,7 @@ respond:{"a":"respond"}`
                 toolIcon: toolDef?.icon || 'Plug',
                 query,
                 status: call.status,
-                resultCount: displayResults.length || (data?.results?.length || 0),
+                resultCount: displayResults.length || (Array.isArray(data?.results) ? data.results.length : 0),
                 results: displayResults,
                 durationMs: call.result?.metadata?.durationMs,
                 error: call.result?.error,

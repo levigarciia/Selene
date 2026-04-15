@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { AIService } from '../services/AIService'
 import { ASSISTENTES_PADRAO } from '../utils/assistentesPadrao'
 
@@ -17,14 +17,13 @@ export function useAI() {
 
     // Provedor ativo
     const [provedorAtivo, setProvedorAtivo] = useState<'openai' | 'gemini' | 'openrouter' | 'lmstudio'>(() => {
-        return (localStorage.getItem('selene_provedor_ativo') as any) || 'openai'
+        const provedorSalvo = localStorage.getItem('selene_provedor_ativo')
+        return provedorSalvo === 'gemini' || provedorSalvo === 'openrouter' || provedorSalvo === 'lmstudio'
+            ? provedorSalvo
+            : 'openai'
     })
 
-    const [aiService, setAiService] = useState<AIService | null>(null)
-    const aiServiceRef = useRef<AIService | null>(null)
-    const ultimaChaveUsadaRef = useRef<string>('')
-
-    const criarOuObterServico = useCallback(() => {
+    const aiService = useMemo(() => {
         const chaveOpenAi = apiKey.trim()
         const chaveGemini = geminiKey.trim()
         const chaveOpenRouter = openRouterKey.trim()
@@ -32,27 +31,22 @@ export function useAI() {
         const modOpenRouter = modeloOpenRouter.trim()
         const modLmStudio = modeloLmStudio.trim()
 
-        const assinatura = [chaveOpenAi, chaveGemini, chaveOpenRouter, modOpenRouter, urlLmStudio, modLmStudio, provedorAtivo].join('|')
-
         if (!chaveOpenAi && !chaveGemini && !chaveOpenRouter && !urlLmStudio) {
             return null
         }
 
-        if (!aiServiceRef.current || ultimaChaveUsadaRef.current !== assinatura) {
-            const servico = new AIService({
-                activeProvider: provedorAtivo,
-                openai: chaveOpenAi ? { key: chaveOpenAi } : undefined,
-                gemini: chaveGemini ? { key: chaveGemini } : undefined,
-                openRouter: chaveOpenRouter ? { key: chaveOpenRouter, model: modOpenRouter } : undefined,
-                lmStudio: urlLmStudio ? { baseUrl: urlLmStudio, model: modLmStudio } : undefined
-            })
-            aiServiceRef.current = servico
-            setAiService(servico)
-            ultimaChaveUsadaRef.current = assinatura
-        }
-
-        return aiServiceRef.current
+        return new AIService({
+            activeProvider: provedorAtivo,
+            openai: chaveOpenAi ? { key: chaveOpenAi } : undefined,
+            gemini: chaveGemini ? { key: chaveGemini } : undefined,
+            openRouter: chaveOpenRouter ? { key: chaveOpenRouter, model: modOpenRouter } : undefined,
+            lmStudio: urlLmStudio ? { baseUrl: urlLmStudio, model: modLmStudio } : undefined
+        })
     }, [apiKey, geminiKey, openRouterKey, modeloOpenRouter, modeloLmStudio, baseUrlLmStudio, provedorAtivo])
+
+    const criarOuObterServico = useCallback(() => {
+        return aiService
+    }, [aiService])
 
     // Persistencia
     useEffect(() => {
@@ -65,16 +59,7 @@ export function useAI() {
         localStorage.setItem('selene_baseurl_lmstudio', baseUrlLmStudio)
         localStorage.setItem('selene_provedor_ativo', provedorAtivo)
 
-        const temChave = apiKey || geminiKey || openRouterKey || baseUrlLmStudio.trim()
-        if (!temChave) {
-            setAiService(null)
-            aiServiceRef.current = null
-            ultimaChaveUsadaRef.current = ''
-            return
-        }
-
-        criarOuObterServico()
-    }, [apiKey, geminiKey, openRouterKey, modeloOpenRouter, modeloLmStudio, baseUrlLmStudio, systemPrompt, provedorAtivo, criarOuObterServico])
+    }, [apiKey, geminiKey, openRouterKey, modeloOpenRouter, modeloLmStudio, baseUrlLmStudio, systemPrompt, provedorAtivo])
 
     return {
         apiKey, setApiKey,

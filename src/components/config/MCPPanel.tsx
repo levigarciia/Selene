@@ -6,7 +6,7 @@
  * Follows the same pattern as AssistantsPanel.
  */
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
     Brain,
@@ -162,6 +162,13 @@ interface RegistroMCPServidor {
     }
 }
 
+interface RespostaListaRegistroMCP {
+    servers?: RegistroMCPServidor[]
+    metadata?: {
+        nextCursor?: string | null
+    }
+}
+
 interface MCPPanelProps {
     onClose: () => void
 }
@@ -189,6 +196,19 @@ const REGISTRO_MCP_CATEGORIES = [
     { id: 'mcpb', label: 'MCPB' },
     { id: 'remoto', label: 'Remotos' }
 ]
+
+function obterMensagemErro(erro: unknown, fallback: string): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    if (typeof erro === 'object' && erro !== null && 'message' in erro) {
+        const mensagem = (erro as { message?: unknown }).message
+        if (typeof mensagem === 'string' && mensagem.trim()) {
+            return mensagem
+        }
+    }
+    return fallback
+}
 
 const POPULAR_SERVERS = [
     'brave', 'github-official', 'playwright', 'notion', 'mongodb', 
@@ -560,6 +580,113 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
         loadServers()
     }, [])
 
+    const parseSimpleYaml = useCallback((yaml: string): DockerMCPServer['meta'] => {
+        type MetaDocker = NonNullable<DockerMCPServer['meta']>
+
+        const result: Partial<MetaDocker> = {}
+        const lines = yaml.split('\n')
+        let currentSection = ''
+        const tags: string[] = []
+
+        for (const line of lines) {
+            if (line.startsWith('name:')) result.name = line.split(':')[1]?.trim()
+            if (line.startsWith('image:')) result.image = line.split(':')[1]?.trim()
+            if (line.startsWith('  category:')) result.category = line.split(':')[1]?.trim()
+            if (line.startsWith('  title:')) result.title = line.split(':').slice(1).join(':').trim()
+            if (line.startsWith('  description:')) result.description = line.split(':').slice(1).join(':').trim()
+            if (line.startsWith('  icon:')) result.icon = line.split('icon:')[1]?.trim()
+            if (line.includes('project:')) {
+                result.source = { project: line.split('project:')[1]?.trim() }
+            }
+            if (line.trim().startsWith('- ') && currentSection === 'tags') {
+                tags.push(line.trim().replace('- ', ''))
+            }
+            if (line.includes('tags:')) currentSection = 'tags'
+            else if (line.match(/^\s*\w+:/) && !line.includes('-')) currentSection = ''
+        }
+
+        if (tags.length > 0) result.tags = tags
+
+        return Object.keys(result).length > 0 ? result as MetaDocker : undefined
+    }, [])
+
+    const loadDockerMCPRegistry = useCallback(async () => {
+        setRegistryLoading(true)
+        setRegistryError(null)
+        try {
+            const response = await fetch('https://api.github.com/repos/docker/mcp-registry/contents/servers')
+            if (!response.ok) throw new Error(`Erro da API do GitHub: ${response.status}`)
+
+            const dirs = await response.json() as Array<{ name: string; path: string; sha: string }>
+
+            const serversWithMeta: DockerMCPServer[] = []
+            const batchSize = 10
+
+            for (let i = 0; i < dirs.length; i += batchSize) {
+                const batch = dirs.slice(i, i + batchSize)
+                const metaPromises = batch.map(async (dir) => {
+                    try {
+                        const yamlUrl = `https://raw.githubusercontent.com/docker/mcp-registry/main/servers/${dir.name}/server.yaml`
+                        const yamlRes = await fetch(yamlUrl)
+                        if (!yamlRes.ok) return { ...dir, meta: undefined }
+
+                        const yamlText = await yamlRes.text()
+                        const meta = parseSimpleYaml(yamlText)
+                        return { ...dir, meta }
+                    } catch {
+                        return { ...dir, meta: undefined }
+                    }
+                })
+
+                const batchResults = await Promise.all(metaPromises)
+                serversWithMeta.push(...batchResults.filter((server) => server.meta))
+            }
+
+            setRegistryServers(serversWithMeta)
+        } catch (error: unknown) {
+            console.error('[MCPPanel] Docker MCP Registry error:', error)
+            setRegistryError(obterMensagemErro(error, 'Falha ao carregar marketplace'))
+        }
+        setRegistryLoading(false)
+    }, [parseSimpleYaml])
+
+    const carregarRegistroOficial = useCallback(async () => {
+        setRegistroLoading(true)
+        setRegistroError(null)
+        try {
+            const servidores: RegistroMCPServidor[] = []
+            let cursor: string | null = null
+            let paginasCarregadas = 0
+
+            do {
+                const url = new URL('https://registry.modelcontextprotocol.io/v0.1/servers')
+                url.searchParams.set('limit', '100')
+                url.searchParams.set('version', 'latest')
+                if (cursor) url.searchParams.set('cursor', cursor)
+
+                const response = await fetch(url.toString())
+                if (!response.ok) throw new Error(`Erro da API do MCP Registry: ${response.status}`)
+
+                const data = await response.json() as RespostaListaRegistroMCP
+                if (Array.isArray(data.servers)) {
+                    servidores.push(...data.servers)
+                }
+
+                cursor = data.metadata?.nextCursor ?? null
+                paginasCarregadas += 1
+                if (paginasCarregadas > 200) {
+                    cursor = null
+                }
+            } while (cursor)
+
+            setRegistroServidores(servidores)
+        } catch (error: unknown) {
+            console.error('[MCPPanel] MCP Registry error:', error)
+            setRegistroError(obterMensagemErro(error, 'Falha ao carregar MCP Registry'))
+        }
+        setRegistroLoading(false)
+    }, [])
+
     // Load marketplace when tab changes
     useEffect(() => {
         if (activeTab !== 'marketplace') return
@@ -569,7 +696,13 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
         if (registroServidores.length === 0) {
             carregarRegistroOficial()
         }
-    }, [activeTab])
+    }, [
+        activeTab,
+        loadDockerMCPRegistry,
+        carregarRegistroOficial,
+        registroServidores.length,
+        registryServers.length
+    ])
 
     // Filter servers when search or category changes
     useEffect(() => {
@@ -691,111 +824,6 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
             alert('Falha ao salvar diretórios permitidos.')
         }
         setSalvandoDirs((prev) => ({ ...prev, [serverId]: false }))
-    }
-
-    const loadDockerMCPRegistry = async () => {
-        setRegistryLoading(true)
-        setRegistryError(null)
-        try {
-            const response = await fetch('https://api.github.com/repos/docker/mcp-registry/contents/servers')
-            if (!response.ok) throw new Error(`Erro da API do GitHub: ${response.status}`)
-            
-            const dirs: Array<{ name: string; path: string; sha: string }> = await response.json()
-            
-            const serversWithMeta: DockerMCPServer[] = []
-            const batchSize = 10
-            
-            for (let i = 0; i < dirs.length; i += batchSize) {
-                const batch = dirs.slice(i, i + batchSize)
-                const metaPromises = batch.map(async (dir) => {
-                    try {
-                        const yamlUrl = `https://raw.githubusercontent.com/docker/mcp-registry/main/servers/${dir.name}/server.yaml`
-                        const yamlRes = await fetch(yamlUrl)
-                        if (!yamlRes.ok) return { ...dir, meta: undefined }
-                        
-                        const yamlText = await yamlRes.text()
-                        const meta = parseSimpleYaml(yamlText)
-                        return { ...dir, meta }
-                    } catch {
-                        return { ...dir, meta: undefined }
-                    }
-                })
-                
-                const batchResults = await Promise.all(metaPromises)
-                serversWithMeta.push(...batchResults.filter(s => s.meta))
-            }
-            
-            setRegistryServers(serversWithMeta)
-        } catch (error: any) {
-            console.error('[MCPPanel] Docker MCP Registry error:', error)
-            setRegistryError(error.message || 'Falha ao carregar marketplace')
-        }
-        setRegistryLoading(false)
-    }
-
-    const carregarRegistroOficial = async () => {
-        setRegistroLoading(true)
-        setRegistroError(null)
-        try {
-            const servidores: RegistroMCPServidor[] = []
-            let cursor: string | null = null
-            let paginasCarregadas = 0
-
-            do {
-                const url = new URL('https://registry.modelcontextprotocol.io/v0.1/servers')
-                url.searchParams.set('limit', '100')
-                url.searchParams.set('version', 'latest')
-                if (cursor) url.searchParams.set('cursor', cursor)
-
-                const response = await fetch(url.toString())
-                if (!response.ok) throw new Error(`Erro da API do MCP Registry: ${response.status}`)
-
-                const data = await response.json()
-                if (Array.isArray(data.servers)) {
-                    servidores.push(...data.servers)
-                }
-
-                cursor = data.metadata?.nextCursor ?? null
-                paginasCarregadas += 1
-                if (paginasCarregadas > 200) {
-                    cursor = null
-                }
-            } while (cursor)
-
-            setRegistroServidores(servidores)
-        } catch (error: any) {
-            console.error('[MCPPanel] MCP Registry error:', error)
-            setRegistroError(error.message || 'Falha ao carregar MCP Registry')
-        }
-        setRegistroLoading(false)
-    }
-
-    const parseSimpleYaml = (yaml: string): DockerMCPServer['meta'] => {
-        const result: any = {}
-        const lines = yaml.split('\n')
-        let currentSection = ''
-        let tags: string[] = []
-        
-        for (const line of lines) {
-            if (line.startsWith('name:')) result.name = line.split(':')[1]?.trim()
-            if (line.startsWith('image:')) result.image = line.split(':')[1]?.trim()
-            if (line.startsWith('  category:')) result.category = line.split(':')[1]?.trim()
-            if (line.startsWith('  title:')) result.title = line.split(':').slice(1).join(':').trim()
-            if (line.startsWith('  description:')) result.description = line.split(':').slice(1).join(':').trim()
-            if (line.startsWith('  icon:')) result.icon = line.split('icon:')[1]?.trim()
-            if (line.includes('project:')) {
-                result.source = { project: line.split('project:')[1]?.trim() }
-            }
-            if (line.trim().startsWith('- ') && currentSection === 'tags') {
-                tags.push(line.trim().replace('- ', ''))
-            }
-            if (line.includes('tags:')) currentSection = 'tags'
-            else if (line.match(/^\s*\w+:/) && !line.includes('-')) currentSection = ''
-        }
-        
-        if (tags.length > 0) result.tags = tags
-        
-        return result
     }
 
     const handleConnect = async (serverId: string) => {
@@ -1143,6 +1171,7 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
             <AnimatePresence>
                 {showAddModal && (
                     <AddServerModal 
+                        key="novo-servidor"
                         onClose={() => setShowAddModal(false)}
                         onAdd={async (config) => {
                             await window.electronAPI?.mcp?.addServer(config)
@@ -1156,6 +1185,7 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
             <AnimatePresence>
                 {servidorEmEdicao && (
                     <AddServerModal 
+                        key={servidorEmEdicao.id}
                         configInicial={servidorEmEdicao}
                         titulo="Configurar Servidor MCP"
                         textoConfirmar="Salvar"
@@ -2039,9 +2069,9 @@ const DetalhesMcpModal: React.FC<DetalhesMcpModalProps> = ({
                 if (ativo) {
                     setRegistroDetalhado(data)
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 if (ativo) {
-                    setDetalhesErro(error?.message || 'Falha ao carregar detalhes')
+                    setDetalhesErro(obterMensagemErro(error, 'Falha ao carregar detalhes'))
                 }
             } finally {
                 if (ativo) {
@@ -2518,18 +2548,6 @@ const AddServerModal: React.FC<AddServerModalProps> = ({
     const [enabled, setEnabled] = useState(configInicial?.enabled ?? true)
     const [autoConnect, setAutoConnect] = useState(configInicial?.autoConnect ?? false)
     const [loading, setLoading] = useState(false)
-
-    useEffect(() => {
-        setName(configInicial?.name || '')
-        setCommand(configInicial?.command || 'docker')
-        setTransporte(configInicial?.transport || 'stdio')
-        setUrlRemota(configInicial?.url || '')
-        setHeadersTexto(formatarHeadersTexto(configInicial?.headers))
-        setArgs(configInicial?.args?.join(' ') || 'run -i --rm')
-        setEnvTexto(formatarEnvTexto(configInicial?.env))
-        setEnabled(configInicial?.enabled ?? true)
-        setAutoConnect(configInicial?.autoConnect ?? false)
-    }, [configInicial])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()

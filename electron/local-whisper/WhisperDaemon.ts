@@ -6,7 +6,7 @@
  * Runs in Electron main process
  */
 
-import { spawn, ChildProcess } from 'child_process'
+import { spawn } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
@@ -123,7 +123,7 @@ export class WhisperDaemon extends EventEmitter {
                 if (fs.existsSync(audioPath)) {
                     fs.unlinkSync(audioPath)
                 }
-            } catch (e) {
+            } catch {
                 // Ignore cleanup errors
             }
         }
@@ -209,7 +209,7 @@ export class WhisperDaemon extends EventEmitter {
             for (const file of files) {
                 fs.unlinkSync(path.join(this.tempDir, file))
             }
-        } catch (e) {
+        } catch {
             // Ignore cleanup errors
         }
     }

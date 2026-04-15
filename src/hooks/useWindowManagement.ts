@@ -2,8 +2,9 @@ import { useRef, useEffect } from 'react'
 
 type RegiaoModal = { x: number; y: number; width: number; height: number }
 
-export function useWindowManagement(dependencias: any[]) {
+export function useWindowManagement(dependencias: ReadonlyArray<unknown>) {
     const modalRef = useRef<HTMLDivElement | null>(null)
+    const overlayProativoRef = useRef<HTMLDivElement | null>(null)
     const toolbarRef = useRef<HTMLDivElement | null>(null)
     const assistentesRef = useRef<HTMLDivElement | null>(null)
     const configuracoesRef = useRef<HTMLDivElement | null>(null)
@@ -31,6 +32,7 @@ export function useWindowManagement(dependencias: any[]) {
             }
 
             adicionar(modalRef.current)
+            adicionar(overlayProativoRef.current)
             adicionar(toolbarRef.current)
             adicionar(assistentesRef.current)
             adicionar(configuracoesRef.current)
@@ -60,6 +62,7 @@ export function useWindowManagement(dependencias: any[]) {
         }
 
         registrarObservadores(modalRef.current)
+        registrarObservadores(overlayProativoRef.current)
         registrarObservadores(toolbarRef.current)
         registrarObservadores(assistentesRef.current)
         registrarObservadores(configuracoesRef.current)
@@ -90,6 +93,7 @@ export function useWindowManagement(dependencias: any[]) {
 
     return {
         modalRef,
+        overlayProativoRef,
         toolbarRef,
         assistentesRef,
         configuracoesRef,

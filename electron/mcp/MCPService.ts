@@ -61,6 +61,13 @@ interface JsonRpcResponse {
     error?: { code: number; message: string; data?: unknown }
 }
 
+function obterMensagemErro(erro: unknown): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return 'Erro desconhecido'
+}
+
 // ============================================================================
 // MCP SERVICE
 // ============================================================================
@@ -216,7 +223,7 @@ class MCPService extends EventEmitter {
                         try {
                             const response = JSON.parse(line) as JsonRpcResponse
                             this.handleResponse(serverId, response)
-                        } catch (e) {
+                        } catch {
                             console.warn('[MCP] Failed to parse response:', line)
                         }
                     }
@@ -265,11 +272,11 @@ class MCPService extends EventEmitter {
             this.emit('status-changed', serverId, 'connected')
             this.emit('tools-updated', serverId, state.tools)
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(`[MCP] Failed to connect to ${state.config.name}:`, error)
             state.status = 'error'
-            state.error = error.message
-            this.emit('status-changed', serverId, 'error', error.message)
+            state.error = obterMensagemErro(error)
+            this.emit('status-changed', serverId, 'error', obterMensagemErro(error))
             throw error
         }
     }
@@ -338,7 +345,7 @@ class MCPService extends EventEmitter {
             if (config.enabled && config.autoConnect) {
                 try {
                     await this.connect(config.id)
-                } catch (e) {
+                } catch {
                     console.error(`[MCP] Failed to auto-connect ${config.name}`)
                 }
             }
@@ -402,7 +409,7 @@ class MCPService extends EventEmitter {
     getAllServers(): Array<{ config: MCPServerConfig; status: MCPServerStatus; toolCount: number }> {
         const result: Array<{ config: MCPServerConfig; status: MCPServerStatus; toolCount: number }> = []
         
-        for (const [_, state] of this.servers) {
+        for (const [, state] of this.servers) {
             result.push({
                 config: state.config,
                 status: state.status,

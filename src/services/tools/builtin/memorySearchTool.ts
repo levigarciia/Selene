@@ -77,11 +77,11 @@ export const memorySearchHandler: ToolHandler = async (args, context): Promise<T
                 stats
             }
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[MemorySearchTool] Error:', error)
         return {
             success: false,
-            error: error.message || 'Memory search failed'
+            error: error instanceof Error ? error.message : 'Memory search failed'
         }
     }
 }

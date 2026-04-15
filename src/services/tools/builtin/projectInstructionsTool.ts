@@ -116,11 +116,11 @@ export const projectInstructionsHandler: ToolHandler = async (args, context) => 
                     error: `Ação desconhecida: ${action}. Use "update", "append" ou "clear".`
                 }
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[ProjectInstructionsTool] Error:', error)
         return {
             success: false,
-            error: error.message || 'Erro ao atualizar instruções do projeto.'
+            error: error instanceof Error ? error.message : 'Erro ao atualizar instruções do projeto.'
         }
     }
 }

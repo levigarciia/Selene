@@ -74,13 +74,13 @@ export function useCrossChatContext(): CrossChatState & CrossChatActions {
         setEnabledState(service.isEnabled())
         setIndexStats(getIndexStats())
         setMetrics(service.getMetrics())
-    }, [service])
+    }, [service, setEnabledState, setIndexStats, setMetrics])
 
     // Toggle enabled
     const setEnabled = useCallback((value: boolean) => {
         service.setEnabled(value)
         setEnabledState(value)
-    }, [service])
+    }, [service, setEnabledState])
 
     // Limpar índice
     const handleClearIndex = useCallback(() => {

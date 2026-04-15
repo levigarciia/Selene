@@ -28,6 +28,13 @@ const MODEL_INFO: Record<WhisperModelSize, { size: string; desc: string }> = {
     large: { size: '~3 GB', desc: 'Best accuracy, slowest' }
 }
 
+function obterMensagemErro(erro: unknown, fallback: string): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return fallback
+}
+
 export class WhisperLocalService {
     private static instance: WhisperLocalService | null = null
     private config: WhisperConfig
@@ -75,7 +82,7 @@ export class WhisperLocalService {
             const binaryPath = this.config.binaryPath?.trim()
             const binarioExiste = await window.electronAPI?.whisperBinaryExists?.(binaryPath || undefined)
             if (binarioExiste === false) {
-                throw new Error('whisper-node não está compilado. Rode \"make\" em node_modules/whisper-node/lib/whisper.cpp (gera main/main.exe) ou selecione transcrição em nuvem.')
+                throw new Error('whisper-node não está compilado. Rode "make" em node_modules/whisper-node/lib/whisper.cpp (gera main/main.exe) ou selecione transcrição em nuvem.')
             }
             // Check if model exists
             const exists = await window.electronAPI?.whisperModelExists?.(this.config.modelSize)
@@ -105,11 +112,11 @@ export class WhisperLocalService {
 
             this.ready = true
             console.log('[WhisperLocal] ✅ Whisper initialized and ready!')
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[WhisperLocal] 🛑 Failed to initialize:', error)
             this.ready = false
             
-            const msg = error?.message || 'Motivo desconhecido'
+            const msg = obterMensagemErro(error, 'Motivo desconhecido')
             let errorMsg = 'Falha ao inicializar o Whisper'
             if (msg.includes('download') || msg.includes('fetch')) {
                 errorMsg += ': problema de rede ao baixar modelo.'
@@ -157,9 +164,9 @@ export class WhisperLocalService {
             console.log(`[WhisperLocal] Result: "${result.text}"`)
 
             return result.text || ''
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[WhisperLocal] ❌ Transcription failed:', error)
-            throw new Error(`Transcription failed: ${error.message}`)
+            throw new Error(`Transcription failed: ${obterMensagemErro(error, 'Falha desconhecida')}`)
         }
     }
 

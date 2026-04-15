@@ -207,6 +207,13 @@ export class AudioService {
     }
 
     stop() {
+        const sampleRateAtual = this.audioContext?.sampleRate ?? 16000;
+
+        // Garante a transcrição do último trecho, mesmo em gravações curtas.
+        if (this.accLength > 0) {
+            this.flushAcumulado(sampleRateAtual);
+        }
+
         if (this.processor) {
             this.processor.disconnect();
             this.processor.onaudioprocess = null;

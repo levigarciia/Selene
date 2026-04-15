@@ -23,21 +23,29 @@ import {
 } from 'lucide-react'
 import type { ToolCardData, ToolResultItem, ToolCallStatus } from '../../types/tools'
 
-// Icon mapping for tool types
-const TOOL_ICONS: Record<string, React.ElementType> = {
-    Globe,
-    Brain,
-    File,
-    Plug,
-    Terminal,
-    Camera,
-    Database,
-    Search,
-    AlertCircle
-}
-
-const getIcon = (iconName: string): React.ElementType => {
-    return TOOL_ICONS[iconName] || Plug
+const renderToolIcon = (iconName: string, className: string) => {
+    switch (iconName) {
+        case 'Globe':
+            return <Globe size={18} className={className} />
+        case 'Brain':
+            return <Brain size={18} className={className} />
+        case 'File':
+            return <File size={18} className={className} />
+        case 'Plug':
+            return <Plug size={18} className={className} />
+        case 'Terminal':
+            return <Terminal size={18} className={className} />
+        case 'Camera':
+            return <Camera size={18} className={className} />
+        case 'Database':
+            return <Database size={18} className={className} />
+        case 'Search':
+            return <Search size={18} className={className} />
+        case 'AlertCircle':
+            return <AlertCircle size={18} className={className} />
+        default:
+            return <Plug size={18} className={className} />
+    }
 }
 
 const getStatusColor = (status: ToolCallStatus): string => {
@@ -67,7 +75,6 @@ export const ToolCard: React.FC<ToolCardProps> = ({
     compact = false
 }) => {
     const [expanded, setExpanded] = useState(false)
-    const IconComponent = getIcon(data.toolIcon)
     const isLoading = data.status === 'pending' || data.status === 'executing'
     const hasResults = data.results.length > 0
     const canExpand = hasResults && !isLoading
@@ -80,11 +87,11 @@ export const ToolCard: React.FC<ToolCardProps> = ({
     }
 
     return (
-        <div className={`${compact ? 'my-1' : 'my-2'}`}>
+        <div className={`min-w-0 max-w-full ${compact ? 'my-1' : 'my-2'}`}>
             <button
                 onClick={handleClick}
                 disabled={!canExpand}
-                className={`w-full flex items-center gap-3 px-4 ${compact ? 'py-2' : 'py-3'} rounded-xl border transition-all ${
+                className={`flex w-full min-w-0 max-w-full items-center gap-3 rounded-xl border px-4 ${compact ? 'py-2' : 'py-3'} transition-all ${
                     expanded 
                         ? 'bg-neutral-800/80 border-white/15' 
                         : 'bg-neutral-800/50 border-white/10 hover:bg-neutral-800/70'
@@ -93,7 +100,7 @@ export const ToolCard: React.FC<ToolCardProps> = ({
                 {isLoading ? (
                     <Loader2 size={18} className="text-purple-400 animate-spin shrink-0" />
                 ) : (
-                    <IconComponent size={18} className={`shrink-0 ${getStatusColor(data.status)}`} />
+                    renderToolIcon(data.toolIcon, `shrink-0 ${getStatusColor(data.status)}`)
                 )}
                 
                 <div className="flex-1 min-w-0 text-left">
@@ -145,7 +152,7 @@ export const ToolCard: React.FC<ToolCardProps> = ({
                         exit={{ opacity: 0, height: 0 }}
                         className="overflow-hidden"
                     >
-                        <div className="mt-2 ml-4 pl-4 border-l-2 border-neutral-700 space-y-2">
+                        <div className="mt-2 ml-4 max-w-full space-y-2 border-l-2 border-neutral-700 pl-4">
                             {data.results.map((result, idx) => (
                                 <ToolResultItemView key={idx} result={result} />
                             ))}
@@ -213,7 +220,7 @@ const ToolResultItemView: React.FC<{ result: ToolResultItem }> = ({ result }) =>
                     <Terminal size={12} className="text-neutral-500" />
                     <span className="text-xs text-neutral-400">{result.title}</span>
                 </div>
-                <pre className="text-xs text-neutral-300 overflow-x-auto">
+                <pre className="max-w-full overflow-x-auto text-xs text-neutral-300 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-purple-400/40">
                     <code>{result.content}</code>
                 </pre>
             </div>
@@ -227,7 +234,7 @@ const ToolResultItemView: React.FC<{ result: ToolResultItem }> = ({ result }) =>
                     <Database size={12} className="text-neutral-500" />
                     <span className="text-xs text-neutral-400">{result.title}</span>
                 </div>
-                <pre className="text-xs text-neutral-300 overflow-x-auto">
+                <pre className="max-w-full overflow-x-auto text-xs text-neutral-300 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-purple-400/40">
                     <code>{result.content}</code>
                 </pre>
             </div>

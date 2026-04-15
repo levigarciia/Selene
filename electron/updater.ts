@@ -135,7 +135,7 @@ const setupEventListeners = (mainWindow: BrowserWindow | null) => {
         })
     })
 
-    autoUpdater.on('update-not-available', (info: UpdateInfo) => {
+    autoUpdater.on('update-not-available', () => {
         log.info('No updates available. Current version:', app.getVersion())
         sendToRenderer('update-status', {
             status: 'not-available',

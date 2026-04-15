@@ -48,7 +48,7 @@ async function buscarNaWebViaIpc(query: string, maxResults: number): Promise<Web
         if (resposta?.error) {
             console.warn('[WebSearch] IPC error:', resposta.error)
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.warn('[WebSearch] IPC error:', error)
     }
 
@@ -68,8 +68,8 @@ async function buscarConteudoViaIpc(url: string): Promise<string | null> {
         if (resposta?.error) {
             return `[Erro ao buscar conteudo: ${resposta.error}]`
         }
-    } catch (error: any) {
-        return `[Erro ao buscar conteudo: ${error.message}]`
+    } catch (error: unknown) {
+        return `[Erro ao buscar conteudo: ${error instanceof Error ? error.message : 'Erro desconhecido'}]`
     }
 
     return null
@@ -119,7 +119,7 @@ export async function searchWeb(query: string, maxResults = 5): Promise<WebSearc
             results,
             timestamp: Date.now()
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[WebSearch] Error:', error)
         return {
             query,
@@ -242,9 +242,9 @@ export async function fetchUrlContent(url: string, maxLength = 2000, timeoutMs =
         }
         
         return text
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[WebSearch] Fetch error:', error)
-        return `[Erro ao buscar conteúdo: ${error.message}]`
+        return `[Erro ao buscar conteúdo: ${error instanceof Error ? error.message : 'Erro desconhecido'}]`
     }
 }
 

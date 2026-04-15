@@ -1,175 +1,215 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-    Minus, Square, X, ChevronRight,
-    FolderOpen, FilePlus, FileText, MessageSquare, Trash2, Send, Plus,
-    Palette, FileCode, ChevronDown
+    ArrowLeft,
+    ArrowUp,
+    Check,
+    ChevronDown,
+    ChevronRight,
+    FolderOpen,
+    MessageSquare,
+    Paperclip,
+    Palette,
+    Pencil,
+    Plus,
+    Trash2,
+    X,
+    FileCode,
+    FilePlus,
 } from 'lucide-react'
 import type { Project } from '../../../../types/project'
 import type { Conversation } from '../types'
-import { formatFileSize } from '../../../../services/DocumentService'
 
-// Cores disponíveis para projetos
 const CORES_PROJETO = [
-    '#FFD700', // Gold
-    '#7C3AED', // Purple
-    '#3B82F6', // Blue
-    '#10B981', // Green
-    '#F59E0B', // Orange
-    '#EF4444', // Red
-    '#EC4899', // Pink
-    '#6366F1', // Indigo
-    '#14B8A6', // Teal
-    '#8B5CF6', // Violet
+    '#FFD700',
+    '#7C3AED',
+    '#3B82F6',
+    '#10B981',
+    '#F59E0B',
+    '#EF4444',
+    '#EC4899',
+    '#6366F1',
+    '#14B8A6',
+    '#8B5CF6',
 ]
 
 interface ProjectViewProps {
     project: Project
     conversations: Conversation[]
     onClose: () => void
+    onDeleteProject: () => void
     onRenameProject: (newName: string) => void
     onUpdateProject: (updates: Partial<Project>) => void
-    onDeleteFile: (fileId: string) => void
     onDeleteConversation: (convId: string) => void
+    onRenameConversation: (convId: string, newTitle: string) => void
     onUploadFiles: () => void
     onSelectConversation: (convId: string) => void
     chatInput: string
     onChatInputChange: (value: string) => void
-    onCreateChat: (initialMessage?: string) => void
+    onCreateChat: () => void
     chatInputRef: React.RefObject<HTMLInputElement | null>
+    pendingScreenshots: string[]
+    onRemoveScreenshot: (index: number) => void
+    onAddImages: (files: File[]) => void
+    onChatPaste: (event: React.ClipboardEvent<HTMLInputElement>) => void
 }
 
 export const ProjectView: React.FC<ProjectViewProps> = ({
     project,
     conversations,
     onClose,
+    onDeleteProject,
     onRenameProject,
     onUpdateProject,
-    onDeleteFile,
     onDeleteConversation,
+    onRenameConversation,
     onUploadFiles,
     onSelectConversation,
     chatInput,
     onChatInputChange,
     onCreateChat,
     chatInputRef,
+    pendingScreenshots,
+    onRemoveScreenshot,
+    onAddImages,
+    onChatPaste,
 }) => {
-    const projectConvs = conversations.filter(c => c.projectId === project.id)
+    const projectConvs = conversations.filter((conversation) => conversation.projectId === project.id)
     const [showColorPicker, setShowColorPicker] = useState(false)
-    const [showInstructions, setShowInstructions] = useState(!!project.instructions)
-
+    const [showInstructions, setShowInstructions] = useState(false)
+    const [conversaEditandoId, setConversaEditandoId] = useState<string | null>(null)
+    const [tituloConversaEditado, setTituloConversaEditado] = useState('')
+    const inputImagensRef = useRef<HTMLInputElement>(null)
     const corAtual = project.color || '#FFD700'
+
+    const placeholderComposer = pendingScreenshots.length > 0
+        ? `Descreva as imagens do novo chat em ${project.name}`
+        : `Novo chat em ${project.name}`
+
+    const iniciarEdicaoConversa = (conversa: Conversation) => {
+        setConversaEditandoId(conversa.id)
+        setTituloConversaEditado(conversa.title)
+    }
+
+    const cancelarEdicaoConversa = () => {
+        setConversaEditandoId(null)
+        setTituloConversaEditado('')
+    }
+
+    const salvarEdicaoConversa = (convId: string) => {
+        const tituloNormalizado = tituloConversaEditado.trim()
+
+        if (!tituloNormalizado) {
+            cancelarEdicaoConversa()
+            return
+        }
+
+        onRenameConversation(convId, tituloNormalizado)
+        cancelarEdicaoConversa()
+    }
+
+    const podeCriarChat = chatInput.trim().length > 0 || pendingScreenshots.length > 0
 
     return (
         <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-40 flex flex-col bg-neutral-900"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="absolute inset-0 z-20 flex flex-col bg-[#0a0a0c] pointer-events-auto"
+            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-            {/* Project Header */}
-            <header
-                className="flex-none h-14 flex items-center justify-between px-5 bg-neutral-900/80 border-b border-white/5 backdrop-blur-xl"
-                style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-            >
-                <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                    <FolderOpen size={20} style={{ color: corAtual }} />
-                    <span className="text-sm font-medium text-neutral-200">{project.name}</span>
+            <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+                <div className="flex min-w-0 items-center gap-3">
+                    <button
+                        onClick={onClose}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-white/5 hover:text-white"
+                        aria-label="Voltar para o chat"
+                    >
+                        <ArrowLeft size={18} />
+                    </button>
+
+                    <div className="relative shrink-0">
+                        <button
+                            onClick={() => setShowColorPicker((value) => !value)}
+                            className="group rounded-2xl bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.06]"
+                            title="Mudar cor da pasta"
+                        >
+                            <FolderOpen size={24} style={{ color: corAtual }} />
+                            <div className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-neutral-800 bg-neutral-700 opacity-0 transition-opacity group-hover:opacity-100">
+                                <Palette size={8} className="text-neutral-300" />
+                            </div>
+                        </button>
+
+                        <AnimatePresence>
+                            {showColorPicker && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -5 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -5 }}
+                                    className="absolute left-0 top-full z-50 mt-2 w-44 rounded-xl border border-white/10 bg-[#16181d] p-3 shadow-xl"
+                                >
+                                    <p className="mb-2 text-xs text-neutral-500">Cor da pasta</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {CORES_PROJETO.map((cor) => (
+                                            <button
+                                                key={cor}
+                                                onClick={() => {
+                                                    onUpdateProject({ color: cor })
+                                                    setShowColorPicker(false)
+                                                }}
+                                                className={`h-7 w-7 rounded-lg transition-transform hover:scale-110 ${
+                                                    cor === corAtual ? 'ring-2 ring-white ring-offset-2 ring-offset-[#16181d]' : ''
+                                                }`}
+                                                style={{ backgroundColor: cor }}
+                                            />
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    <div className="min-w-0">
+                        <input
+                            type="text"
+                            value={project.name}
+                            onChange={(event) => onRenameProject(event.target.value)}
+                            className="w-full min-w-0 rounded-xl border border-transparent bg-transparent px-2 py-1 text-lg font-semibold text-white outline-none transition-colors focus:border-white/10 focus:bg-white/[0.03]"
+                        />
+                        <p className="px-2 text-xs text-neutral-500">
+                            {project.files.length} arquivo(s) e {projectConvs.length} conversa(s) vinculada(s)
+                        </p>
+                    </div>
                 </div>
 
-                <div
-                    className="flex items-center gap-1"
-                    style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-                >
+                <div className="flex items-center gap-2">
                     <button
-                        onClick={() => window.electronAPI?.minimizeWindow?.()}
-                        className="p-2 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                        onClick={onUploadFiles}
+                        className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-sm text-neutral-200 transition-colors hover:bg-white/10"
                     >
-                        <Minus size={16} />
+                        <FilePlus size={15} />
+                        Adicionar arquivos
                     </button>
                     <button
-                        onClick={() => window.electronAPI?.toggleMaximizeWindow?.()}
-                        className="p-2 text-neutral-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                        onClick={() => {
+                            if (confirm(`Excluir projeto "${project.name}"? As conversas serão movidas para fora.`)) {
+                                onDeleteProject()
+                            }
+                        }}
+                        className="flex items-center gap-2 rounded-xl border border-[#4d232b] bg-[#2a161b] px-3 py-2 text-sm text-[#f1bcc5] transition-colors hover:bg-[#341b22]"
                     >
-                        <Square size={14} />
-                    </button>
-                    <button
-                        onClick={() => window.electronAPI?.closeWindow?.()}
-                        className="p-2 text-neutral-400 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                    >
-                        <X size={16} />
+                        <Trash2 size={15} />
+                        Excluir projeto
                     </button>
                 </div>
             </header>
 
-            {/* Project Content */}
             <div className="flex-1 overflow-y-auto p-8 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent">
-                <div className="max-w-2xl mx-auto">
-                    {/* Project Title with Color Picker */}
-                    <div className="flex items-center gap-4 mb-6">
-                        {/* Color Picker Button */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowColorPicker(!showColorPicker)}
-                                className="p-2 rounded-xl hover:bg-white/10 transition-colors group"
-                                title="Mudar cor da pasta"
-                            >
-                                <FolderOpen size={32} style={{ color: corAtual }} />
-                                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-neutral-800 border-2 border-neutral-700 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Palette size={8} className="text-neutral-400" />
-                                </div>
-                            </button>
-
-                            {/* Color Picker Dropdown */}
-                            <AnimatePresence>
-                                {showColorPicker && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -5 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -5 }}
-                                        className="absolute top-full left-0 mt-2 p-3 rounded-xl bg-neutral-800 border border-white/10 shadow-xl z-50"
-                                    >
-                                        <p className="text-xs text-neutral-500 mb-2">Cor da pasta</p>
-                                        <div className="flex flex-wrap gap-2 w-40">
-                                            {CORES_PROJETO.map(cor => (
-                                                <button
-                                                    key={cor}
-                                                    onClick={() => {
-                                                        onUpdateProject({ color: cor })
-                                                        setShowColorPicker(false)
-                                                    }}
-                                                    className={`w-7 h-7 rounded-lg transition-transform hover:scale-110 ${cor === corAtual ? 'ring-2 ring-white ring-offset-2 ring-offset-neutral-800' : ''}`}
-                                                    style={{ backgroundColor: cor }}
-                                                />
-                                            ))}
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-
-                        <input
-                            type="text"
-                            value={project.name}
-                            onChange={(e) => onRenameProject(e.target.value)}
-                            className="text-2xl font-semibold bg-transparent text-white border-none outline-none flex-1 focus:ring-2 focus:ring-purple-500/50 rounded px-2 -mx-2"
-                        />
-
-                        {/* Files Count Badge */}
+                <div className="mx-auto max-w-4xl space-y-8">
+                    <div>
                         <button
-                            onClick={onUploadFiles}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition-colors text-sm"
-                        >
-                            <FilePlus size={14} />
-                            <span>{project.files.length} arquivos</span>
-                        </button>
-                    </div>
-
-                    {/* Project Instructions */}
-                    <div className="mb-6">
-                        <button
-                            onClick={() => setShowInstructions(!showInstructions)}
-                            className="flex items-center gap-2 text-sm text-neutral-400 hover:text-neutral-300 transition-colors mb-2"
+                            onClick={() => setShowInstructions((value) => !value)}
+                            className="mb-3 flex items-center gap-2 text-sm text-neutral-400 transition-colors hover:text-neutral-300"
                         >
                             <FileCode size={14} />
                             <span>Instruções do Projeto</span>
@@ -189,134 +229,201 @@ export const ProjectView: React.FC<ProjectViewProps> = ({
                                 >
                                     <textarea
                                         value={project.instructions || ''}
-                                        onChange={(e) => onUpdateProject({ instructions: e.target.value })}
-                                        placeholder="Defina o prompt-base deste projeto. Exemplo: 'Você é DOUG.EXE...', 'Responda no formato técnico X', 'Considere somente os arquivos anexados'..."
-                                        className="w-full h-32 p-4 rounded-xl bg-white/5 border border-white/10 text-neutral-200 placeholder-neutral-500 text-sm resize-none outline-none focus:border-purple-500/50 transition-colors [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10"
+                                        onChange={(event) => onUpdateProject({ instructions: event.target.value })}
+                                        placeholder="Defina o prompt-base deste projeto. Exemplo: regras, tom, formato técnico e como os arquivos devem ser usados."
+                                        className="h-32 w-full resize-none bg-transparent p-0 text-sm leading-7 text-neutral-200 placeholder-neutral-500 outline-none [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10"
                                     />
-                                    <p className="text-xs text-neutral-600 mt-1.5">
-                                        Em conversas deste projeto, este texto substitui o prompt global e os assistentes. Só o contexto do próprio projeto e seus arquivos será usado.
-                                    </p>
                                 </motion.div>
                             )}
                         </AnimatePresence>
                     </div>
 
-                    {/* New Chat Input */}
-                    <div className="mb-8">
-                        <div className="flex items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 focus-within:border-purple-500/50 transition-colors">
-                            <Plus size={20} className="text-neutral-500" />
-                            <input
-                                ref={chatInputRef}
-                                type="text"
-                                value={chatInput}
-                                onChange={(e) => onChatInputChange(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && chatInput.trim()) {
-                                        onCreateChat(chatInput.trim())
-                                        onChatInputChange('')
-                                    }
-                                }}
-                                placeholder={`Novo chat em ${project.name}`}
-                                className="flex-1 bg-transparent text-white placeholder-neutral-500 outline-none"
-                            />
-                            <button
-                                onClick={() => {
-                                    if (chatInput.trim()) {
-                                        onCreateChat(chatInput.trim())
-                                        onChatInputChange('')
-                                    }
-                                }}
-                                className="p-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white transition-colors"
-                            >
-                                <Send size={16} />
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Files Section */}
-                    {project.files.length > 0 && (
-                        <div className="mb-8">
-                            <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                                <FileText size={14} />
-                                Arquivos do Projeto
-                            </h3>
-                            <div className="grid grid-cols-2 gap-3">
-                                {project.files.map(file => (
-                                    <div
-                                        key={file.id}
-                                        className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors group"
-                                    >
-                                        <FileText size={18} className="text-neutral-500 shrink-0" />
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm text-white truncate">{file.name}</p>
-                                            <p className="text-xs text-neutral-500">{formatFileSize(file.size)}</p>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                if (confirm(`Remover "${file.name}"?`)) {
-                                                    onDeleteFile(file.id)
-                                                }
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded-lg text-neutral-500 hover:text-red-400 transition-all"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Conversations in Project */}
                     <div>
-                        <h3 className="text-sm font-medium text-neutral-400 mb-3 flex items-center gap-2">
-                            <MessageSquare size={14} />
-                            Conversas do Projeto ({projectConvs.length})
-                        </h3>
-                        {projectConvs.length === 0 ? (
-                            <div className="text-center py-12 text-neutral-500">
-                                <MessageSquare size={32} className="mx-auto mb-3 opacity-50" />
-                                <p>Nenhuma conversa ainda</p>
-                                <p className="text-sm mt-1">Use o campo acima para iniciar um novo chat</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                {projectConvs.map(conv => (
+                        {pendingScreenshots.length > 0 && (
+                            <div className="mb-3 flex flex-wrap items-start gap-2">
+                                {pendingScreenshots.map((shot, idx) => (
                                     <div
-                                        key={conv.id}
-                                        className="flex items-center gap-3 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors group"
+                                        key={`shot-project-${idx}`}
+                                        className="relative overflow-hidden rounded-xl border border-white/[0.06] bg-[#121419]"
                                     >
+                                        <img
+                                            src={shot}
+                                            alt={`Imagem anexada ${idx + 1}`}
+                                            className="h-16 w-auto object-cover"
+                                        />
                                         <button
-                                            onClick={() => onSelectConversation(conv.id)}
-                                            className="flex-1 flex items-center gap-3 text-left min-w-0"
+                                            type="button"
+                                            onClick={() => onRemoveScreenshot(idx)}
+                                            className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white transition-colors hover:bg-black/80"
+                                            title="Remover imagem"
                                         >
-                                            <MessageSquare size={18} className="text-neutral-500 shrink-0" />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm text-white truncate">{conv.title}</p>
-                                                <p className="text-xs text-neutral-500">
-                                                    {new Date(conv.updatedAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
-                                                    {conv.messages.length > 0 && ` · ${conv.messages.length} mensagens`}
-                                                </p>
-                                            </div>
+                                            <X size={11} />
                                         </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                if (confirm(`Excluir "${conv.title}"?`)) {
-                                                    onDeleteConversation(conv.id)
-                                                }
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 rounded-lg text-neutral-500 hover:text-red-400 transition-all shrink-0"
-                                            title="Excluir conversa"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                        <ChevronRight size={16} className="text-neutral-600 group-hover:text-neutral-400 transition-colors shrink-0" />
                                     </div>
                                 ))}
                             </div>
                         )}
+
+                        <div className="rounded-[24px] border border-white/[0.06] bg-[#1b1d22] px-5 py-4 shadow-[0_18px_40px_rgba(0,0,0,0.14)] transition-colors focus-within:border-white/[0.1]">
+                            <div className="flex items-center gap-3">
+                                <Plus size={20} className="shrink-0 text-neutral-500" />
+                                <input
+                                    ref={chatInputRef}
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(event) => onChatInputChange(event.target.value)}
+                                    onPaste={onChatPaste}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' && podeCriarChat) {
+                                            onCreateChat()
+                                        }
+                                    }}
+                                    placeholder={placeholderComposer}
+                                    className="flex-1 bg-transparent text-white placeholder-neutral-500 outline-none"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => inputImagensRef.current?.click()}
+                                    className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04] text-neutral-300 transition-colors hover:bg-white/[0.08] hover:text-white"
+                                    title="Anexar imagens"
+                                >
+                                    <Paperclip size={16} />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onCreateChat}
+                                    disabled={!podeCriarChat}
+                                    className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                                        podeCriarChat
+                                            ? 'bg-[#4f6bcb] text-white hover:bg-[#5d78da]'
+                                            : 'bg-white/[0.06] text-[#69707d]'
+                                    }`}
+                                    title="Criar conversa"
+                                >
+                                    <ArrowUp size={16} />
+                                </button>
+                            </div>
+
+                            <input
+                                ref={inputImagensRef}
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(event) => {
+                                    const files = Array.from(event.target.files || [])
+                                    if (files.length > 0) {
+                                        onAddImages(files)
+                                    }
+                                    event.target.value = ''
+                                }}
+                            />
+                        </div>
                     </div>
+
+                    <section className="rounded-[28px] border border-white/[0.06] bg-[#111216] p-6 shadow-[0_20px_48px_rgba(0,0,0,0.18)]">
+                        <h3 className="mb-4 flex items-center gap-2 text-sm font-medium text-neutral-300">
+                            <MessageSquare size={14} />
+                            Conversas do Projeto ({projectConvs.length})
+                        </h3>
+
+                        {projectConvs.length === 0 ? (
+                            <div className="py-12 text-center text-neutral-500">
+                                <MessageSquare size={32} className="mx-auto mb-3 opacity-50" />
+                                <p>Nenhuma conversa ainda</p>
+                                <p className="mt-1 text-sm">Use o campo acima para iniciar um novo chat</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {projectConvs.map((conv) => {
+                                    const estaEditando = conversaEditandoId === conv.id
+
+                                    return (
+                                        <div
+                                            key={conv.id}
+                                            className="group flex items-center gap-3 rounded-2xl border border-white/[0.05] bg-white/[0.03] p-4 transition-colors hover:bg-white/[0.05]"
+                                        >
+                                            <MessageSquare size={18} className="shrink-0 text-neutral-500" />
+
+                                            <div className="min-w-0 flex-1">
+                                                {estaEditando ? (
+                                                    <input
+                                                        type="text"
+                                                        value={tituloConversaEditado}
+                                                        onChange={(event) => setTituloConversaEditado(event.target.value)}
+                                                        onBlur={() => salvarEdicaoConversa(conv.id)}
+                                                        onKeyDown={(event) => {
+                                                            if (event.key === 'Enter') {
+                                                                salvarEdicaoConversa(conv.id)
+                                                            } else if (event.key === 'Escape') {
+                                                                cancelarEdicaoConversa()
+                                                            }
+                                                        }}
+                                                        className="w-full rounded-xl border border-white/10 bg-[#0f1116] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-[#6f86d6]/60"
+                                                        autoFocus
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        onClick={() => onSelectConversation(conv.id)}
+                                                        className="w-full text-left"
+                                                    >
+                                                        <p className="truncate text-sm text-white">{conv.title}</p>
+                                                        <p className="text-xs text-neutral-500">
+                                                            {new Date(conv.updatedAt).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}
+                                                            {conv.messages.length > 0 && ` · ${conv.messages.length} mensagens`}
+                                                        </p>
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {estaEditando ? (
+                                                <div className="flex items-center gap-1">
+                                                    <button
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={() => salvarEdicaoConversa(conv.id)}
+                                                        className="shrink-0 rounded-lg p-1.5 text-[#cad6ff] transition-colors hover:bg-[#2c3b68] hover:text-white"
+                                                        title="Salvar nome da conversa"
+                                                    >
+                                                        <Check size={14} />
+                                                    </button>
+                                                    <button
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={cancelarEdicaoConversa}
+                                                        className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-white/10 hover:text-white"
+                                                        title="Cancelar edição"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => iniciarEdicaoConversa(conv)}
+                                                        className="shrink-0 rounded-lg p-1.5 text-neutral-500 opacity-0 transition-all group-hover:opacity-100 hover:bg-white/10 hover:text-white"
+                                                        title="Renomear conversa"
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm(`Excluir "${conv.title}"?`)) {
+                                                                onDeleteConversation(conv.id)
+                                                            }
+                                                        }}
+                                                        className="shrink-0 rounded-lg p-1.5 text-neutral-500 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400"
+                                                        title="Excluir conversa"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                    <ChevronRight size={16} className="shrink-0 text-neutral-600 transition-colors group-hover:text-neutral-400" />
+                                                </>
+                                            )}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </section>
                 </div>
             </div>
         </motion.div>

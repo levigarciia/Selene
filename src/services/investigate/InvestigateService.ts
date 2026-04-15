@@ -47,6 +47,65 @@ type ContextoExecucaoInvestigacao = {
     conversationId?: string
     projectId?: string
 }
+type EscopoDecomposicao = 'amplo' | 'focado' | 'específico'
+
+interface FaseDecomposicao extends InvestigationPhase {
+    decompositionData?: {
+        ambiguities: string[]
+        contextNeeded: string[]
+        scope: EscopoDecomposicao
+    }
+}
+
+interface RespostaSubPergunta {
+    question?: string
+    reasoning?: string
+    priority?: number
+}
+
+interface RespostaDecomposicao {
+    subQuestions?: RespostaSubPergunta[]
+    ambiguities?: string[]
+    contextNeeded?: string[]
+    scope?: EscopoDecomposicao
+}
+
+interface ResultadoFerramentaInvestigacao {
+    results?: Array<{
+        title?: string
+        content?: string
+        snippet?: string
+        url?: string
+    }>
+    formattedForAI?: string
+}
+
+interface RespostaContradicao {
+    topic?: string
+    summary?: string
+}
+
+interface RespostaValidacao {
+    consistencies?: string[]
+    contradictions?: RespostaContradicao[]
+    gaps?: string[]
+    nextQueries?: string[]
+    missingEvidence?: string[]
+    overallAssessment?: 'suficiente' | 'parcial' | 'insuficiente'
+}
+
+function obterMensagemErro(erro: unknown, fallback: string): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    if (typeof erro === 'object' && erro !== null && 'message' in erro) {
+        const mensagem = (erro as { message?: unknown }).message
+        if (typeof mensagem === 'string' && mensagem.trim()) {
+            return mensagem
+        }
+    }
+    return fallback
+}
 
 // ============================================================================
 // INVESTIGATE SERVICE v2
@@ -210,11 +269,12 @@ class InvestigateServiceV2 {
             // FASES 3-5: Collection → Validation → Loop → Synthesis
             await this.runCollectionValidationLoop()
 
-        } catch (error: any) {
-            if (error.message === 'Cancelled') {
+        } catch (error: unknown) {
+            const mensagemErro = obterMensagemErro(error, 'Falha desconhecida')
+            if (mensagemErro === 'Cancelled') {
                 this.currentTrace!.state = 'cancelled'
                 this.notify('cancelled', 'Investigação cancelada')
-            } else if (error.message === 'Timeout') {
+            } else if (mensagemErro === 'Timeout') {
                 // Timeout: sintetiza com o que já tem
                 console.log('[InvestigateV2] Timeout reached, synthesizing with available data...')
                 this.currentTrace!.errors.push({
@@ -539,12 +599,12 @@ class InvestigateServiceV2 {
 
         try {
             const response = await this.chatFn!(prompt)
-            const parsed = this.parseJSON(response)
+            const parsed = this.parseJSON(response) as RespostaDecomposicao | null
 
             if (parsed?.subQuestions) {
                 this.currentTrace!.subQuestions = parsed.subQuestions
                     .slice(0, INVESTIGATION_LIMITS.MAX_SUB_QUESTIONS)
-                    .map((sq: any, idx: number) => ({
+                    .map((sq, idx: number) => ({
                         id: uuidv4(),
                         question: sq.question || '',
                         reasoning: sq.reasoning || '',
@@ -558,7 +618,7 @@ class InvestigateServiceV2 {
 
             // Guarda info para checkpoint de alinhamento
             if (parsed) {
-                (this.currentTrace!.phases[1] as any).decompositionData = {
+                (this.currentTrace!.phases[1] as FaseDecomposicao).decompositionData = {
                     ambiguities: parsed.ambiguities || [],
                     contextNeeded: parsed.contextNeeded || [],
                     scope: parsed.scope || 'focado'
@@ -568,8 +628,8 @@ class InvestigateServiceV2 {
             this.updatePhase('decomposition', 'completed', parsed)
             this.notify('phase_completed', `${this.currentTrace!.subQuestions.length} sub-perguntas identificadas`)
 
-        } catch (error: any) {
-            this.updatePhase('decomposition', 'failed', null, error.message)
+        } catch (error: unknown) {
+            this.updatePhase('decomposition', 'failed', null, obterMensagemErro(error, 'Falha na decomposição'))
             throw error
         }
     }
@@ -581,7 +641,7 @@ class InvestigateServiceV2 {
     private async runAlignmentCheck(): Promise<boolean> {
         this.updatePhase('clarification', 'running')
         
-        const decompositionData = (this.currentTrace!.phases.find(p => p.name === 'decomposition') as any)?.decompositionData
+        const decompositionData = (this.currentTrace!.phases.find((p) => p.name === 'decomposition') as FaseDecomposicao | undefined)?.decompositionData
         const reasons: ClarificationReason[] = []
         const clarifyingQuestions: string[] = []
 
@@ -658,12 +718,12 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
 
             try {
                 const response = await this.chatFn!(prompt)
-                const parsed = this.parseJSON(response)
+                const parsed = this.parseJSON(response) as RespostaDecomposicao | null
                 
                 if (parsed?.subQuestions) {
                     this.currentTrace!.subQuestions = parsed.subQuestions
                         .slice(0, INVESTIGATION_LIMITS.MAX_SUB_QUESTIONS)
-                        .map((sq: any, idx: number) => ({
+                        .map((sq, idx: number) => ({
                             id: uuidv4(),
                             question: sq.question || '',
                             reasoning: sq.reasoning || '',
@@ -793,7 +853,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
 
                 subQ.status = 'collected'
 
-            } catch (error: any) {
+            } catch (error: unknown) {
                 console.error('[InvestigateV2] Collection error:', error)
                 subQ.status = 'failed'
             }
@@ -883,7 +943,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
 
     private extractEvidenceFromToolCall(call: ToolCall, subQ: SubQuestion): Evidence[] {
         const evidence: Evidence[] = []
-        const data = call.result?.data as any
+        const data = call.result?.data as ResultadoFerramentaInvestigacao | undefined
 
         if (!data) return evidence
 
@@ -1055,15 +1115,19 @@ ${evidenceSummary}
 
         try {
             const response = await this.chatFn!(prompt)
-            const parsed = this.parseJSON(response)
+            const parsed = this.parseJSON(response) as RespostaValidacao | null
 
             const result: ValidationResult = {
                 consistencies: parsed?.consistencies || [],
-                contradictions: (parsed?.contradictions || []).map((c: any) => ({
-                    topic: c.topic || 'Conflito',
-                    claim1: { evidenceId: '', summary: c.summary?.split(' vs ')[0] || c.summary, source: '' },
-                    claim2: { evidenceId: '', summary: c.summary?.split(' vs ')[1] || '', source: '' }
-                })),
+                contradictions: (parsed?.contradictions || []).map((c) => {
+                    const resumo = c.summary || ''
+                    const [parteUm = resumo, parteDois = ''] = resumo.split(' vs ')
+                    return {
+                        topic: c.topic || 'Conflito',
+                        claim1: { evidenceId: '', summary: parteUm, source: '' },
+                        claim2: { evidenceId: '', summary: parteDois, source: '' }
+                    }
+                }),
                 gaps: parsed?.gaps || [],
                 nextQueries: parsed?.nextQueries || [],
                 missingEvidence: parsed?.missingEvidence || [],
@@ -1079,9 +1143,9 @@ ${evidenceSummary}
 
             return result
 
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[InvestigateV2] Validation error:', error)
-            this.updatePhase('validation', 'failed', null, error.message)
+            this.updatePhase('validation', 'failed', null, obterMensagemErro(error, 'Falha na validação'))
             
             return {
                 consistencies: [],
@@ -1150,7 +1214,7 @@ ${validationNotes || '(Sem validação adicional)'}
             
             // Extrai citações usadas
             const citationMatches = response.match(/\[(\d+)\]/g) || []
-            const usedCitations = [...new Set(citationMatches.map(m => parseInt(m.replace(/[\[\]]/g, ''))))]
+            const usedCitations = [...new Set(citationMatches.map((m) => parseInt(m.replaceAll('[', '').replaceAll(']', ''), 10)))]
             
             this.currentTrace!.citations = usedCitations
                 .filter(n => n <= evidence.length)
@@ -1171,9 +1235,10 @@ ${validationNotes || '(Sem validação adicional)'}
             this.updatePhase('synthesis', 'completed')
             this.notify('completed', 'Investigação concluída')
 
-        } catch (error: any) {
-            this.updatePhase('synthesis', 'failed', null, error.message)
-            this.currentTrace!.finalAnswer = `Não foi possível sintetizar: ${error.message}`
+        } catch (error: unknown) {
+            const mensagemErro = obterMensagemErro(error, 'Falha na síntese')
+            this.updatePhase('synthesis', 'failed', null, mensagemErro)
+            this.currentTrace!.finalAnswer = `Não foi possível sintetizar: ${mensagemErro}`
             this.currentTrace!.state = 'failed'
             throw error
         }
@@ -1277,7 +1342,7 @@ ${validationNotes || '(Sem validação adicional)'}
         const ts = Date.parse(limpa)
         if (!Number.isNaN(ts)) return ts
 
-        const matchBr = limpa.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/)
+        const matchBr = limpa.match(/(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/)
         if (matchBr) {
             const dia = Number(matchBr[1])
             const mes = Number(matchBr[2]) - 1
@@ -1286,7 +1351,7 @@ ${validationNotes || '(Sem validação adicional)'}
             return Number.isNaN(parsed) ? null : parsed
         }
 
-        const matchIso = limpa.match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/)
+        const matchIso = limpa.match(/(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})/)
         if (matchIso) {
             const ano = Number(matchIso[1])
             const mes = Number(matchIso[2]) - 1
@@ -1360,7 +1425,7 @@ ${validationNotes || '(Sem validação adicional)'}
         this.currentTrace.currentPhase = name
     }
 
-    private parseJSON(text: string): any | null {
+    private parseJSON(text: string): unknown | null {
         try {
             return JSON.parse(text)
         } catch {
@@ -1368,7 +1433,9 @@ ${validationNotes || '(Sem validação adicional)'}
             if (match) {
                 try {
                     return JSON.parse(match[1].trim())
-                } catch { }
+                } catch {
+                    return null
+                }
             }
             const jsonMatch = text.match(/\{[\s\S]*\}/)
             if (jsonMatch) {
@@ -1395,12 +1462,13 @@ ${validationNotes || '(Sem validação adicional)'}
                 return 'Identificando sub-perguntas...'
             case 'awaiting_clarification':
                 return 'Aguardando seu esclarecimento...'
-            case 'collecting':
+            case 'collecting': {
                 const collecting = this.currentTrace.subQuestions.find(sq => sq.status === 'collecting')
                 if (collecting) {
                     return `Pesquisando: "${collecting.question.slice(0, 40)}..."`
                 }
                 return `Coletando informações (iteração ${this.currentTrace.currentIteration})...`
+            }
             case 'validating':
                 return 'Validando e cruzando informações...'
             case 'synthesizing':

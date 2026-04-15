@@ -28,6 +28,7 @@ import {
     areSimilar
 } from './MemoryExtractor'
 import { pertenceAoEscopo } from './escopoMemoria'
+import { carregarMapaProjetosPorConversa } from '../conversasPersistidas'
 
 
 // ============================================================================
@@ -544,16 +545,7 @@ export async function processUserMessage(
 
 function migrarMemoriasPorProjeto(memorias: AutoMemory[]): AutoMemory[] {
     try {
-        const conversasSalvas = localStorage.getItem('selene_conversations')
-        if (!conversasSalvas) return memorias
-
-        const conversas = JSON.parse(conversasSalvas) as Array<{ id: string; projectId?: string }>
-        const mapaProjetos = new Map<string, string>()
-        for (const conversa of conversas) {
-            if (conversa.projectId) {
-                mapaProjetos.set(conversa.id, conversa.projectId)
-            }
-        }
+        const mapaProjetos = carregarMapaProjetosPorConversa()
         if (mapaProjetos.size === 0) return memorias
 
         let alterou = false

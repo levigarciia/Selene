@@ -2,7 +2,17 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { AIProvider } from '../AIProvider'
 import type { OpcoesRequisicaoIA } from '../AIProvider'
 import type { MetaFimStream } from '../AIProvider'
-import type { MensagemChat } from '../types'
+import type { ConteudoMultimodal, MensagemChat } from '../types'
+
+type GeminiChunkParcial = {
+    candidates?: Array<{
+        finishReason?: string
+        content?: {
+            parts?: Array<{ text?: string; thought?: boolean; type?: string }>
+        }
+    }>
+    text?: () => string
+}
 
 export class GeminiProvider implements AIProvider {
     private client: GoogleGenerativeAI | null = null
@@ -21,11 +31,7 @@ export class GeminiProvider implements AIProvider {
         if (!this.client) throw new Error('Gemini não configurado.')
         if (opcoes.signal?.aborted) throw criarErroAbortado()
         try {
-            const systemInstruction = mensagens.find((m) => m.role === 'system')?.content
-            const conteudo = mensagens
-                .filter((m) => m.role !== 'system')
-                .map((m) => `${m.role === 'assistant' ? 'Assistente:' : 'Usuário:'}\n${m.content}`)
-                .join('\n\n')
+            const { systemInstruction, conteudo } = this.normalizarMensagensParaGemini(mensagens)
 
             const generationConfig = this.construirConfigGeracao(opcoes)
             const model = this.client.getGenerativeModel({
@@ -37,9 +43,9 @@ export class GeminiProvider implements AIProvider {
             if (opcoes.signal?.aborted) throw criarErroAbortado()
             const response = await result.response
             return response.text()
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erro no chat Gemini:', error)
-            throw new Error(`Erro Gemini: ${error.message || 'Erro desconhecido'}`)
+            throw new Error(`Erro Gemini: ${this.obterMensagemErro(error, 'Erro desconhecido')}`)
         }
     }
 
@@ -51,11 +57,7 @@ export class GeminiProvider implements AIProvider {
         if (!this.client) throw new Error('Gemini não configurado.')
         if (opcoes.signal?.aborted) throw criarErroAbortado()
         try {
-            const systemInstruction = mensagens.find((m) => m.role === 'system')?.content
-            const conteudo = mensagens
-                .filter((m) => m.role !== 'system')
-                .map((m) => `${m.role === 'assistant' ? 'Assistente:' : 'Usuário:'}\n${m.content}`)
-                .join('\n\n')
+            const { systemInstruction, conteudo } = this.normalizarMensagensParaGemini(mensagens)
 
             const generationConfig = this.construirConfigGeracao(opcoes)
             const model = this.client.getGenerativeModel({
@@ -69,8 +71,9 @@ export class GeminiProvider implements AIProvider {
 
             for await (const chunk of result.stream) {
                 if (opcoes.signal?.aborted) throw criarErroAbortado()
-                finishReason = this.normalizarFinishReasonGemini((chunk as any)?.candidates?.[0]?.finishReason)
-                const partes = this.extrairPartesTextoGemini(chunk as any)
+                const chunkParcial = chunk as GeminiChunkParcial
+                finishReason = this.normalizarFinishReasonGemini(chunkParcial.candidates?.[0]?.finishReason)
+                const partes = this.extrairPartesTextoGemini(chunkParcial)
                 if (partes.raciocinio) {
                     opcoes.onEventoStream?.({
                         tipo: 'raciocinio',
@@ -83,9 +86,9 @@ export class GeminiProvider implements AIProvider {
                 }
             }
             opcoes.onFimStream?.({ finishReason })
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erro no streaming Gemini:', error)
-            throw new Error(`Erro Gemini: ${error.message || 'Erro desconhecido'}`)
+            throw new Error(`Erro Gemini: ${this.obterMensagemErro(error, 'Erro desconhecido')}`)
         }
     }
 
@@ -117,20 +120,33 @@ export class GeminiProvider implements AIProvider {
     async analisarImagem(pergunta: string, dataUrl: string, opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('Gemini não configurado.')
         if (opcoes.signal?.aborted) throw criarErroAbortado()
-        const { base64, mimeType } = this.extrairBase64(dataUrl)
         const systemInstruction = this.resolverInstrucaoSistemaImagem(opcoes)
+        const mensagens: MensagemChat[] = []
+        if (systemInstruction) {
+            mensagens.push({ role: 'system', content: systemInstruction })
+        }
+        if (Array.isArray(opcoes.historico) && opcoes.historico.length > 0) {
+            mensagens.push(...opcoes.historico.map((mensagem) => ({
+                role: mensagem.role,
+                content: mensagem.images?.length
+                    ? this.criarConteudoMultimodalGemini(mensagem.content, mensagem.images)
+                    : mensagem.content
+            })))
+        }
+        mensagens.push({
+            role: 'user',
+            content: this.criarConteudoMultimodalGemini(pergunta, [dataUrl])
+        })
+        const promptGemini = this.normalizarMensagensParaGemini(mensagens)
 
         const generationConfig = this.construirConfigGeracao(opcoes)
         const model = this.client.getGenerativeModel({
             model: 'gemini-2.0-flash',
-            ...(systemInstruction ? { systemInstruction } : {}),
+            ...(promptGemini.systemInstruction ? { systemInstruction: promptGemini.systemInstruction } : {}),
             ...(generationConfig ? { generationConfig } : {})
         })
 
-        const result = await model.generateContent([
-            { text: pergunta },
-            { inlineData: { data: base64, mimeType } }
-        ])
+        const result = await model.generateContent(promptGemini.conteudo)
         if (opcoes.signal?.aborted) throw criarErroAbortado()
         return result.response.text()
     }
@@ -144,26 +160,40 @@ export class GeminiProvider implements AIProvider {
         if (!this.client) throw new Error('Gemini não configurado.')
         if (opcoes.signal?.aborted) throw criarErroAbortado()
         try {
-            const { base64, mimeType } = this.extrairBase64(dataUrl)
             const systemInstruction = this.resolverInstrucaoSistemaImagem(opcoes)
+            const mensagens: MensagemChat[] = []
+            if (systemInstruction) {
+                mensagens.push({ role: 'system', content: systemInstruction })
+            }
+            if (Array.isArray(opcoes.historico) && opcoes.historico.length > 0) {
+                mensagens.push(...opcoes.historico.map((mensagem) => ({
+                    role: mensagem.role,
+                    content: mensagem.images?.length
+                        ? this.criarConteudoMultimodalGemini(mensagem.content, mensagem.images)
+                        : mensagem.content
+                })))
+            }
+            mensagens.push({
+                role: 'user',
+                content: this.criarConteudoMultimodalGemini(pergunta, [dataUrl])
+            })
+            const promptGemini = this.normalizarMensagensParaGemini(mensagens)
 
             const generationConfig = this.construirConfigGeracao(opcoes)
             const model = this.client.getGenerativeModel({
                 model: 'gemini-2.0-flash',
-                ...(systemInstruction ? { systemInstruction } : {}),
+                ...(promptGemini.systemInstruction ? { systemInstruction: promptGemini.systemInstruction } : {}),
                 ...(generationConfig ? { generationConfig } : {})
             })
 
-            const result = await model.generateContentStream([
-                { text: pergunta },
-                { inlineData: { data: base64, mimeType } }
-            ])
+            const result = await model.generateContentStream(promptGemini.conteudo)
             let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of result.stream) {
                 if (opcoes.signal?.aborted) throw criarErroAbortado()
-                finishReason = this.normalizarFinishReasonGemini((chunk as any)?.candidates?.[0]?.finishReason)
-                const partes = this.extrairPartesTextoGemini(chunk as any)
+                const chunkParcial = chunk as GeminiChunkParcial
+                finishReason = this.normalizarFinishReasonGemini(chunkParcial.candidates?.[0]?.finishReason)
+                const partes = this.extrairPartesTextoGemini(chunkParcial)
                 if (partes.raciocinio) {
                     opcoes.onEventoStream?.({
                         tipo: 'raciocinio',
@@ -176,10 +206,17 @@ export class GeminiProvider implements AIProvider {
                 }
             }
             opcoes.onFimStream?.({ finishReason })
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erro no streaming de imagem Gemini:', error)
-            throw new Error(`Erro Gemini: ${error.message || 'Erro desconhecido'}`)
+            throw new Error(`Erro Gemini: ${this.obterMensagemErro(error, 'Erro desconhecido')}`)
         }
+    }
+
+    private obterMensagemErro(erro: unknown, fallback: string): string {
+        if (erro instanceof Error && erro.message) {
+            return erro.message
+        }
+        return fallback
     }
 
     private async blobToBase64(blob: Blob): Promise<string> {
@@ -194,6 +231,17 @@ export class GeminiProvider implements AIProvider {
         const [cabecalho, base64] = dataUrl.split(',')
         const mimeType = cabecalho?.split(':')[1]?.split(';')[0] || 'image/png'
         return { base64: base64 || '', mimeType }
+    }
+
+    private criarConteudoMultimodalGemini(texto: string, imagens: string[]): ConteudoMultimodal[] {
+        const conteudo: ConteudoMultimodal[] = []
+        if (texto.trim()) {
+            conteudo.push({ type: 'text', text: texto })
+        }
+        for (const imagem of imagens) {
+            conteudo.push({ type: 'image_url', image_url: { url: imagem } })
+        }
+        return conteudo
     }
 
     private pareceRecusa(texto: string) {
@@ -227,7 +275,7 @@ export class GeminiProvider implements AIProvider {
         return 'other'
     }
 
-    private extrairPartesTextoGemini(chunk: any): { conteudo: string; raciocinio: string } {
+    private extrairPartesTextoGemini(chunk: GeminiChunkParcial): { conteudo: string; raciocinio: string } {
         const partes = chunk?.candidates?.[0]?.content?.parts
         if (!Array.isArray(partes) || partes.length === 0) {
             const texto = typeof chunk?.text === 'function' ? chunk.text() : ''
@@ -250,6 +298,44 @@ export class GeminiProvider implements AIProvider {
         }
 
         return { conteudo, raciocinio }
+    }
+
+    private normalizarMensagensParaGemini(mensagens: MensagemChat[]): {
+        systemInstruction?: string
+        conteudo: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }>
+    } {
+        const system = mensagens.find((mensagem) => mensagem.role === 'system')
+        const systemInstruction = typeof system?.content === 'string' ? system.content : undefined
+        const conteudo: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = []
+
+        for (const mensagem of mensagens) {
+            if (mensagem.role === 'system') continue
+
+            conteudo.push({ text: `${mensagem.role === 'assistant' ? 'Assistente' : 'Usuário'}:\n` })
+
+            if (typeof mensagem.content === 'string') {
+                conteudo.push({ text: mensagem.content })
+            } else {
+                for (const parte of mensagem.content) {
+                    if (parte.type === 'text') {
+                        conteudo.push({ text: parte.text })
+                        continue
+                    }
+
+                    const { base64, mimeType } = this.extrairBase64(parte.image_url.url)
+                    conteudo.push({
+                        inlineData: {
+                            data: base64,
+                            mimeType
+                        }
+                    })
+                }
+            }
+
+            conteudo.push({ text: '\n\n' })
+        }
+
+        return { systemInstruction, conteudo }
     }
 }
 

@@ -1,4 +1,4 @@
-import type { MensagemChat } from './types'
+import type { MensagemChat, MensagemHistoricoIA, PerfilLatencia } from './types'
 
 export interface MetaFimStream {
     finishReason?: 'stop' | 'length' | 'other' | null
@@ -17,7 +17,9 @@ export interface OpcoesRequisicaoIA {
     signal?: AbortSignal
     temperature?: number
     perfilGeracao?: string
+    perfilLatencia?: PerfilLatencia
     systemPromptOverride?: string
+    historico?: MensagemHistoricoIA[]
     onEventoStream?: (evento: EventoStreamIA) => void
     onFimStream?: (meta: MetaFimStream) => void
 }

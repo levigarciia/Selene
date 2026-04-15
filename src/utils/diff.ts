@@ -33,7 +33,7 @@ const construirMatrizLcs = (originais: string[], novas: string[]) => {
 
 // Tokeniza mantendo pontuação e espaços como tokens separados para reconstrução fiel
 const tokenizar = (texto: string): string[] => {
-  return texto.split(/([^\w\záàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]+)/).filter(Boolean)
+  return texto.split(/([^\wáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]+)/).filter(Boolean)
 }
 
 const gerarDiffPalavras = (textoAntigo: string, textoNovo: string): ParteDiff[] => {

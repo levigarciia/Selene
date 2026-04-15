@@ -1,7 +1,10 @@
-export type MensagemChat = { role: 'system' | 'user' | 'assistant'; content: string }
+export type PerfilLatencia = 'rapido' | 'equilibrado' | 'completo'
 export type AcaoTexto = 'corrigir' | 'markdown' | 'resumir' | 'detalhar' | 'reescrever'
 export type TomTexto = 'formal' | 'casual' | 'tecnico'
 export type ConteudoMultimodal = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+export type ConteudoMensagemChat = string | ConteudoMultimodal[]
+export type MensagemHistoricoIA = { role: 'user' | 'assistant'; content: string; images?: string[] }
+export type MensagemChat = { role: 'system' | 'user' | 'assistant'; content: ConteudoMensagemChat }
 
 // Provedores suportados
 export type ProvedorID = 'openai' | 'gemini' | 'openrouter' | 'lmstudio'

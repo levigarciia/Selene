@@ -69,13 +69,13 @@ export function useMemoryAutopilot(): MemoryAutopilotState & MemoryAutopilotActi
         setMemories(autopilot.getMemories())
         setStats(autopilot.getStats())
         setMetrics(autopilot.getMetrics())
-    }, [autopilot])
+    }, [autopilot, setEnabledState, setMemories, setStats, setMetrics])
 
     // Toggle enabled
     const setEnabled = useCallback((value: boolean) => {
         autopilot.setEnabled(value)
         setEnabledState(value)
-    }, [autopilot])
+    }, [autopilot, setEnabledState])
 
     // Remover memória
     const removeMemory = useCallback((id: string) => {

@@ -107,17 +107,18 @@ export class GroqWhisperService {
             console.log(`[GroqWhisper] Result: "${text.substring(0, 100)}..."`)
 
             return text
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[GroqWhisper] ❌ Transcription failed:', error)
+            const mensagemErro = error instanceof Error ? error.message : 'Erro desconhecido'
             
-            if (error.message?.includes('401')) {
+            if (mensagemErro.includes('401')) {
                 throw new Error('Groq API key inválida. Verifique sua chave em console.groq.com')
             }
-            if (error.message?.includes('429')) {
+            if (mensagemErro.includes('429')) {
                 throw new Error('Rate limit Groq atingido. Aguarde alguns segundos.')
             }
             
-            throw new Error(`Transcrição Groq falhou: ${error.message}`)
+            throw new Error(`Transcrição Groq falhou: ${mensagemErro}`)
         }
     }
 

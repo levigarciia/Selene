@@ -3,7 +3,7 @@
  * Component for managing local Whisper models (download, delete, status)
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Download, Trash2, Check, AlertCircle, Loader2, HardDrive, Mic } from 'lucide-react'
 
@@ -18,6 +18,13 @@ interface WhisperModel {
     path: string
 }
 
+function obterMensagemErro(erro: unknown, fallback: string): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return fallback
+}
+
 interface DownloadProgress {
     modelName: string
     downloaded: number
@@ -30,7 +37,6 @@ export function LocalWhisperModelManager() {
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
-    const [selectedModel, setSelectedModel] = useState<string>('base')
     const [isAvailable, setIsAvailable] = useState(false)
 
     // Load models on mount
@@ -48,7 +54,7 @@ export function LocalWhisperModelManager() {
             setDownloadProgress(data)
         })
 
-        const unsubComplete = api.onDownloadComplete((data) => {
+        const unsubComplete = api.onDownloadComplete(() => {
             setDownloadProgress(null)
             loadModels() // Refresh list
         })
@@ -75,8 +81,8 @@ export function LocalWhisperModelManager() {
             } else {
                 setError(result?.error || 'Failed to load models')
             }
-        } catch (err: any) {
-            setError(err.message || 'Failed to load models')
+        } catch (erro) {
+            setError(obterMensagemErro(erro, 'Failed to load models'))
         } finally {
             setIsLoading(false)
         }
@@ -98,8 +104,8 @@ export function LocalWhisperModelManager() {
             if (!result?.success) {
                 setError(result?.error || 'Download failed')
             }
-        } catch (err: any) {
-            setError(err.message || 'Download failed')
+        } catch (erro) {
+            setError(obterMensagemErro(erro, 'Download failed'))
         }
     }
 
@@ -108,8 +114,8 @@ export function LocalWhisperModelManager() {
             await window.electronAPI?.localWhisper?.cancelDownload(modelName)
             setDownloadProgress(null)
             loadModels()
-        } catch (err: any) {
-            setError(err.message || 'Failed to cancel download')
+        } catch (erro) {
+            setError(obterMensagemErro(erro, 'Failed to cancel download'))
         }
     }
 
@@ -122,8 +128,8 @@ export function LocalWhisperModelManager() {
             } else {
                 setError(result?.error || 'Failed to delete model')
             }
-        } catch (err: any) {
-            setError(err.message || 'Failed to delete model')
+        } catch (erro) {
+            setError(obterMensagemErro(erro, 'Failed to delete model'))
         }
     }
 

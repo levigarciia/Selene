@@ -197,11 +197,11 @@ export const webSearchHandler: ToolHandler = async (args, context): Promise<Tool
                 displayResults
             }
         }
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[WebSearchTool] Error:', error)
         return {
             success: false,
-            error: error.message || 'Web search failed'
+            error: error instanceof Error ? error.message : 'Web search failed'
         }
     }
 }

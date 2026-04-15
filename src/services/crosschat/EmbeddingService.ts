@@ -26,7 +26,7 @@ interface EmbeddingCacheStore {
 // CACHE EM MEMÓRIA
 // ============================================================================
 
-let memoryCache: Map<string, number[]> = new Map()
+const memoryCache: Map<string, number[]> = new Map()
 
 // ============================================================================
 // UTILITÁRIOS

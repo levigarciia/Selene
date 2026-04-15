@@ -2,6 +2,32 @@ import { ipcRenderer, contextBridge } from 'electron'
 
 console.log('[preload] inicializado', { contextIsolation: process.contextIsolated })
 
+type MensagemChatIPC = {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+    timestamp: number
+    images?: string[]
+    imagensContexto?: Array<{
+        src: string
+        resumo?: string
+        statusResumo?: 'pendente' | 'gerando' | 'concluido' | 'falhou'
+    }>
+    raciocinio?: string
+}
+
+type StatusAtualizacaoIPC = {
+    status: string
+    version?: string
+    progress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
+    error?: string
+    currentVersion?: string
+    releaseNotes?: string
+    releaseDate?: string
+}
+
+type ConfigWhisperLegado = Record<string, unknown>
+
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld('electronAPI', {
     setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => {
@@ -68,17 +94,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('chat-receber-screenshot', listener)
         return () => ipcRenderer.removeListener('chat-receber-screenshot', listener)
     },
-    openExpandedChat: (messages: any[]) => {
+    openExpandedChat: (messages: MensagemChatIPC[]) => {
         ipcRenderer.send('open-expanded-chat', messages)
     },
-    onHydrateChat: (callback: (messages: any[]) => void) => {
-        const listener = (_event: any, messages: any[]) => callback(messages)
+    onHydrateChat: (callback: (messages: MensagemChatIPC[]) => void) => {
+        const listener = (_event: unknown, messages: MensagemChatIPC[]) => callback(messages)
         ipcRenderer.on('hydrate-chat', listener)
         return () => ipcRenderer.removeListener('hydrate-chat', listener)
     },
+    isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
     minimizeWindow: () => ipcRenderer.send('window-minimize'),
     toggleMaximizeWindow: () => ipcRenderer.send('window-maximize'),
     closeWindow: () => ipcRenderer.send('window-close'),
+    onWindowMaximizedChange: (callback: (maximizada: boolean) => void) => {
+        const listener = (_event: unknown, maximizada: boolean) => callback(maximizada)
+        ipcRenderer.on('window-maximized-change', listener)
+        return () => ipcRenderer.removeListener('window-maximized-change', listener)
+    },
     onCollapseToolbar: (callback: () => void) => {
         const listener = () => callback()
         ipcRenderer.on('collapse-toolbar', listener)
@@ -94,8 +126,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.send('install-update')
     },
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-    onUpdateStatus: (callback: (status: any) => void) => {
-        const listener = (_event: any, status: any) => callback(status)
+    onUpdateStatus: (callback: (status: StatusAtualizacaoIPC) => void) => {
+        const listener = (_event: unknown, status: StatusAtualizacaoIPC) => callback(status)
         ipcRenderer.on('update-status', listener)
         return () => ipcRenderer.removeListener('update-status', listener)
     },
@@ -105,10 +137,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     whisperBinaryExists: (binaryPath?: string) => ipcRenderer.invoke('whisper-binary-exists', binaryPath),
     whisperModelExists: (modelSize: string) => ipcRenderer.invoke('whisper-model-exists', modelSize),
     whisperDownloadModel: (modelSize: string) => ipcRenderer.invoke('whisper-download-model', modelSize),
-    whisperInitialize: (config: any) => ipcRenderer.invoke('whisper-initialize', config),
-    whisperTranscribe: (audioBuffer: Buffer, config: any) => ipcRenderer.invoke('whisper-transcribe', audioBuffer, config),
-    onWhisperDownloadProgress: (callback: (progress: any) => void) => {
-        const listener = (_event: any, progress: any) => callback(progress)
+    whisperInitialize: (config: ConfigWhisperLegado) => ipcRenderer.invoke('whisper-initialize', config),
+    whisperTranscribe: (audioBuffer: Buffer, config: ConfigWhisperLegado) => ipcRenderer.invoke('whisper-transcribe', audioBuffer, config),
+    onWhisperDownloadProgress: (callback: (progress: { percent: number; downloaded: number; total: number }) => void) => {
+        const listener = (_event: unknown, progress: { percent: number; downloaded: number; total: number }) => callback(progress)
         ipcRenderer.on('whisper-download-progress', listener)
         return () => ipcRenderer.removeListener('whisper-download-progress', listener)
     },
@@ -141,34 +173,43 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
         // Event listeners for download progress
         onDownloadProgress: (callback: (data: { modelName: string; downloaded: number; total: number; percent: number }) => void) => {
-            const handler = (_event: any, data: any) => callback(data)
+            const handler = (_event: unknown, data: { modelName: string; downloaded: number; total: number; percent: number }) => callback(data)
             ipcRenderer.on('whisper-local:download-progress', handler)
             return () => ipcRenderer.removeListener('whisper-local:download-progress', handler)
         },
         onDownloadComplete: (callback: (data: { modelName: string; success: boolean; path: string }) => void) => {
-            const handler = (_event: any, data: any) => callback(data)
+            const handler = (_event: unknown, data: { modelName: string; success: boolean; path: string }) => callback(data)
             ipcRenderer.on('whisper-local:download-complete', handler)
             return () => ipcRenderer.removeListener('whisper-local:download-complete', handler)
         },
         onDownloadError: (callback: (data: { modelName: string; error: string }) => void) => {
-            const handler = (_event: any, data: any) => callback(data)
+            const handler = (_event: unknown, data: { modelName: string; error: string }) => callback(data)
             ipcRenderer.on('whisper-local:download-error', handler)
             return () => ipcRenderer.removeListener('whisper-local:download-error', handler)
         },
         
         // Event listeners for transcription results
         onTranscriptionDelta: (callback: (data: { sessionId: string; delta: string; text: string; speakerLabel?: string }) => void) => {
-            const handler = (_event: any, data: any) => callback(data)
+            const handler = (_event: unknown, data: { sessionId: string; delta: string; text: string; speakerLabel?: string }) => {
+                console.log('[preload] whisper-local:transcription-delta', data.sessionId, data.text)
+                callback(data)
+            }
             ipcRenderer.on('whisper-local:transcription-delta', handler)
             return () => ipcRenderer.removeListener('whisper-local:transcription-delta', handler)
         },
         onTranscriptionComplete: (callback: (data: { sessionId: string; text: string; speakerLabel?: string }) => void) => {
-            const handler = (_event: any, data: any) => callback(data)
+            const handler = (_event: unknown, data: { sessionId: string; text: string; speakerLabel?: string }) => {
+                console.log('[preload] whisper-local:transcription-complete', data.sessionId, data.text)
+                callback(data)
+            }
             ipcRenderer.on('whisper-local:transcription-complete', handler)
             return () => ipcRenderer.removeListener('whisper-local:transcription-complete', handler)
         },
         onTranscriptionError: (callback: (data: { sessionId: string; error: string }) => void) => {
-            const handler = (_event: any, data: any) => callback(data)
+            const handler = (_event: unknown, data: { sessionId: string; error: string }) => {
+                console.log('[preload] whisper-local:transcription-error', data.sessionId, data.error)
+                callback(data)
+            }
             ipcRenderer.on('whisper-local:transcription-error', handler)
             return () => ipcRenderer.removeListener('whisper-local:transcription-error', handler)
         }

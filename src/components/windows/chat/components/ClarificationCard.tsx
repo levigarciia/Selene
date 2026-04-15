@@ -33,6 +33,7 @@ export const ClarificationCard: React.FC<ClarificationCardProps> = ({
     }
 
     const handleSkip = () => {
+        onSkip()
         onSubmit({
             answers: {},
             skipClarification: true

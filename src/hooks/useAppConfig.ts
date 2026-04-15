@@ -12,11 +12,13 @@
  * - Screenshots state
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { AIService } from '../services/AIService'
 import { ASSISTENTES_PADRAO } from '../utils/assistentesPadrao'
 import { useVoiceInput } from './useVoiceInput'
 import { useUserProfile } from './useUserProfile'
+import type { PerfilLatencia } from '../services/ai/types'
+import type { ConfiguracaoOverlayProativo, NivelIntervencaoOverlay } from '../types/overlayProativo'
 
 // ============================================
 // Types
@@ -35,6 +37,7 @@ export interface AppConfig {
     modeloOpenRouter: string
     modeloLmStudio: string
     baseUrlLmStudio: string
+    perfilLatencia: PerfilLatencia
     
     // System prompt
     systemPrompt: string
@@ -42,6 +45,9 @@ export interface AppConfig {
     // Shortcuts
     atalhoGramatical: string
     atalhoScreenshot: string
+
+    // Overlay proativo
+    overlayProativo: ConfiguracaoOverlayProativo
 }
 
 export interface UseAppConfigOptions {
@@ -56,6 +62,11 @@ export interface UseAppConfigOptions {
 
 const ATALHO_PADRAO = 'Control+Alt+X'
 const ATALHO_SCREENSHOT_PADRAO = 'Control+Alt+S'
+const OVERLAY_COOLDOWN_PADRAO_MS = 25_000
+
+function obterPerfilLatenciaPadrao(provedor: ProvedorAtivo): PerfilLatencia {
+    return provedor === 'lmstudio' ? 'rapido' : 'equilibrado'
+}
 
 // ============================================
 // Storage Helpers
@@ -72,6 +83,48 @@ function loadString(key: string, fallback: string): string {
 function saveString(key: string, value: string): void {
     try {
         localStorage.setItem(key, value)
+    } catch (e) {
+        console.warn(`[useAppConfig] Failed to save ${key}:`, e)
+    }
+}
+
+function loadNumber(key: string, fallback: number): number {
+    try {
+        const raw = localStorage.getItem(key)
+        if (!raw) return fallback
+        const valor = Number(raw)
+        return Number.isFinite(valor) ? valor : fallback
+    } catch {
+        return fallback
+    }
+}
+
+function saveNumber(key: string, value: number): void {
+    try {
+        localStorage.setItem(key, String(value))
+    } catch (e) {
+        console.warn(`[useAppConfig] Failed to save ${key}:`, e)
+    }
+}
+
+function loadNullableNumber(key: string): number | null {
+    try {
+        const raw = localStorage.getItem(key)
+        if (!raw) return null
+        const valor = Number(raw)
+        return Number.isFinite(valor) ? valor : null
+    } catch {
+        return null
+    }
+}
+
+function saveNullableNumber(key: string, value: number | null): void {
+    try {
+        if (value === null) {
+            localStorage.removeItem(key)
+            return
+        }
+        localStorage.setItem(key, String(value))
     } catch (e) {
         console.warn(`[useAppConfig] Failed to save ${key}:`, e)
     }
@@ -105,6 +158,10 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     const [provedorAtivo, setProvedorAtivoState] = useState<ProvedorAtivo>(() => 
         loadString('selene_provedor_ativo', 'openai') as ProvedorAtivo
     )
+    const [perfilLatencia, setPerfilLatenciaState] = useState<PerfilLatencia>(() => {
+        const provedorInicial = loadString('selene_provedor_ativo', 'openai') as ProvedorAtivo
+        return loadString('selene_perfil_latencia', obterPerfilLatenciaPadrao(provedorInicial)) as PerfilLatencia
+    })
     const [modeloOpenRouter, setModeloOpenRouterState] = useState(() => 
         loadString('selene_modelo_openrouter', '')
     )
@@ -128,6 +185,23 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     const [atalhoScreenshot, setAtalhoScreenshotState] = useState(() => 
         loadString('selene_atalho_screenshot', ATALHO_SCREENSHOT_PADRAO)
     )
+
+    // ========================================
+    // Overlay Proativo State
+    // ========================================
+
+    const [overlayProativoHabilitado, setOverlayProativoHabilitadoState] = useState(() =>
+        loadString('selene_overlay_proativo_habilitado', 'true') !== 'false'
+    )
+    const [overlayProativoNivelIntervencao, setOverlayProativoNivelIntervencaoState] = useState<NivelIntervencaoOverlay>(() =>
+        loadString('selene_overlay_proativo_nivel', 'equilibrado') as NivelIntervencaoOverlay
+    )
+    const [overlayProativoSonecaAte, setOverlayProativoSonecaAteState] = useState<number | null>(() =>
+        loadNullableNumber('selene_overlay_proativo_soneca_ate')
+    )
+    const [overlayProativoCooldownMs, setOverlayProativoCooldownMsState] = useState(() =>
+        loadNumber('selene_overlay_proativo_cooldown_ms', OVERLAY_COOLDOWN_PADRAO_MS)
+    )
     
     // ========================================
     // Screenshots State
@@ -139,11 +213,7 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     // AI Service
     // ========================================
     
-    const [aiService, setAiService] = useState<AIService | null>(null)
-    const aiServiceRef = useRef<AIService | null>(null)
-    const ultimaChaveUsadaRef = useRef<string>('')
-    
-    const criarOuObterServico = useCallback(() => {
+    const aiService = useMemo(() => {
         const chaveOpenAi = apiKey.trim()
         const chaveGemini = geminiKey.trim()
         const chaveOpenRouter = openRouterKey.trim()
@@ -151,27 +221,22 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         const modOpenRouter = modeloOpenRouter.trim()
         const modLmStudio = modeloLmStudio.trim()
 
-        const assinatura = [chaveOpenAi, chaveGemini, chaveOpenRouter, modOpenRouter, urlLmStudio, modLmStudio, provedorAtivo].join('|')
-
         if (!chaveOpenAi && !chaveGemini && !chaveOpenRouter && !urlLmStudio) {
             return null
         }
 
-        if (!aiServiceRef.current || ultimaChaveUsadaRef.current !== assinatura) {
-            const servico = new AIService({
-                activeProvider: provedorAtivo,
-                openai: chaveOpenAi ? { key: chaveOpenAi } : undefined,
-                gemini: chaveGemini ? { key: chaveGemini } : undefined,
-                openRouter: chaveOpenRouter ? { key: chaveOpenRouter, model: modOpenRouter } : undefined,
-                lmStudio: urlLmStudio ? { baseUrl: urlLmStudio, model: modLmStudio } : undefined
-            })
-            aiServiceRef.current = servico
-            setAiService(servico)
-            ultimaChaveUsadaRef.current = assinatura
-        }
-
-        return aiServiceRef.current
+        return new AIService({
+            activeProvider: provedorAtivo,
+            openai: chaveOpenAi ? { key: chaveOpenAi } : undefined,
+            gemini: chaveGemini ? { key: chaveGemini } : undefined,
+            openRouter: chaveOpenRouter ? { key: chaveOpenRouter, model: modOpenRouter } : undefined,
+            lmStudio: urlLmStudio ? { baseUrl: urlLmStudio, model: modLmStudio } : undefined
+        })
     }, [apiKey, geminiKey, openRouterKey, modeloOpenRouter, modeloLmStudio, baseUrlLmStudio, provedorAtivo])
+
+    const criarOuObterServico = useCallback(() => {
+        return aiService
+    }, [aiService])
     
     // ========================================
     // Setters with Persistence
@@ -193,8 +258,21 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     }, [])
     
     const setProvedorAtivo = useCallback((provedor: ProvedorAtivo) => {
-        setProvedorAtivoState(provedor)
+        setProvedorAtivoState((anterior) => {
+            const perfilAnteriorPadrao = obterPerfilLatenciaPadrao(anterior)
+            if (perfilLatencia === perfilAnteriorPadrao) {
+                const novoPerfilPadrao = obterPerfilLatenciaPadrao(provedor)
+                setPerfilLatenciaState(novoPerfilPadrao)
+                saveString('selene_perfil_latencia', novoPerfilPadrao)
+            }
+            return provedor
+        })
         saveString('selene_provedor_ativo', provedor)
+    }, [perfilLatencia])
+
+    const setPerfilLatencia = useCallback((perfil: PerfilLatencia) => {
+        setPerfilLatenciaState(perfil)
+        saveString('selene_perfil_latencia', perfil)
     }, [])
     
     const setModeloOpenRouter = useCallback((modelo: string) => {
@@ -226,6 +304,26 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         setAtalhoScreenshotState(atalho)
         saveString('selene_atalho_screenshot', atalho)
     }, [])
+
+    const setOverlayProativoHabilitado = useCallback((habilitado: boolean) => {
+        setOverlayProativoHabilitadoState(habilitado)
+        saveString('selene_overlay_proativo_habilitado', String(habilitado))
+    }, [])
+
+    const setOverlayProativoNivelIntervencao = useCallback((nivel: NivelIntervencaoOverlay) => {
+        setOverlayProativoNivelIntervencaoState(nivel)
+        saveString('selene_overlay_proativo_nivel', nivel)
+    }, [])
+
+    const setOverlayProativoSonecaAte = useCallback((timestamp: number | null) => {
+        setOverlayProativoSonecaAteState(timestamp)
+        saveNullableNumber('selene_overlay_proativo_soneca_ate', timestamp)
+    }, [])
+
+    const setOverlayProativoCooldownMs = useCallback((cooldownMs: number) => {
+        setOverlayProativoCooldownMsState(cooldownMs)
+        saveNumber('selene_overlay_proativo_cooldown_ms', cooldownMs)
+    }, [])
     
     // ========================================
     // Screenshot Helpers
@@ -254,21 +352,6 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     // ========================================
     
     const voiceInput = useVoiceInput(aiService)
-    
-    // ========================================
-    // Effects: AI Service Auto-Create
-    // ========================================
-    
-    useEffect(() => {
-        const temChave = apiKey || geminiKey || openRouterKey || baseUrlLmStudio.trim()
-        if (!temChave) {
-            setAiService(null)
-            aiServiceRef.current = null
-            ultimaChaveUsadaRef.current = ''
-            return
-        }
-        criarOuObterServico()
-    }, [apiKey, geminiKey, openRouterKey, modeloOpenRouter, modeloLmStudio, baseUrlLmStudio, systemPrompt, provedorAtivo, criarOuObterServico])
     
     // ========================================
     // Effects: Shortcut Registration
@@ -321,12 +404,19 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         geminiKey,
         openRouterKey,
         provedorAtivo,
+        perfilLatencia,
         modeloOpenRouter,
         modeloLmStudio,
         baseUrlLmStudio,
         systemPrompt,
         atalhoGramatical,
         atalhoScreenshot,
+        overlayProativo: {
+            habilitado: overlayProativoHabilitado,
+            nivelIntervencao: overlayProativoNivelIntervencao,
+            sonecaAte: overlayProativoSonecaAte,
+            cooldownMs: overlayProativoCooldownMs,
+        },
     }
     
     // ========================================
@@ -348,12 +438,21 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         // Provider Settings
         provedorAtivo,
         setProvedorAtivo,
+        perfilLatencia,
+        setPerfilLatencia,
         modeloOpenRouter,
         setModeloOpenRouter,
         modeloLmStudio,
         setModeloLmStudio,
         baseUrlLmStudio,
         setBaseUrlLmStudio,
+        modeloAtivo: provedorAtivo === 'lmstudio'
+            ? modeloLmStudio
+            : provedorAtivo === 'openrouter'
+            ? modeloOpenRouter
+            : provedorAtivo === 'openai'
+            ? 'gpt-4o'
+            : 'gemini-2.0-flash',
         systemPrompt,
         setSystemPrompt,
         
@@ -366,7 +465,14 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         setAtalhoGramatical,
         atalhoScreenshot,
         setAtalhoScreenshot,
-        
+
+        // Overlay Proativo
+        overlayProativoConfig: config.overlayProativo,
+        setOverlayProativoHabilitado,
+        setOverlayProativoNivelIntervencao,
+        setOverlayProativoSonecaAte,
+        setOverlayProativoCooldownMs,
+
         // Screenshots
         pendingScreenshots,
         setPendingScreenshots,
@@ -388,6 +494,10 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         // Voice Input shortcuts
         isRecording: voiceInput.isRecording,
         transcription: voiceInput.transcription,
+        transcriptionConfirmada: voiceInput.transcriptionConfirmada,
+        transcriptionParcial: voiceInput.transcriptionParcial,
+        ultimaAtualizacaoTranscricaoEm: voiceInput.ultimaAtualizacaoTranscricaoEm,
+        ultimaParadaGravacaoEm: voiceInput.ultimaParadaGravacaoEm,
         setTranscription: voiceInput.setTranscription,
         toggleRecording: voiceInput.toggleRecording,
     }

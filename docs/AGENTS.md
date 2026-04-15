@@ -1,249 +1,260 @@
-# Orientação para Agentes de IA (AGENTS.md)
+# Orientação para Agentes de IA
 
-👋 Olá, Agente! Se você foi instruído a manter, refatorar ou adicionar funcionalidades à **Selene**, este documento é para você. Ele contém o contexto arquitetural crucial e "regras de ouro" para garantir que você não quebre a funcionalidade principal do aplicativo.
+Este documento resume a arquitetura real da Selene para tarefas de manutenção, refatoração e adição de funcionalidades. Use-o como contexto operacional antes de alterar fluxos centrais. Sempre mantenha esse arquivo atualizado.
 
-## 🏗️ Arquitetura do Projeto
+## Visão Geral
 
-A Selene é um aplicativo **Electron + React + TypeScript**. A característica mais crítica é o seu comportamento de **janela transparente** (overlay).
+A Selene é um aplicativo `Electron + React + TypeScript` com três superfícies principais:
 
-### Estrutura de Pastas Chave
+- Overlay transparente em tela cheia, controlado por `src/App.tsx`
+- Janela dedicada de chat, aberta pelo processo principal
+- Janela dedicada do assistente gramatical
 
-```
+O núcleo do produto continua sendo o comportamento de overlay com click-through. Quase toda regressão séria no app nasce de mudanças indevidas nesse fluxo ou da quebra do contrato entre `main.ts`, `preload.ts` e o renderer.
+
+## Estrutura de Pastas Chave
+
+```text
 electron/
-├── main.ts           # Processo Principal - ciclo de vida, atalhos globais, polling de mouse
-├── preload.ts        # Ponte - APIs seguras via window.electronAPI
-├── updater.ts        # Módulo de auto-update
-└── whisper.ts        # Serviço de transcrição local (whisper.cpp)
+├── main.ts                     # Ciclo de vida, tray, atalhos globais e click-through
+├── preload.ts                  # Ponte segura via window.electronAPI
+├── updater.ts                  # Auto-update
+├── web-search.ts               # Busca web via processo principal
+├── mcp/                        # IPC e integração com servidores MCP
+└── local-whisper/              # Streaming/transcrição local com Whisper
 
 src/
-├── App.tsx           # Raiz do Renderizador - estado global, eventos de polling
-├── main.tsx          # Entry point React - roteamento de janelas
-├── components/
-│   ├── config/               # Componentes de configuração
-│   │   ├── SettingsPanel.tsx # COMPONENTE UNIFICADO de configurações
-│   │   ├── VoiceSettings.tsx # Configurações de transcrição
-│   │   └── ModalConfiguracoes.tsx # Wrapper modal para SettingsPanel
-│   ├── windows/
-│   │   ├── chat/             # ChatWindow e assistentes
-│   │   │   ├── ChatWindow.tsx
-│   │   │   ├── AssistantsPanel.tsx
-│   │   │   └── AssistantEditor.tsx
-│   │   └── grammar/
-│   │       └── GrammarWindow.tsx
-│   ├── modals/
-│   │   └── FloatingModal.tsx
-│   └── toolbar/
-│       └── BottomToolbar.tsx
+├── App.tsx                     # Overlay raiz, hover polling, screenshot e overlay proativo
 ├── hooks/
-│   ├── useAppConfig.ts       # HOOK CENTRALIZADO - todas as configurações
-│   ├── useAI.ts              # Serviço de IA (agora integrado em useAppConfig)
-│   ├── useVoiceInput.ts      # Entrada de voz e transcrição
-│   ├── useAssistants.ts      # Gerenciamento de assistentes
-│   ├── useCrossChatContext.ts # Contexto entre conversas
-│   └── useMemoryAutopilot.ts  # Memória automática
+│   ├── useAppConfig.ts         # Fonte central de configuração e persistência
+│   ├── useOverlayProativo.ts   # Orquestra intervenções do overlay
+│   ├── useCrossChatContext.ts  # Busca semântica entre conversas
+│   └── useMemoryAutopilot.ts   # Extração automática de memória
+├── components/
+│   ├── config/
+│   │   ├── SettingsPanel.tsx   # Superfície principal de configurações
+│   │   ├── SecaoPerfil.tsx
+│   │   ├── SecaoIA.tsx
+│   │   ├── SecaoPersonalizacao.tsx
+│   │   ├── SecaoAvancado.tsx
+│   │   ├── VoiceSettings.tsx
+│   │   ├── ModalConfiguracoes.tsx
+│   │   └── MCPPanel.tsx        # Painel dedicado de MCP
+│   ├── modals/
+│   │   ├── ReasoningTrailModal.tsx
+│   │   └── OverlayProativoModal.tsx
+│   └── windows/
+│       ├── chat/
+│       │   ├── ChatWindow.tsx
+│       │   ├── hooks/          # useChatUI, useChatShell, useSendMessage
+│       │   ├── components/     # sidebar, input, cards, drawers, hubs
+│       │   └── utils/
+│       └── grammar/
+│           └── GrammarWindow.tsx
 ├── services/
-│   ├── AIService.ts          # Abstração de provedores de IA
-│   ├── ai/providers/         # OpenAI, Gemini, OpenRouter, LMStudio
-│   ├── transcription/        # Serviços de transcrição
-│   ├── crosschat/            # Sistema de busca semântica
-│   └── memory/               # Sistema de memória automática
-└── utils/
-    └── assistentesPadrao.ts  # Assistentes padrão e tipos
+│   ├── AIService.ts
+│   ├── ProjectContextService.ts
+│   ├── conversasPersistidas.ts
+│   ├── ai/providers/           # OpenAI, Gemini, OpenRouter, LM Studio
+│   ├── tools/                  # Tool calling, executor, bridge MCP, built-ins
+│   ├── investigate/            # Pesquisa profunda e trilha de raciocínio
+│   ├── crosschat/              # Recuperação semântica por embeddings
+│   ├── memory/                 # Memória persistente e autopilot
+│   ├── overlay/                # Regras e heurísticas do overlay proativo
+│   └── whisper/                # Camada de transcrição
+└── types/
+    ├── chat.ts
+    ├── project.ts
+    └── overlayProativo.ts
 ```
 
----
+## Regras de Ouro
 
-## ⚠️ Regras de Ouro (Critical Safety Rules)
+### 1. Não quebre o click-through
 
-### 1. Não Quebre o "Click-Through" (Transparência)
+O overlay ocupa a tela inteira, mas deve permitir clique no resto do desktop.
 
-A janela do Electron ocupa a tela inteira, mas é transparente.
+Fluxo atual:
 
-**Como funciona:**
+1. `electron/main.ts` monitora o cursor com `checarCursor()`
+2. O renderer publica regiões clicáveis via IPC com `update-modal-regions`
+3. O processo principal alterna entre `pass_through`, `interativo` e `debug`
 
-1. O `electron/main.ts` faz polling da posição do mouse a 10Hz (`checarCursor`)
-2. O `App.tsx` recebe as coordenadas via `window.electronAPI.onCheckHover`
-3. Se o mouse estiver sobre um widget (`.pointer-events-auto`), ativamos a interação
-4. Se estiver no vazio, desativamos (`setIgnoreMouseEvents(true, { forward: true })`)
+Regras:
 
-**Regras:**
+- Não troque polling por `mousemove`; isso falha no overlay transparente
+- Não remova `pointer-events-none` do container raiz do overlay
+- Elementos clicáveis no overlay devem continuar usando `pointer-events-auto`
+- Mudanças em `setIgnoreMouseEvents` precisam preservar o diff de estado, sem spam de IPC
+- O modo de seleção de área e o `debug mode` têm exceções próprias; não simplifique essa lógica sem testar
 
-- ❌ Nunca remova a classe `pointer-events-none` do container raiz em `App.tsx` ou `index.css`
-- ✅ Widgets interativos **DEVEM** ter `pointer-events-auto`
-- ❌ Não reverta a lógica de **Polling** para `mousemove` event listeners (falham em janelas transparentes no Windows)
-- ✅ Use `ref` com `getBoundingClientRect()` para verificar se o mouse está sobre um widget
+### 2. `useAppConfig` é a fonte central de configuração
 
-### 2. Use o Hook Centralizado `useAppConfig`
+`src/hooks/useAppConfig.ts` concentra:
 
-**IMPORTANTE**: A partir da v0.2.0, todas as configurações são gerenciadas pelo hook `useAppConfig`.
+- Chaves e provedor de IA
+- Perfil de latência
+- Prompt base
+- Atalhos globais
+- Estado de screenshots
+- Configuração do overlay proativo
+- Integração com perfil do usuário e voz
 
-```typescript
-// ✅ BOM: Use useAppConfig
-const {
-  apiKey,
-  setApiKey,
-  profile,
-  setProfile,
-  memories,
-  addMemory,
-  voiceInput,
-  // ...etc
-} = useAppConfig();
+Regras:
 
-// ❌ RUIM: Não use hooks individuais diretamente em componentes de UI
-const { apiKey } = useAI(); // Isto está encapsulado em useAppConfig
-```
+- Não espalhe persistência nova diretamente em componentes
+- Prefira adicionar novos estados persistidos em `useAppConfig`
+- As chaves de `localStorage` atuais usam prefixo `selene_`
+- Nunca hardcode credenciais ou caminhos sensíveis
 
-### 3. SettingsPanel é o Único Componente de Configurações
+### 3. Configurações têm duas superfícies distintas
 
-O `SettingsPanel` em `src/components/config/SettingsPanel.tsx` é o **único** componente de UI para configurações. Ele pode ser usado de duas formas:
+- `SettingsPanel.tsx` é a superfície principal de configuração do produto
+- `ModalConfiguracoes.tsx` é apenas um wrapper para uso no overlay
+- `MCPPanel.tsx` é um painel dedicado e separado do fluxo geral de settings
 
-```typescript
-// No Modal (App.tsx)
-<SettingsPanel variant="modal" onClose={...} {...props} />
+Se adicionar uma nova configuração:
 
-// Inline no ChatWindow
-<SettingsPanel variant="inline" onClose={...} {...props} />
-```
+1. Defina o estado e a persistência em `useAppConfig`
+2. Exponha a prop necessária no `SettingsPanel`
+3. Encaixe a UI na seção correta (`SecaoPerfil`, `SecaoIA`, `SecaoPersonalizacao`, `SecaoAvancado` ou `VoiceSettings`)
 
-**Nunca** crie componentes de configuração duplicados.
+### 4. O chat foi modularizado; preserve essa divisão
 
-### 4. Gerenciamento de Estado e IPC
+`ChatWindow.tsx` ainda é o orquestrador, mas a lógica está separada em blocos claros:
 
-- Evite "spam" de IPC. Só envie mensagens para o processo principal (`setIgnoreMouseEvents`) se o estado de interação **mudou** (diffing).
-- O estado `debugInteractive` em `App.tsx` é usado para forçar a janela a ser clicável para fins de desenvolvimento (F9). Respeite essa flag.
-- Janelas separadas (ChatWindow, GrammarWindow) usam parâmetros de URL (`?window=chat`, `?window=grammar`) para roteamento em `main.tsx`.
+- `useChatUI`: estados visuais e overlays locais
+- `useChatShell`: navegação, contexto ativo, drawers e hubs
+- `useSendMessage`: pipeline de envio, streaming, tool calling e investigação
+- `conversasPersistidas.ts`: hidratação, normalização e persistência de conversas
 
-### 5. Persistência de Dados
+Regras:
 
-- ❌ Não hardcode chaves de API
-- ✅ Use `localStorage` para persistir configurações do usuário:
-  - Chaves de API: `openaiKey`, `geminiKey`, `openRouterKey`
-  - Preferências: `systemPrompt`, `assistentes`, `provedorAtivo`
-  - Perfil: `userProfile`, `memories`, `autoMemories`
-  - Flags: `crossChatEnabled`, `memoryAutopilotEnabled`
-  - Voice: `voiceProvider`, `whisperModel`
-- O hook `useAppConfig` centraliza toda a lógica de persistência.
+- Evite reintroduzir lógica monolítica em `ChatWindow.tsx`
+- Componentes novos do chat devem entrar em `components/` com export centralizado
+- Se mexer no formato de mensagens, revise também a persistência e normalização
 
-### 6. Estilização (TailwindCSS)
+### 5. Tool calling, MCP e investigação são fluxos centrais
 
-- ✅ Use Tailwind para tudo
-- ✅ Mantenha o tema "Dark Mode / Glassmorphism":
-  - Background: `bg-neutral-900/90`, `bg-black/80`
-  - Blur: `backdrop-blur-md`, `backdrop-blur-xl`
-  - Bordas: `border-white/10`, `border-white/5`
-  - Texto: `text-white`, `text-white/70`
-- ✅ Use `framer-motion` para animações (AnimatePresence para entradas/saídas)
-- ✅ Componentes arrastáveis usam `drag` do Framer Motion
+O stack atual está dividido assim:
 
-### 7. Sistema de Memória
+- `src/services/tools/ToolCallingService.ts`: decisão de uso de ferramentas
+- `src/services/tools/ToolExecutor.ts`: execução
+- `src/services/tools/builtin/`: ferramentas nativas
+- `src/services/tools/MCPToolBridge.ts`: sincronização de ferramentas MCP
+- `electron/mcp/`: IPC e ciclo de vida dos servidores MCP
+- `src/services/investigate/`: pesquisa profunda, checkpoints e evidências
 
-O projeto possui dois sistemas de memória independentes (veja `docs/MEMORY_ARCHITECTURE.md`):
+Regras:
 
-**Cross-Chat Context:**
+- Ferramentas novas precisam ser registradas e executáveis de ponta a ponta
+- Se a ferramenta depender de IPC, atualize `main.ts`, `preload.ts` e os tipos do renderer
+- O chat exibe trilha de raciocínio e checkpoints de clarificação; preserve esse contrato ao mexer em investigação
+- Sinais de atualidade e buscas web já influenciam a decisão de ferramentas; não duplique heurísticas em componentes
 
-- Recupera trechos de conversas anteriores via busca semântica
-- Arquivos: `services/crosschat/`
-- NUNCA grava memória permanente, apenas indexa
+### 6. Contexto de projeto e memória têm responsabilidades diferentes
 
-**Memory Autopilot:**
+Responsabilidades atuais:
 
-- Extrai preferências automaticamente das conversas
-- Arquivos: `services/memory/`
-- Grava em `localStorage` com validação e deduplicação
+- `ProjectContextService`: contexto de arquivos e instruções específicas por projeto
+- `crosschat/`: recuperação semântica entre conversas
+- `memory/`: extração e persistência de preferências
 
-Ambos são opcionais e controlados por toggles nas configurações.
+Regras:
 
----
+- Não misture memória permanente com contexto transitório de projeto
+- Instruções do projeto e contexto de arquivos não devem voltar a ser concatenados de forma monolítica
+- Ao alterar o formato de projeto, revise também indexação, hydration e tool calling
 
-## 🤖 Tarefas Comuns
+### 7. Overlay proativo é parte da experiência principal
 
-### Adicionar um Novo Provedor de LLM
+O overlay proativo usa:
 
-1. Crie o provider em `src/services/ai/providers/NovoProvider.ts` implementando `AIProvider`
-2. Registre em `AIService.ts` no construtor e na detecção auto
-3. Adicione campos de configuração no `SettingsPanel.tsx`
-4. Atualize o hook `useAppConfig` para incluir novas chaves/modelos
-5. Atualize o tipo `ProvedorID` em `services/ai/types.ts`
+- `src/hooks/useOverlayProativo.ts`
+- `src/services/overlay/overlayProativo.ts`
+- `src/components/modals/OverlayProativoModal.tsx`
+- Configuração persistida via `useAppConfig` e UI em `SecaoAvancado`
 
-### Adicionar Nova Aba de Configurações
+Regras:
 
-1. Adicione o ID da aba em `SettingsTab` no `SettingsPanel.tsx`
-2. Adicione entrada no array `allTabs` com ícone e condição de visibilidade
-3. Adicione a seção de conteúdo no JSX com `{activeTab === 'nova-aba' && (...)}`
-4. Se necessário, adicione props ao `SettingsPanelProps`
+- Intervenções devem ser discretas e pausáveis
+- O overlay proativo é suspenso em contextos como chat aberto, seleção de área e telas modais
+- Não trate o overlay proativo como toast genérico; ele responde a heurísticas próprias
 
-### Registrar Novo Atalho Global
+### 8. Siga a linguagem visual oficial
 
-1. Defina a constante de atalho padrão em `electron/main.ts`
-2. Crie a função de registro (ex: `registrarAtalhoX`)
-3. Envie evento IPC para o renderer
-4. Exponha em `preload.ts` via `contextBridge`
-5. Adicione input configurável na aba "Atalhos" do `SettingsPanel`
-6. Atualize `useAppConfig` com estado e persistência
+Antes de alterar frontend, consulte obrigatoriamente [PHILOSOPHY.md](./PHILOSOPHY.md).
 
-### Criar Nova Janela
+Direção atual:
 
-1. Crie o componente em `src/components/windows/nova/NovaWindow.tsx`
-2. Adicione rota em `src/main.tsx` checando parâmetro de URL
-3. Crie função `createNovaWindow()` em `electron/main.ts`
-4. Exponha abertura via IPC em `preload.ts`
+- Minimalismo escuro, técnico e silencioso
+- Animações discretas
+- Sem glassmorphism pesado, neon, gradientes chamativos ou visual de dashboard denso sem instrução explícita
 
-### Melhorar a Detecção de Mouse
+## Tarefas Comuns
 
-A lógica está em:
+### Adicionar um novo provedor de IA
 
-- `electron/main.ts`: `checarCursor()` e `iniciarTracker()`
-- `src/App.tsx`: `handleCheckHover()`
+1. Implemente o provider em `src/services/ai/providers/`
+2. Registre no `AIService.ts`
+3. Exponha campos necessários em `SecaoIA.tsx`
+4. Atualize `useAppConfig.ts` com persistência e defaults
+5. Revise tipos compartilhados em `src/services/ai/types.ts`
 
-Se precisar otimizar, faça com **cuidado extremo** e teste a interatividade em:
+### Adicionar uma nova ferramenta nativa
 
-- Overlay (widgets)
-- ChatWindow (janela separada)
-- GrammarWindow (janela separada)
+1. Crie a ferramenta em `src/services/tools/builtin/`
+2. Registre no registry de ferramentas
+3. Garanta execução no `ToolExecutor`
+4. Ajuste tipos e payloads usados pelo chat
+5. Se houver IPC, atualize `electron/main.ts`, `electron/preload.ts` e `src/electron.d.ts`
 
----
+### Adicionar uma nova seção de configuração
 
-## 🐛 Debugging
+1. Persistência e estado em `useAppConfig.ts`
+2. Props e navegação em `SettingsPanel.tsx`
+3. UI em um componente de seção coeso dentro de `src/components/config/`
 
-### "Não consigo clicar"
+### Criar uma nova janela Electron
 
-1. Pressione **F9** para ativar Debug Mode
-2. Se overlay vermelho aparecer, o click-through está funcionando
-3. Verifique se o widget tem `pointer-events-auto`
-4. Verifique logs do console (`Ctrl+Shift+I`)
+1. Crie o componente em `src/components/windows/`
+2. Adicione roteamento em `src/main.tsx`
+3. Abra a janela a partir de `electron/main.ts`
+4. Exponha a ponte necessária em `preload.ts`
 
-### "Janela não abre"
+## Debugging
 
-1. Verifique logs do processo principal (terminal onde rodou `npm run dev`)
-2. Confirme que o preload está correto (`dist-electron/preload.cjs`)
-3. Verifique erros de IPC no console do renderer
+### "Não consigo clicar no overlay"
 
-### "Configurações não persistem"
+1. Teste `F9` para entrar em modo debug
+2. Confirme se a região interativa está sendo publicada via `update-modal-regions`
+3. Verifique `pointer-events-auto` nos blocos interativos
+4. Revise `checarCursor()` e o estado `pass_through/interativo/debug`
 
-1. Verifique erros de `localStorage` no console
-2. Confirme que `useAppConfig` está sendo usado corretamente
-3. Limpe `localStorage` e teste novamente
+### "Configuração não persiste"
 
-### "Transcrição não funciona"
+1. Verifique `useAppConfig.ts`
+2. Confira a chave `selene_*` correspondente no `localStorage`
+3. Procure gravação duplicada em componente de UI
 
-1. Verifique se a API key está configurada (para nuvem)
-2. Para local, verifique se o modelo foi baixado
-3. Verifique logs do console para erros de Whisper
+### "Ferramenta ou MCP não responde"
 
----
+1. Revise `ToolCallingService.ts` e `ToolExecutor.ts`
+2. Confirme sincronização no `MCPToolBridge.ts`
+3. Verifique IPC em `electron/mcp/` e APIs expostas no preload
 
-## 📝 Convenções de Código
+### "Transcrição local falhou"
 
-- **Commits**: Use [Conventional Commits](https://www.conventionalcommits.org/)
-  - `feat:` novas funcionalidades
-  - `fix:` correções
-  - `refactor:` refatoração
-  - `docs:` documentação
-- **TypeScript**: Evite `any`, use tipos específicos
-- **Componentes**: Funções com hooks, não classes
-- **Nomes**: Português para UI strings, inglês para código
+1. Verifique `electron/local-whisper/`
+2. Confirme binário/modelo selecionado em `VoiceSettings`
+3. Revise logs do processo principal e do renderer
 
----
+## Convenções de Trabalho
 
-_Bom trabalho, Agente. Mantenha o código limpo e o futuro transparente._
+- Prefira rodar scripts com `bun run ...`
+- O histórico ainda tem scripts com `npm` e `npx` no `package.json`; não altere isso sem revisar build e release
+- Use TypeScript com tipos explícitos; evite `any`
+- Preserve nomes e responsabilidades dos módulos antes de mover arquivos
+- Ao mexer em contratos entre Electron e renderer, atualize também `src/electron.d.ts`
+
+_Se a mudança tocar overlay, chat, IPC e persistência ao mesmo tempo, trate como alteração de alto risco e valide o fluxo inteiro._

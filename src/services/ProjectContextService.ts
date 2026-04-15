@@ -321,6 +321,7 @@ export function criarPromptSistemaProjeto(
     _userMessage?: string,
     _opcoes: OpcoesPromptProjeto = {}
 ): ContextoPromptProjeto {
+    void _opcoes
     const promptSistemaProjeto = (project.instructions || '').trim()
 
     return {

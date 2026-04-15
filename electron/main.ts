@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, globalShortcut, clipboard, desktopCapturer, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, globalShortcut, desktopCapturer, Tray, Menu, nativeImage } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
@@ -20,8 +20,8 @@ let chatWin: BrowserWindow | null = null
 let tray: Tray | null = null
 let grammarWin: BrowserWindow | null = null
 let isDebugMode = false
-let ultimoIgnore = true
 let trackerInterval: NodeJS.Timeout | null = null
+let timeoutInicialChat: NodeJS.Timeout | null = null
 let modalRegions: Array<{ x: number; y: number; width: number; height: number }> = []
 type JanelaEstado = 'pass_through' | 'interativo' | 'debug'
 let estadoAtual: JanelaEstado = 'pass_through'
@@ -37,11 +37,119 @@ const logDebug = (...args: unknown[]) => {
 }
 let isAreaSelectionMode = false
 let areaEnforceInterval: NodeJS.Timeout | null = null
+let hidratacaoPendenteChat: unknown[] | null = null
 
 // Helper para atualizar estado do overlay e menu do tray
 const setOverlayVisible = (visible: boolean) => {
     overlayIsVisible = visible
     if (updateTrayMenuCallback) updateTrayMenuCallback()
+}
+
+const ocultarOverlay = () => {
+    if (!win || win.isDestroyed()) return
+    win.hide()
+    setOverlayVisible(false)
+}
+
+const mostrarOverlay = () => {
+    if (!win || win.isDestroyed()) return
+    win.show()
+    setOverlayVisible(true)
+    win.webContents.send('collapse-toolbar')
+}
+
+const limparTimeoutInicialChat = () => {
+    if (!timeoutInicialChat) return
+    clearTimeout(timeoutInicialChat)
+    timeoutInicialChat = null
+}
+
+const enviarHidratacaoPendenteChat = () => {
+    if (!chatWin || chatWin.isDestroyed() || !hidratacaoPendenteChat) return
+    chatWin.webContents.send('hydrate-chat', hidratacaoPendenteChat)
+    hidratacaoPendenteChat = null
+}
+
+const vincularEventosEstadoJanela = (janela: BrowserWindow) => {
+    const notificarEstado = () => {
+        if (janela.isDestroyed()) return
+        janela.webContents.send('window-maximized-change', janela.isMaximized())
+    }
+
+    janela.on('maximize', notificarEstado)
+    janela.on('unmaximize', notificarEstado)
+}
+
+function abrirJanelaChat(messages: unknown[] = []) {
+    if (messages.length > 0) {
+        hidratacaoPendenteChat = messages
+    }
+
+    limparTimeoutInicialChat()
+    ocultarOverlay()
+
+    if (chatWin && !chatWin.isDestroyed()) {
+        if (chatWin.isMinimized()) {
+            chatWin.restore()
+        }
+        chatWin.show()
+        chatWin.focus()
+
+        if (!chatWin.webContents.isLoading()) {
+            enviarHidratacaoPendenteChat()
+        }
+        return chatWin
+    }
+
+    const preloadPath = path.join(__dirname, 'preload.cjs')
+    const iconPath = path.join(process.env.VITE_PUBLIC || '', 'selene.ico')
+    console.log('[chatWin] icon path:', iconPath, 'exists?', fs.existsSync(iconPath))
+
+    const appIcon = nativeImage.createFromPath(iconPath)
+    console.log('[chatWin] icon isEmpty?', appIcon.isEmpty(), 'size:', appIcon.getSize())
+
+    chatWin = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        minWidth: 800,
+        minHeight: 600,
+        center: true,
+        icon: iconPath,
+        backgroundColor: '#0a0a0c',
+        frame: false,
+        titleBarStyle: 'hidden',
+        skipTaskbar: false,
+        webPreferences: {
+            preload: preloadPath,
+            nodeIntegration: false,
+            contextIsolation: true,
+        },
+    })
+
+    vincularEventosEstadoJanela(chatWin)
+
+    if (!appIcon.isEmpty()) {
+        chatWin.setIcon(appIcon)
+    }
+
+    if (VITE_DEV_SERVER_URL) {
+        chatWin.loadURL(`${VITE_DEV_SERVER_URL}#chat`)
+    } else {
+        chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
+    }
+
+    configurarMenuInspecionar(chatWin)
+
+    chatWin.webContents.once('did-finish-load', () => {
+        enviarHidratacaoPendenteChat()
+    })
+
+    chatWin.on('closed', () => {
+        chatWin = null
+        mostrarOverlay()
+    })
+
+    return chatWin
 }
 
 const dispararColarGlobal = () => {
@@ -78,12 +186,12 @@ const obterTextoSelecionado = async (): Promise<string> => {
 }
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+type FonteCapturaTela = Electron.DesktopCapturerSource & { display_id?: string }
 
 function aplicarPassThrough(winAlvo: BrowserWindow, options?: Electron.IgnoreMouseEventsOptions) {
     // Mantemos focusable true para continuar recebendo eventos de ponteiro (forward) e poder sair do modo fantasma.
     winAlvo.setIgnoreMouseEvents(true, options)
     // Não reforce alwaysOnTop aqui para evitar corridas; está fixo na criação.
-    ultimoIgnore = true
 }
 
 function forcarInteracao(winAlvo: BrowserWindow, ignore: boolean, options?: Electron.IgnoreMouseEventsOptions) {
@@ -95,7 +203,6 @@ function forcarInteracao(winAlvo: BrowserWindow, ignore: boolean, options?: Elec
     winAlvo.setIgnoreMouseEvents(false)
     winAlvo.focus()
     winAlvo.setAlwaysOnTop(true, process.platform === 'win32' ? 'pop-up-menu' : 'screen-saver')
-    ultimoIgnore = false
 }
 
 function definirEstado(novo: JanelaEstado) {
@@ -389,6 +496,8 @@ function createGrammarWindow() {
         },
     })
 
+    vincularEventosEstadoJanela(grammarWin)
+
     if (VITE_DEV_SERVER_URL) {
         grammarWin.loadURL(`${VITE_DEV_SERVER_URL}?window=grammar`)
     } else {
@@ -430,6 +539,8 @@ function createWindow() {
             contextIsolation: true,
         },
     })
+
+    vincularEventosEstadoJanela(win)
 
     win.webContents.on('preload-error', (_event, _preloadPath, error) => {
         console.error('[preload-error]', error)
@@ -584,7 +695,7 @@ function createWindow() {
                 thumbnailSize: { width, height }
             })
             const principal =
-                sources.find((src) => (src as any).display_id === String(display.id)) ||
+                sources.find((src) => (src as FonteCapturaTela).display_id === String(display.id)) ||
                 sources.find((src) => (src.name || '').toLowerCase().includes('screen')) ||
                 sources[0]
             return principal?.thumbnail?.toDataURL() || null
@@ -597,71 +708,7 @@ function createWindow() {
     // Usar a variável global chatWin declarada no topo do arquivo
 
     ipcMain.on('open-expanded-chat', (_event, messages) => {
-        // Hide overlay window
-        if (win && !win.isDestroyed()) {
-            win.hide()
-            setOverlayVisible(false)
-        }
-
-        if (chatWin && !chatWin.isDestroyed()) {
-            chatWin.focus()
-            chatWin.webContents.send('hydrate-chat', messages)
-            return
-        }
-
-        const preloadPath = path.join(__dirname, 'preload.cjs')
-        const iconPath = path.join(process.env.VITE_PUBLIC || '', 'selene.ico')
-        console.log('[chatWin] icon path:', iconPath, 'exists?', fs.existsSync(iconPath))
-
-        const appIcon = nativeImage.createFromPath(iconPath)
-        console.log('[chatWin] icon isEmpty?', appIcon.isEmpty(), 'size:', appIcon.getSize())
-
-        chatWin = new BrowserWindow({
-            width: 1200,
-            height: 800,
-            minWidth: 800,
-            minHeight: 600,
-            center: true,
-            icon: iconPath, // Use path directly, Windows prefers this for ICO
-            backgroundColor: '#0a0a0c',
-            frame: false,
-            titleBarStyle: 'hidden',
-            skipTaskbar: false, // Visible in taskbar
-            webPreferences: {
-                preload: preloadPath,
-                nodeIntegration: false,
-                contextIsolation: true,
-            },
-        })
-
-        // Also set icon after creation for extra compatibility
-        if (!appIcon.isEmpty()) {
-            chatWin.setIcon(appIcon)
-        }
-
-        if (VITE_DEV_SERVER_URL) {
-            chatWin.loadURL(`${VITE_DEV_SERVER_URL}#chat`)
-        } else {
-            chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
-        }
-
-        if (chatWin) {
-            configurarMenuInspecionar(chatWin)
-        }
-
-        chatWin.webContents.on('did-finish-load', () => {
-            chatWin?.webContents.send('hydrate-chat', messages)
-        })
-
-        // When ChatWindow closes, show overlay again with collapsed toolbar
-        chatWin.on('closed', () => {
-            chatWin = null
-            if (win && !win.isDestroyed()) {
-                win.show()
-                setOverlayVisible(true)
-                win.webContents.send('collapse-toolbar')
-            }
-        })
+        abrirJanelaChat(Array.isArray(messages) ? messages : [])
     })
 
     if (VITE_DEV_SERVER_URL) {
@@ -685,6 +732,11 @@ ipcMain.on('window-maximize', (event) => {
     } else {
         win?.maximize()
     }
+})
+
+ipcMain.handle('window-is-maximized', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return win?.isMaximized() ?? false
 })
 
 ipcMain.on('window-close', (event) => {
@@ -752,60 +804,7 @@ app.whenReady().then(() => {
     // Initialize auto-updater (respects user preference)
     initAutoUpdater(win)
 
-    // Start with ChatWindow by default
-    setTimeout(() => {
-        if (win && !win.isDestroyed()) {
-            win.hide()
-            setOverlayVisible(false)
-        }
-
-        const preloadPath = path.join(__dirname, 'preload.cjs')
-        const iconPath = path.join(process.env.VITE_PUBLIC || '', 'selene.ico')
-        console.log('[startup chatWin] icon path:', iconPath, 'exists?', fs.existsSync(iconPath))
-
-        chatWin = new BrowserWindow({
-            width: 1200,
-            height: 800,
-            minWidth: 800,
-            minHeight: 600,
-            center: true,
-            icon: iconPath,
-            backgroundColor: '#0a0a0c',
-            frame: false,
-            titleBarStyle: 'hidden',
-            skipTaskbar: false,
-            webPreferences: {
-                preload: preloadPath,
-                nodeIntegration: false,
-                contextIsolation: true,
-            },
-        })
-
-        // Also set icon after creation for extra compatibility
-        const appIcon = nativeImage.createFromPath(iconPath)
-        if (!appIcon.isEmpty()) {
-            chatWin.setIcon(appIcon)
-        }
-
-        if (VITE_DEV_SERVER_URL) {
-            chatWin.loadURL(`${VITE_DEV_SERVER_URL}#chat`)
-        } else {
-            chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
-        }
-
-        if (chatWin) {
-            configurarMenuInspecionar(chatWin)
-        }
-
-        chatWin.on('closed', () => {
-            chatWin = null
-            if (win && !win.isDestroyed()) {
-                win.show()
-                setOverlayVisible(true)
-                win.webContents.send('collapse-toolbar')
-            }
-        })
-    }, 500)
+    abrirJanelaChat()
 
     globalShortcut.register('F9', () => {
         if (!win) return
@@ -834,61 +833,7 @@ app.whenReady().then(() => {
             {
                 label: 'Abrir Selene Chat',
                 click: () => {
-                    if (chatWin && !chatWin.isDestroyed()) {
-                        chatWin.show()
-                        chatWin.focus()
-                    } else {
-                        // Criar nova janela de chat (simula click no botão expand)
-                        if (win && !win.isDestroyed()) {
-                            win.hide()
-                            setOverlayVisible(false)
-                        }
-                        
-                        const preloadPath = path.join(__dirname, 'preload.cjs')
-                        const iconPath = path.join(process.env.VITE_PUBLIC || '', 'selene.ico')
-                        
-                        chatWin = new BrowserWindow({
-                            width: 1200,
-                            height: 800,
-                            minWidth: 800,
-                            minHeight: 600,
-                            center: true,
-                            icon: iconPath,
-                            backgroundColor: '#0a0a0c',
-                            frame: false,
-                            titleBarStyle: 'hidden',
-                            skipTaskbar: false,
-                            webPreferences: {
-                                preload: preloadPath,
-                                nodeIntegration: false,
-                                contextIsolation: true,
-                            },
-                        })
-                        
-                        const appIcon = nativeImage.createFromPath(iconPath)
-                        if (!appIcon.isEmpty()) {
-                            chatWin.setIcon(appIcon)
-                        }
-                        
-                        if (VITE_DEV_SERVER_URL) {
-                            chatWin.loadURL(`${VITE_DEV_SERVER_URL}#chat`)
-                        } else {
-                            chatWin.loadFile(path.join(process.env.DIST || '', 'index.html'), { hash: 'chat' })
-                        }
-
-                        if (chatWin) {
-                            configurarMenuInspecionar(chatWin)
-                        }
-                        
-                        chatWin.on('closed', () => {
-                            chatWin = null
-                            if (win && !win.isDestroyed()) {
-                                win.show()
-                                setOverlayVisible(true)
-                                win.webContents.send('collapse-toolbar')
-                            }
-                        })
-                    }
+                    abrirJanelaChat()
                 }
             },
             {

@@ -20,10 +20,27 @@ interface BottomToolbarProps {
     aoAbrirAssistenteGramatical: () => void
     aoAbrirConfiguracoes: () => void
     aoAbrirChatWindow: () => void
+    aoExpandirToolbar?: () => void
     aoFecharAplicacao: () => void
     menuDropdownRef?: RefObject<HTMLDivElement | null>
     initialCollapsed?: boolean
     forceCollapse?: boolean
+}
+
+type BarraWave = {
+    id: number
+    altura: number
+    fase: number
+    vel1: number
+    vel2: number
+    peso: number
+    delay: number
+    duracao: number
+}
+
+function gerarNumeroDeterministico(semente: number): number {
+    const valor = Math.sin(semente * 12.9898) * 43758.5453
+    return valor - Math.floor(valor)
 }
 
 const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
@@ -41,6 +58,7 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     aoAbrirAssistentes,
     aoAbrirAssistenteGramatical,
     aoAbrirChatWindow,
+    aoExpandirToolbar,
     aoAbrirConfiguracoes,
     aoFecharAplicacao,
     menuDropdownRef,
@@ -48,13 +66,6 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     forceCollapse
 }, ref) => {
     const [isExpanded, setIsExpanded] = useState(!initialCollapsed)
-
-    // Sync with forceCollapse
-    useMemo(() => {
-        if (forceCollapse !== undefined) {
-             setIsExpanded(!forceCollapse)
-        }
-    }, [forceCollapse])
 
     const [menuAberto, setMenuAberto] = useState(false)
     const [toolCallingAtivo, setToolCallingAtivo] = useState(() => {
@@ -65,15 +76,15 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     const [menuFerramentasMcpAberto, setMenuFerramentasMcpAberto] = useState(false)
     const [ferramentasMcp, setFerramentasMcp] = useState(() => toolRegistry.getMcpTools())
     const dragControls = useDragControls()
+    const isExpandedAtual = forceCollapse !== undefined ? !forceCollapse : isExpanded
     const nivelAudioNormalizado = Math.min(1, Math.max(0, nivelAudio || 0))
-    const barrasWave = useMemo(() => Array.from({ length: 24 }, (_, index) => ({
+    const barrasWave = useMemo<BarraWave[]>(() => Array.from({ length: 24 }, (_, index) => ({
         id: index,
         altura: 6 + (index % 5) * 2,
-        seed: Math.random(),
-        fase: Math.random() * Math.PI * 2,
-        vel1: 0.6 + Math.random() * 0.9,
-        vel2: 1.2 + Math.random() * 1.3,
-        peso: 0.6 + Math.random() * 0.9,
+        fase: gerarNumeroDeterministico(index + 1) * Math.PI * 2,
+        vel1: 0.6 + gerarNumeroDeterministico(index + 11) * 0.9,
+        vel2: 1.2 + gerarNumeroDeterministico(index + 23) * 1.3,
+        peso: 0.6 + gerarNumeroDeterministico(index + 37) * 0.9,
         delay: (index % 8) * 0.05,
         duracao: 0.9 + (index % 6) * 0.12
     })), [])
@@ -83,7 +94,6 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     const mediaAudio = barrasAtuais.reduce((acc, valor) => acc + valor, 0) / barrasAtuais.length
     const nivelAudioAmplificado = Math.min(1, Math.pow(Math.max(mediaAudio, nivelAudioNormalizado) * 4, 0.65))
     const opacidadeWave = 0.25 + nivelAudioAmplificado * 0.7
-    const tempoOscilacao = performance.now() / 1000
 
     const acionarEAbrir = (acao: () => void) => {
         setMenuAberto(false)
@@ -100,11 +110,7 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     }, [])
 
     useEffect(() => {
-        if (!menuAberto) {
-            setMenuFerramentasMcpAberto(false)
-            return
-        }
-
+        if (!menuAberto) return
         mcpToolBridge.syncAllTools().catch(err => {
             console.warn('[BottomToolbar] Falha ao sincronizar MCP:', err)
         })
@@ -114,7 +120,7 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
         <div
             ref={ref}
             data-area-interativa="true"
-            className={`fixed ${isExpanded ? 'bottom-10' : 'bottom-3'} left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 pointer-events-auto`}
+            className={`fixed ${isExpandedAtual ? 'bottom-10' : 'bottom-3'} left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 pointer-events-auto`}
             onPointerEnter={() => window.electronAPI?.setIgnoreMouseEvents(false)}
             onPointerLeave={() => {
                 if (!menuAberto) {
@@ -128,12 +134,12 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                 dragControls={dragControls}
                 dragMomentum={false}
                 layout
-                className={`overflow-visible transition-all duration-200 ${isExpanded
+                className={`overflow-visible transition-all duration-200 ${isExpandedAtual
                     ? 'w-full bg-neutral-900/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl'
                     : 'w-[180px] mx-auto bg-black/30 backdrop-blur-sm border border-white/5 rounded-full px-2 shadow-md'
                     }`}
             >
-                {isExpanded && (
+                {isExpandedAtual && (
                     <div
                         className="h-7 w-full flex items-center justify-center cursor-grab active:cursor-grabbing hover:bg-white/5 transition-colors border-b border-white/5"
                         onPointerDown={(e) => dragControls.start(e)}
@@ -149,8 +155,8 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                     </div>
                 )}
 
-                <AnimatePresence initial={false}>
-                    {isExpanded && (
+                    <AnimatePresence initial={false}>
+                    {isExpandedAtual && (
                         <motion.div
                             key="toolbar-conteudo"
                             initial={{ height: 0, opacity: 0 }}
@@ -180,18 +186,19 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
 
                                 <div className="flex-1 min-w-0 relative bg-white/5 rounded-xl border border-white/5 focus-within:border-white/20 transition-colors">
                                     {isRecording ? (
-                                        <div className="h-14 flex items-center justify-center px-4 relative">
-                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        <div className="h-14 flex items-center justify-center px-4 relative overflow-hidden rounded-xl">
+                                            <div className="absolute inset-x-3 inset-y-1 flex items-end justify-center pointer-events-none overflow-hidden">
                                                 <div
-                                                    className="w-full max-w-[320px] flex items-end justify-center gap-1.5"
+                                                    className="h-full w-full max-w-[320px] flex items-end justify-center gap-1.5"
                                                     style={{ opacity: opacidadeWave }}
                                                 >
                                                     {barrasWave.map((barra) => {
                                                         const variacao =
-                                                            0.6 +
-                                                            0.22 * Math.sin(tempoOscilacao * barra.vel1 + barra.fase) +
-                                                            0.18 * Math.sin(tempoOscilacao * barra.vel2 + barra.fase * 1.7)
-                                                        const altura = barra.altura + (8 + nivelAudioAmplificado * 90) * barra.peso * variacao
+                                                            0.75 +
+                                                            0.18 * Math.sin(barra.fase) +
+                                                            0.12 * Math.sin(barra.fase * 1.7 + barra.vel1 + barra.vel2)
+                                                        const alturaCalculada = barra.altura + (6 + nivelAudioAmplificado * 42) * barra.peso * variacao
+                                                        const altura = Math.min(44, Math.max(6, alturaCalculada))
                                                         return (
                                                             <div
                                                                 key={`wave-${barra.id}`}
@@ -369,7 +376,7 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                                                             </div>
                                                         </button>
 
-                                                        {menuFerramentasMcpAberto && (
+                                                        {menuAberto && menuFerramentasMcpAberto && (
                                                             <div className="mt-2 max-h-36 overflow-y-auto space-y-1 pr-1">
                                                                 {ferramentasMcp.length === 0 ? (
                                                                     <p className="text-xs text-white/50">Nenhuma ferramenta MCP conectada.</p>
@@ -426,11 +433,13 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                     )}
                 </AnimatePresence>
 
-                {!isExpanded && (
+                {!isExpandedAtual && (
                     <div className="px-1 py-1">
                         <button
-                            onClick={() => setIsExpanded(true)}
-                            onPointerDown={(e) => dragControls.start(e)}
+                            onClick={() => {
+                                aoExpandirToolbar?.()
+                                setIsExpanded(true)
+                            }}
                             className="w-full max-w-[180px] mx-auto flex items-center justify-center gap-2 rounded-full border border-white/5 bg-black/50 px-3 py-1.5 backdrop-blur-sm hover:bg-black transition-all active:scale-[0.99]"
                         >
                             <div className="w-10 h-1.5 rounded-full bg-white/25" />

@@ -1,11 +1,12 @@
 export * from './ai/types'
-import type { AIConfig, AcaoTexto, MensagemChat, ProvedorID, TomTexto } from './ai/types'
+import type { AIConfig, AcaoTexto, ConteudoMensagemChat, MensagemChat, MensagemHistoricoIA, ProvedorID, TomTexto } from './ai/types'
 import type { AIProvider } from './ai/AIProvider'
 import type { OpcoesRequisicaoIA } from './ai/AIProvider'
 import { OpenAIProvider } from './ai/providers/OpenAIProvider'
 import { GeminiProvider } from './ai/providers/GeminiProvider'
 import { OpenRouterProvider } from './ai/providers/OpenRouterProvider'
 import { LMStudioProvider } from './ai/providers/LMStudioProvider'
+import { criarConteudoTextoComImagens } from './ai/historicoMultimodal'
 
 class ExtratorRaciocinioThink {
   private readonly tagInicio = '<think>'
@@ -130,9 +131,9 @@ export class AIService {
   }
 
   private construirMensagensChat(
-    texto: string,
+    texto: ConteudoMensagemChat,
     systemPrompt: string,
-    history: { role: 'user' | 'assistant', content: string }[] = []
+    history: MensagemHistoricoIA[] = []
   ): MensagemChat[] {
     const mensagens: MensagemChat[] = []
     const systemNormalizado = (systemPrompt || '').trim()
@@ -142,7 +143,12 @@ export class AIService {
     }
 
     mensagens.push(
-      ...history.map(m => ({ role: m.role, content: m.content })),
+      ...history.map(m => ({
+        role: m.role,
+        content: m.role === 'user' && m.images?.length
+          ? criarConteudoTextoComImagens(m.content, m.images)
+          : m.content
+      })),
       { role: 'user', content: texto }
     )
 
@@ -150,9 +156,9 @@ export class AIService {
   }
 
   async chat(
-    texto: string,
+    texto: ConteudoMensagemChat,
     systemPrompt: string = 'Você é uma assistente útil chamada Selene.',
-    history: { role: 'user' | 'assistant', content: string }[] = [],
+    history: MensagemHistoricoIA[] = [],
     opcoes: OpcoesRequisicaoIA = {}
   ): Promise<string> {
     const mensagens = this.construirMensagensChat(texto, systemPrompt, history)
@@ -160,10 +166,10 @@ export class AIService {
   }
 
   async streamChat(
-    texto: string,
+    texto: ConteudoMensagemChat,
     onChunk: (chunk: string) => void,
     systemPrompt: string = 'Você é uma assistente útil chamada Selene.',
-    history: { role: 'user' | 'assistant', content: string }[] = [],
+    history: MensagemHistoricoIA[] = [],
     opcoes: OpcoesRequisicaoIA = {}
   ): Promise<void> {
     const mensagens = this.construirMensagensChat(texto, systemPrompt, history)

@@ -11,7 +11,6 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import * as https from 'https'
-import * as crypto from 'crypto'
 import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -139,7 +138,14 @@ const BYTES_PER_SAMPLE = 2
 
 let modelsPath: string | null = null
 let tempDir: string | null = null
-let activeDownloads = new Map<string, { abort: () => void }>()
+const activeDownloads = new Map<string, { abort: () => void }>()
+
+function obterMensagemErro(erro: unknown): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return 'Erro desconhecido'
+}
 
 /**
  * Initialize paths
@@ -517,14 +523,14 @@ export function setupWhisperIPC(): void {
                             downloaded,
                             total
                         })
-                    } catch (err) {
+                    } catch {
                         // Sender destroyed
                     }
                 }
             })
             return { success: true }
-        } catch (error: any) {
-            return { success: false, error: error.message }
+        } catch (error: unknown) {
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -559,8 +565,8 @@ export function setupWhisperIPC(): void {
 
             console.log('[WhisperMain] ✅ Whisper ready')
             return { success: true }
-        } catch (error: any) {
-            return { success: false, error: error.message }
+        } catch (error: unknown) {
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -569,8 +575,8 @@ export function setupWhisperIPC(): void {
         try {
             const text = await transcribe(audioBuffer, config)
             return { success: true, text }
-        } catch (error: any) {
-            return { success: false, error: error.message }
+        } catch (error: unknown) {
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 
@@ -584,8 +590,8 @@ export function setupWhisperIPC(): void {
                 return { success: true }
             }
             return { success: false, error: 'Model not found' }
-        } catch (error: any) {
-            return { success: false, error: error.message }
+        } catch (error: unknown) {
+            return { success: false, error: obterMensagemErro(error) }
         }
     })
 

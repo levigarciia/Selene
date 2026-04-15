@@ -9,7 +9,6 @@ import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
-import * as crypto from 'crypto'
 import { EventEmitter } from 'events'
 
 // Audio constants
@@ -47,6 +46,13 @@ export interface WhisperSessionEvents {
     'delta': (data: { sessionId: string; delta: string; text: string; speakerLabel?: string }) => void
     'complete': (data: { sessionId: string; text: string; speakerLabel?: string }) => void
     'error': (data: { sessionId: string; error: string }) => void
+}
+
+function obterMensagemErro(erro: unknown): string {
+    if (erro instanceof Error && erro.message) {
+        return erro.message
+    }
+    return 'Erro desconhecido'
 }
 
 export class WhisperSession extends EventEmitter {
@@ -295,7 +301,7 @@ export class WhisperSession extends EventEmitter {
         try {
             // Determine how much audio to process
             let samplesToProcess = Math.min(bufferSamples, WINDOW_SAMPLES)
-            let bytesToProcess = samplesToProcess * BYTES_PER_SAMPLE
+            const bytesToProcess = samplesToProcess * BYTES_PER_SAMPLE
 
             // Extract audio chunk
             let audioChunk = this.audioBuffer.slice(0, bytesToProcess)
@@ -333,7 +339,7 @@ export class WhisperSession extends EventEmitter {
             // Clean up temp file
             try {
                 fs.unlinkSync(tempFile)
-            } catch (e) {
+            } catch {
                 // Ignore cleanup errors
             }
 
@@ -369,11 +375,12 @@ export class WhisperSession extends EventEmitter {
             } else {
                 this.hadSpeechSinceLastProcess = false
             }
-        } catch (error: any) {
-            this.log(`Processing error: ${error.message}`)
+        } catch (error: unknown) {
+            const mensagemErro = obterMensagemErro(error)
+            this.log(`Processing error: ${mensagemErro}`)
             this.emit('error', {
                 sessionId: this.sessionId,
-                error: error.message
+                error: mensagemErro
             })
         } finally {
             this.isProcessing = false
@@ -470,7 +477,7 @@ export class WhisperSession extends EventEmitter {
                 this.log(`Whisper timed out after ${timeoutMs}ms - terminating...`)
                 try {
                     this.activeProcess?.kill('SIGTERM')
-                } catch (e) {
+                } catch {
                     // ignore
                 }
             }, timeoutMs)
@@ -563,7 +570,7 @@ export class WhisperSession extends EventEmitter {
                     fs.unlinkSync(path.join(this.tempDir, file))
                 }
             }
-        } catch (e) {
+        } catch {
             // Ignore cleanup errors
         }
 

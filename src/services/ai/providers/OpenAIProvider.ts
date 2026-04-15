@@ -2,7 +2,10 @@ import OpenAI from 'openai'
 import type { AIProvider } from '../AIProvider'
 import type { OpcoesRequisicaoIA } from '../AIProvider'
 import type { MetaFimStream } from '../AIProvider'
-import type { MensagemChat } from '../types'
+import type { MensagemChat, MensagemHistoricoIA } from '../types'
+import { criarConteudoTextoComImagens } from '../historicoMultimodal'
+
+type RegistroGenerico = Record<string, unknown>
 
 export class OpenAIProvider implements AIProvider {
     private client: OpenAI | null = null
@@ -25,15 +28,15 @@ export class OpenAIProvider implements AIProvider {
     async chat(mensagens: MensagemChat[], opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('OpenAI não configurado.')
         try {
-            const payload: any = {
-                messages: mensagens,
-                model: this.model
+            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
+                messages: mensagens as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+                model: this.model,
+                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
-            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
 
             const completion = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
             return completion.choices[0].message.content || ''
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erro no chat OpenAI:', error)
             if (this.ehRateLimit(error)) throw new Error('Limite ou créditos esgotados na OpenAI.')
             throw error
@@ -47,20 +50,20 @@ export class OpenAIProvider implements AIProvider {
     ): Promise<void> {
         if (!this.client) throw new Error('OpenAI não configurado.')
         try {
-            const payload: any = {
-                messages: mensagens,
+            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
+                messages: mensagens as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
                 model: this.model,
-                stream: true
+                stream: true,
+                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
-            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
 
             const stream = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
             let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of stream) {
                 finishReason = this.normalizarFinishReason(chunk.choices?.[0]?.finish_reason)
-                const choice = chunk.choices?.[0] as any
-                const delta = choice?.delta as any
+                const choice = chunk.choices?.[0]
+                const delta = choice?.delta
                 const partes = this.extrairPartesStream(choice, delta)
                 const raciocinio = partes.raciocinio
                 if (raciocinio) {
@@ -78,7 +81,7 @@ export class OpenAIProvider implements AIProvider {
             }
 
             opcoes.onFimStream?.({ finishReason })
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erro no streaming OpenAI:', error)
             if (this.ehRateLimit(error)) throw new Error('Limite ou créditos esgotados na OpenAI.')
             throw error
@@ -107,23 +110,27 @@ export class OpenAIProvider implements AIProvider {
             { type: 'image_url', image_url: { url: dataUrl } }
         ]
         const systemPrompt = opcoes.systemPromptOverride ?? 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.'
-        const mensagens: any[] = []
+        const mensagens: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = []
         if (systemPrompt.trim()) {
             mensagens.push({ role: 'system', content: systemPrompt })
         }
-        mensagens.push({ role: 'user', content: conteudo as any })
+        mensagens.push(...this.normalizarHistorico(opcoes.historico))
+        mensagens.push({
+            role: 'user',
+            content: conteudo as unknown as OpenAI.Chat.Completions.ChatCompletionUserMessageParam['content']
+        })
 
         try {
-            const payload: any = {
+            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
                 model: this.model,
-                messages: mensagens
+                messages: mensagens,
+                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
-            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
 
             const completion = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
             return completion.choices[0].message.content || ''
-        } catch (error: any) {
-            console.warn('[imagem][openai] falhou', error?.message)
+        } catch (error: unknown) {
+            console.warn('[imagem][openai] falhou', this.obterMensagemErro(error))
             throw error
         }
     }
@@ -141,27 +148,31 @@ export class OpenAIProvider implements AIProvider {
             { type: 'image_url', image_url: { url: dataUrl } }
         ]
         const systemPrompt = opcoes.systemPromptOverride ?? 'Você é um assistente que analisa imagens e responde em português do Brasil, de forma objetiva.'
-        const mensagens: any[] = []
+        const mensagens: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = []
         if (systemPrompt.trim()) {
             mensagens.push({ role: 'system', content: systemPrompt })
         }
-        mensagens.push({ role: 'user', content: conteudo as any })
+        mensagens.push(...this.normalizarHistorico(opcoes.historico))
+        mensagens.push({
+            role: 'user',
+            content: conteudo as unknown as OpenAI.Chat.Completions.ChatCompletionUserMessageParam['content']
+        })
 
         try {
-            const payload: any = {
+            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
                 model: this.model,
                 messages: mensagens,
-                stream: true
+                stream: true,
+                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
-            if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
 
             const stream = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
             let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of stream) {
                 finishReason = this.normalizarFinishReason(chunk.choices?.[0]?.finish_reason)
-                const choice = chunk.choices?.[0] as any
-                const delta = choice?.delta as any
+                const choice = chunk.choices?.[0]
+                const delta = choice?.delta
                 const partes = this.extrairPartesStream(choice, delta)
                 const raciocinio = partes.raciocinio
                 if (raciocinio) {
@@ -179,17 +190,25 @@ export class OpenAIProvider implements AIProvider {
             }
 
             opcoes.onFimStream?.({ finishReason })
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Erro streaming imagem OpenAI:', error)
             if (this.ehRateLimit(error)) throw new Error('Limite ou créditos esgotados na OpenAI.')
             throw error
         }
     }
 
-    private ehRateLimit(err: any) {
-        const status = err?.status || err?.statusCode || err?.code
-        const mensagem = (err?.message || `${err || ''}`).toLowerCase()
+    private ehRateLimit(err: unknown) {
+        const erro = err as { status?: number; statusCode?: number; code?: string | number; message?: string }
+        const status = erro.status || erro.statusCode || erro.code
+        const mensagem = (erro.message || `${err || ''}`).toLowerCase()
         return status === 429 || mensagem.includes('rate limit') || mensagem.includes('quota')
+    }
+
+    private obterMensagemErro(erro: unknown): string {
+        if (erro instanceof Error && erro.message) {
+            return erro.message
+        }
+        return String(erro ?? '')
     }
 
     private normalizarFinishReason(valor: string | null | undefined): MetaFimStream['finishReason'] {
@@ -199,7 +218,10 @@ export class OpenAIProvider implements AIProvider {
         return 'other'
     }
 
-    private extrairPartesStream(choice: any, delta: any): { conteudo: string; raciocinio: string } {
+    private extrairPartesStream(
+        choice?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
+        delta?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
+    ): { conteudo: string; raciocinio: string } {
         let conteudo = ''
         let raciocinio = ''
 
@@ -218,15 +240,17 @@ export class OpenAIProvider implements AIProvider {
             conteudo += this.extrairTextoVariado(delta?.content)
         }
 
-        const candidatosConteudo = [
+        const fallbackConteudo = [
             delta?.text,
             choice?.text,
             choice?.content,
             choice?.message?.content
-        ]
-        conteudo += candidatosConteudo.map((valor) => this.extrairTextoVariado(valor)).join('')
+        ].map((valor) => this.extrairTextoVariado(valor)).join('')
+        if (!conteudo) {
+            conteudo += fallbackConteudo
+        }
 
-        const candidatosRaciocinio = [
+        const fallbackRaciocinio = [
             delta?.reasoning,
             delta?.reasoning_content,
             delta?.reasoningContent,
@@ -236,8 +260,10 @@ export class OpenAIProvider implements AIProvider {
             choice?.reasoningContent,
             choice?.thinking,
             choice?.message?.reasoning
-        ]
-        raciocinio += candidatosRaciocinio.map((valor) => this.extrairTextoVariado(valor)).join('')
+        ].map((valor) => this.extrairTextoVariado(valor)).join('')
+        if (!raciocinio) {
+            raciocinio += fallbackRaciocinio
+        }
 
         return {
             conteudo,
@@ -251,7 +277,7 @@ export class OpenAIProvider implements AIProvider {
             return valor.map((item) => this.extrairTextoVariado(item)).join('')
         }
         if (valor && typeof valor === 'object') {
-            const registro = valor as Record<string, unknown>
+            const registro = valor as RegistroGenerico
             return [
                 this.extrairTextoVariado(registro.text),
                 this.extrairTextoVariado(registro.content),
@@ -259,5 +285,15 @@ export class OpenAIProvider implements AIProvider {
             ].join('')
         }
         return ''
+    }
+
+    private normalizarHistorico(historico?: MensagemHistoricoIA[]): MensagemChat[] {
+        if (!Array.isArray(historico) || historico.length === 0) return []
+        return historico.map((mensagem) => ({
+            role: mensagem.role,
+            content: mensagem.role === 'user' && mensagem.images?.length
+                ? criarConteudoTextoComImagens(mensagem.content, mensagem.images)
+                : mensagem.content
+        }))
     }
 }

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useState } from 'react'
+import { forwardRef, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Plus, Save, Check, X, Sparkles, Wand2, Trash, ChevronDown, Brain, Image, Mic, MessageSquare } from 'lucide-react'
 import { 
@@ -52,14 +52,16 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
         [assistentes, assistenteSelecionadoId]
     )
 
-    const [rascunho, setRascunho] = useState<AssistenteConfig>(assistenteAtual)
+    const [rascunhos, setRascunhos] = useState<Record<string, AssistenteConfig>>({})
     const [showAdvanced, setShowAdvanced] = useState(false)
+    const rascunho = rascunhos[assistenteAtual.id] ?? assistenteAtual
 
-    useEffect(() => {
-        if (assistenteAtual) {
-            setRascunho(assistenteAtual)
-        }
-    }, [assistenteAtual?.id])
+    const atualizarRascunho = (proximo: AssistenteConfig) => {
+        setRascunhos((anterior) => ({
+            ...anterior,
+            [proximo.id]: proximo
+        }))
+    }
 
     const salvarAtual = () => {
         aoSalvar(rascunho)
@@ -75,6 +77,11 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
         if (origem !== 'personalizado') return
         const confirmar = window.confirm('Remover este assistente personalizado?')
         if (!confirmar) return
+        setRascunhos((anterior) => {
+            const proximo = { ...anterior }
+            delete proximo[id]
+            return proximo
+        })
         aoRemover(id)
     }
 
@@ -82,7 +89,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
         const novo = criarAssistenteVazio()
         aoAdicionar(novo)
         aoSelecionar(novo.id)
-        setRascunho(novo)
+        atualizarRascunho(novo)
     }
     
     const togglePermission = (perm: AssistantPermission) => {
@@ -90,7 +97,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
         const updated = permissions.includes(perm)
             ? permissions.filter(p => p !== perm)
             : [...permissions, perm]
-        setRascunho({ ...rascunho, permissions: updated })
+        atualizarRascunho({ ...rascunho, permissions: updated })
     }
     
     const toggleBehavior = (behavior: AssistantBehavior) => {
@@ -98,11 +105,16 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
         const updated = behaviors.includes(behavior)
             ? behaviors.filter(b => b !== behavior)
             : [...behaviors, behavior]
-        setRascunho({ ...rascunho, behaviors: updated })
+        atualizarRascunho({ ...rascunho, behaviors: updated })
     }
     
     const setTone = (tone: AssistantTone) => {
-        setRascunho({ ...rascunho, tone })
+        atualizarRascunho({ ...rascunho, tone })
+    }
+
+    const restaurarPadroes = () => {
+        setRascunhos({})
+        aoRestaurarPadrao()
     }
 
     // Cores e ícones disponíveis
@@ -201,7 +213,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                     </button>
 
                                     <button
-                                        onClick={aoRestaurarPadrao}
+                                        onClick={restaurarPadroes}
                                         className="w-full text-xs text-white/60 hover:text-white transition-colors"
                                     >
                                         Restaurar presets padrão
@@ -216,7 +228,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                         <label className="text-[11px] uppercase text-white/50 font-semibold">Nome</label>
                                         <input
                                             value={rascunho.nome}
-                                            onChange={(e) => setRascunho({ ...rascunho, nome: e.target.value })}
+                                            onChange={(e) => atualizarRascunho({ ...rascunho, nome: e.target.value })}
                                             className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-purple-400"
                                             placeholder="Assistente Geral"
                                         />
@@ -225,7 +237,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                         <label className="text-[11px] uppercase text-white/50 font-semibold">Descrição curta</label>
                                         <input
                                             value={rascunho.descricao}
-                                            onChange={(e) => setRascunho({ ...rascunho, descricao: e.target.value })}
+                                            onChange={(e) => atualizarRascunho({ ...rascunho, descricao: e.target.value })}
                                             className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-purple-400"
                                             placeholder="Explique a essência do preset"
                                         />
@@ -240,7 +252,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                             {ICON_PRESETS.map(icon => (
                                                 <button
                                                     key={icon}
-                                                    onClick={() => setRascunho({ ...rascunho, icon })}
+                                                    onClick={() => atualizarRascunho({ ...rascunho, icon })}
                                                     className={`w-10 h-10 flex items-center justify-center rounded-lg text-lg transition-all ${
                                                         rascunho.icon === icon
                                                             ? 'bg-purple-500/20 border-2 border-purple-500/50'
@@ -258,7 +270,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                             {COLOR_PRESETS.map(color => (
                                                 <button
                                                     key={color}
-                                                    onClick={() => setRascunho({ ...rascunho, color })}
+                                                    onClick={() => atualizarRascunho({ ...rascunho, color })}
                                                     className={`w-10 h-10 rounded-lg transition-all ${
                                                         rascunho.color === color ? 'ring-2 ring-white ring-offset-2 ring-offset-neutral-900' : ''
                                                     }`}
@@ -279,7 +291,7 @@ const AssistentesModal = forwardRef<HTMLDivElement, AssistentesModalProps>(({
                                     </div>
                                     <textarea
                                         value={rascunho.prompt}
-                                        onChange={(e) => setRascunho({ ...rascunho, prompt: e.target.value })}
+                                        onChange={(e) => atualizarRascunho({ ...rascunho, prompt: e.target.value })}
                                         className="min-h-[200px] w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none focus:border-purple-400/70 resize-none leading-relaxed scrollbar-thin scrollbar-thumb-white/15 scrollbar-track-transparent"
                                         placeholder="Descreva como o assistente deve se comportar..."
                                     />
