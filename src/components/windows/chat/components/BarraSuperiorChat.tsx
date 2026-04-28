@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useCallback, useRef } from 'react'
 import { Copy, Minus, X } from 'lucide-react'
 import seleneLogo from '/tray-icon.png'
 
@@ -15,20 +15,45 @@ export const BarraSuperiorChat: React.FC<BarraSuperiorChatProps> = ({
     onAlternarMaximizacaoJanela,
     onFecharJanela,
 }) => {
+    const arrastando = useRef(false)
+
+    // Drag customizado via IPC — substitui -webkit-app-region: drag
+    // que quebra seleção de texto no Electron frameless (Windows)
+    const iniciarDrag = useCallback((e: React.MouseEvent) => {
+        // Só botão esquerdo; ignora se clicou num botão
+        if (e.button !== 0) return
+        if ((e.target as HTMLElement).closest('button')) return
+
+        arrastando.current = true
+        window.electronAPI?.startWindowDrag?.()
+
+        const parar = () => {
+            if (!arrastando.current) return
+            arrastando.current = false
+            window.electronAPI?.stopWindowDrag?.()
+            window.removeEventListener('mouseup', parar)
+        }
+
+        window.addEventListener('mouseup', parar)
+    }, [])
+
+    // Duplo clique para maximizar/restaurar
+    const handleDoubleClick = useCallback(() => {
+        onAlternarMaximizacaoJanela()
+    }, [onAlternarMaximizacaoJanela])
+
     return (
         <header
-            className="flex h-[58px] items-center justify-between border-b border-white/[0.06] bg-[#090a0c] pl-6 pr-2 text-[#f2f3f7]"
-            style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+            className="flex h-[58px] items-center justify-between border-b border-white/[0.06] bg-[#090a0c] pl-6 pr-2 text-[#f2f3f7] cursor-default"
+            onMouseDown={iniciarDrag}
+            onDoubleClick={handleDoubleClick}
         >
             <div className="flex items-center gap-2.5 text-[14px] font-semibold tracking-[0.01em] text-[#e4e8f0]">
                 <img src={seleneLogo} alt="Selene" className="h-[15px] w-[15px] object-contain opacity-90" />
                 <span>Selene</span>
             </div>
 
-            <div
-                className="flex items-center"
-                style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-            >
+            <div className="flex items-center">
                 <div className="flex items-center overflow-hidden rounded-xl border border-white/[0.05] bg-[#101216]">
                     <button
                         type="button"

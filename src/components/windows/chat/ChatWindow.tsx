@@ -42,7 +42,7 @@ import { toolCallingService } from '../../../services/tools/ToolCallingService'
 import { mcpToolBridge } from '../../../services/tools/MCPToolBridge'
 import { obterConfiguracaoPerfilGeracao } from '../../../services/ai/politicaGeracao'
 import { processFileForProject, isFileSupported, formatFileSize, obterLimiteMaximoArquivo, getFileType } from '../../../services/DocumentService'
-import { indexProjectFile } from '../../../services/ProjectContextService'
+import { indexProjectFile, removeFileEmbeddings } from '../../../services/ProjectContextService'
 import { carregarConversasPersistidas, normalizarMensagensChat } from '../../../services/conversasPersistidas'
 import type { Project } from '../../../types/project'
 import { createProject } from '../../../types/project'
@@ -172,10 +172,10 @@ const ChatWindow: React.FC = () => {
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
     const shouldAutoScrollRef = useRef(true)
     const autoScrollTravadoManualmenteRef = useRef(false)
-    const [selecaoTextoAtiva, setSelecaoTextoAtiva] = useState(false)
-    const selecaoTextoAtivaRef = useRef(false)
     const ultimoScrollTopRef = useRef(0)
     const toqueScrollYRef = useRef<number | null>(null)
+    // Rastreia se o usuário está selecionando texto para evitar scroll/re-render
+    const selecionandoTextoRef = useRef(false)
     const [viewportDesktop, setViewportDesktop] = useState(() => (
         typeof window === 'undefined' ? true : window.innerWidth >= 1024
     ))
@@ -326,16 +326,6 @@ const ChatWindow: React.FC = () => {
     }, [shouldAutoScroll])
 
     useEffect(() => {
-        selecaoTextoAtivaRef.current = selecaoTextoAtiva
-
-        if (!selecaoTextoAtiva) return
-
-        autoScrollTravadoManualmenteRef.current = true
-        shouldAutoScrollRef.current = false
-        setShouldAutoScroll(false)
-    }, [selecaoTextoAtiva])
-
-    useEffect(() => {
         const container = messagesContainerRef.current
         if (!container) return
 
@@ -350,10 +340,8 @@ const ChatWindow: React.FC = () => {
         }
 
         const atualizarAutoScroll = () => {
-            if (selecaoTextoAtivaRef.current) {
-                definirAutoScroll(false)
-                return
-            }
+            // Não atualizar estado durante seleção de texto para evitar re-render
+            if (selecionandoTextoRef.current) return
 
             if (estaNoBottomAbsoluto()) {
                 autoScrollTravadoManualmenteRef.current = false
@@ -377,7 +365,9 @@ const ChatWindow: React.FC = () => {
             definirAutoScroll(false)
 
             // Interrompe qualquer smooth scroll em andamento assim que o usuário tenta subir.
-            container.scrollTo({ top: container.scrollTop, behavior: 'auto' })
+            if (!selecionandoTextoRef.current) {
+                container.scrollTo({ top: container.scrollTop, behavior: 'auto' })
+            }
         }
 
         const handleScroll = () => {
@@ -395,19 +385,31 @@ const ChatWindow: React.FC = () => {
             }
         }
 
+        // Detecta início de seleção de texto dentro das mensagens
         const handlePointerDown = (event: PointerEvent) => {
-            if (!isGenerating) return
-
             const alvo = event.target as HTMLElement | null
-            const iniciouSelecaoEmMensagemAssistente = Boolean(alvo?.closest('[data-bloco-mensagem-assistente="true"]'))
+            const dentroDeBloco = Boolean(
+                alvo?.closest('[data-bloco-mensagem="true"]') ||
+                alvo?.closest('.select-text')
+            )
 
-            if (iniciouSelecaoEmMensagemAssistente) {
+            if (dentroDeBloco) {
+                selecionandoTextoRef.current = true
                 autoScrollTravadoManualmenteRef.current = true
                 shouldAutoScrollRef.current = false
                 return
             }
 
-            interromperAutoScroll()
+            if (isGenerating) {
+                interromperAutoScroll()
+            }
+        }
+
+        // Finaliza rastreamento de seleção de texto
+        const handlePointerUp = () => {
+            if (selecionandoTextoRef.current) {
+                selecionandoTextoRef.current = false
+            }
         }
 
         const handleTouchStart = (event: TouchEvent) => {
@@ -436,6 +438,7 @@ const ChatWindow: React.FC = () => {
         container.addEventListener('scroll', handleScroll)
         container.addEventListener('wheel', handleWheel, { passive: true })
         container.addEventListener('pointerdown', handlePointerDown, { passive: true })
+        container.addEventListener('pointerup', handlePointerUp, { passive: true })
         container.addEventListener('touchstart', handleTouchStart, { passive: true })
         container.addEventListener('touchmove', handleTouchMove, { passive: true })
         container.addEventListener('touchend', handleTouchEnd, { passive: true })
@@ -444,6 +447,7 @@ const ChatWindow: React.FC = () => {
             container.removeEventListener('scroll', handleScroll)
             container.removeEventListener('wheel', handleWheel)
             container.removeEventListener('pointerdown', handlePointerDown)
+            container.removeEventListener('pointerup', handlePointerUp)
             container.removeEventListener('touchstart', handleTouchStart)
             container.removeEventListener('touchmove', handleTouchMove)
             container.removeEventListener('touchend', handleTouchEnd)
@@ -452,13 +456,23 @@ const ChatWindow: React.FC = () => {
 
     useEffect(() => {
         const container = messagesContainerRef.current
-        if (!container || !shouldAutoScrollRef.current || selecaoTextoAtivaRef.current) return
+        if (!container || !shouldAutoScrollRef.current) return
+
+        // Não scrollar durante seleção de texto para preservar o destaque
+        if (selecionandoTextoRef.current) return
+
+        // Verificar se há seleção ativa dentro do container
+        const selecaoAtiva = window.getSelection()
+        if (selecaoAtiva && !selecaoAtiva.isCollapsed) {
+            const selecaoDentroContainer = container.contains(selecaoAtiva.anchorNode)
+            if (selecaoDentroContainer) return
+        }
 
         container.scrollTo({
             top: container.scrollHeight,
             behavior: isGenerating ? 'auto' : 'smooth',
         })
-    }, [isGenerating, messages, messagesContainerRef, selecaoTextoAtiva])
+    }, [isGenerating, messages, messagesContainerRef])
 
     // ============================================
     // Service Configuration
@@ -599,6 +613,33 @@ const ChatWindow: React.FC = () => {
         setProjects(prev => prev.map(p =>
             p.id === projectId ? { ...p, ...updates, updatedAt: Date.now() } : p
         ))
+    }, [])
+
+    const renameProjectFile = useCallback((projectId: string, fileId: string, newName: string) => {
+        setProjects(prev => prev.map(p => {
+            if (p.id !== projectId) return p
+
+            return {
+                ...p,
+                files: p.files.map((file) => (
+                    file.id === fileId ? { ...file, name: newName } : file
+                )),
+                updatedAt: Date.now(),
+            }
+        }))
+    }, [])
+
+    const removeFileFromProject = useCallback((projectId: string, fileId: string) => {
+        setProjects(prev => prev.map(p => {
+            if (p.id !== projectId) return p
+
+            return {
+                ...p,
+                files: p.files.filter((file) => file.id !== fileId),
+                updatedAt: Date.now(),
+            }
+        }))
+        removeFileEmbeddings(fileId)
     }, [])
 
     // Register project update callback for AI tool
@@ -1222,17 +1263,20 @@ const ChatWindow: React.FC = () => {
 
     const navegacaoChatAberta = viewportDesktop ? sidebarExpandida : shell.drawerAberto
     const classeCanvasPrincipal = 'mt-3 relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-tl-[18px] border-t border-white/[0.05] bg-[#141416]'
-    const transicaoLayoutNavegacao = {
-        type: 'spring' as const,
-        stiffness: 320,
-        damping: 34,
-        mass: 0.9,
-    }
+    // Transição CSS pura (sem Framer Motion layout) para não aplicar transform
+    // persistente que quebra a seleção de texto no Chromium/Electron.
+    const estiloTransicaoLayout = 'transition-all duration-300 ease-[cubic-bezier(0.25,0.8,0.25,1)]'
 
     return (
         <>
-            <div className="flex h-screen w-full min-w-0 overflow-hidden bg-[#090a0c] text-[#f2f3f7] font-sans selection:bg-[#4b479f]/30">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <div
+                className="flex h-screen w-full min-w-0 overflow-hidden bg-[#090a0c] text-[#f2f3f7] font-sans selection:bg-[#4b479f]/30"
+                style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+            >
+                <div
+                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                    style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                >
                     <BarraSuperiorChat
                         janelaMaximizada={janelaMaximizada}
                         onMinimizarJanela={() => window.electronAPI?.minimizeWindow?.()}
@@ -1297,10 +1341,8 @@ const ChatWindow: React.FC = () => {
                             }}
                         />
 
-                        <motion.div
-                            layout
-                            transition={transicaoLayoutNavegacao}
-                            className="flex min-h-0 min-w-0 flex-1 flex-col"
+                        <div
+                            className={`flex min-h-0 min-w-0 flex-1 flex-col ${estiloTransicaoLayout}`}
                             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                         >
                             <div className={classeCanvasPrincipal}>
@@ -1308,9 +1350,9 @@ const ChatWindow: React.FC = () => {
                                     {visualizacaoPrincipalAtiva === 'chat' && (
                                         <motion.div
                                             key="conteudo-chat"
-                                            initial={{ opacity: 0, x: 12 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            exit={{ opacity: 0, x: -12 }}
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            exit={{ opacity: 0 }}
                                             className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
                                         >
                                             {messages.length === 0 ? (
@@ -1334,7 +1376,6 @@ const ChatWindow: React.FC = () => {
                                                     onCopyMessage={copyMessage}
                                                     onEditUserMessage={editarMensagemUsuario}
                                                     onRegenerateResponse={regenerateLastResponse}
-                                                    onSelecaoTextoAtivaChange={setSelecaoTextoAtiva}
                                                     profileName={profile.name}
                                                     hasInvestigationTrace={!!currentTrace}
                                                     onShowReasoning={() => setShowReasoningTrail(true)}
@@ -1459,6 +1500,8 @@ const ChatWindow: React.FC = () => {
                                             onDeleteProject={() => deleteProject(activeProject.id)}
                                             onRenameProject={(newName) => renameProject(activeProject.id, newName)}
                                             onUpdateProject={(updates) => updateProject(activeProject.id, updates)}
+                                            onRenameFile={(fileId, newName) => renameProjectFile(activeProject.id, fileId, newName)}
+                                            onRemoveFile={(fileId) => removeFileFromProject(activeProject.id, fileId)}
                                             onDeleteConversation={deleteConversation}
                                             onRenameConversation={renameConversation}
                                             onUploadFiles={() => handleProjectFileUpload(activeProject.id)}
@@ -1478,7 +1521,7 @@ const ChatWindow: React.FC = () => {
                                     )}
                                 </AnimatePresence>
                             </div>
-                        </motion.div>
+                        </div>
 
                         <div className="lg:hidden">
                             <DrawerNavegacaoChat

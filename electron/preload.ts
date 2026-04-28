@@ -106,6 +106,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     minimizeWindow: () => ipcRenderer.send('window-minimize'),
     toggleMaximizeWindow: () => ipcRenderer.send('window-maximize'),
     closeWindow: () => ipcRenderer.send('window-close'),
+    startWindowDrag: () => ipcRenderer.send('window-start-drag'),
+    stopWindowDrag: () => ipcRenderer.send('window-stop-drag'),
     onWindowMaximizedChange: (callback: (maximizada: boolean) => void) => {
         const listener = (_event: unknown, maximizada: boolean) => callback(maximizada)
         ipcRenderer.on('window-maximized-change', listener)

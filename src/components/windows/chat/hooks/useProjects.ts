@@ -77,10 +77,7 @@ export function useProjects() {
             }
             return p
         }))
-        // Clean embeddings
-        removeFileEmbeddings(fileId).catch(err => 
-            console.warn('[useProjects] Failed to clean embeddings:', err)
-        )
+        removeFileEmbeddings(fileId)
     }, [])
 
     // Get project by id

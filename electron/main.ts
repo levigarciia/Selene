@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, screen, globalShortcut, desktopCapturer, T
 import path from 'path'
 import { fileURLToPath } from 'url'
 import fs from 'fs'
-import robot from 'robotjs'
+import { createRequire } from 'module'
 import { initAutoUpdater, cleanupAutoUpdater } from './updater.js'
 import { setupWhisperIPC } from './whisper.js'
 import { setupWebSearchIPC } from './web-search.js'
@@ -11,6 +11,7 @@ import { setupMCPIPC } from './mcp/mcpIPC.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const requireNativo = createRequire(import.meta.url)
 
 process.env.DIST = path.join(__dirname, '../dist')
 process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(__dirname, '../public')
@@ -38,6 +39,28 @@ const logDebug = (...args: unknown[]) => {
 let isAreaSelectionMode = false
 let areaEnforceInterval: NodeJS.Timeout | null = null
 let hidratacaoPendenteChat: unknown[] | null = null
+type RobotJS = {
+    keyTap: (tecla: string, modificador?: string | string[]) => void
+}
+let robot: RobotJS | null | undefined
+
+const obterRobot = (): RobotJS | null => {
+    if (robot !== undefined) {
+        return robot
+    }
+
+    try {
+        robot = requireNativo('robotjs') as RobotJS
+        return robot
+    } catch (error) {
+        robot = null
+        console.error(
+            '[robotjs] Falha ao carregar módulo nativo. Execute `bun run rebuild:nativos` para recompilar o binário do Electron.',
+            error
+        )
+        return null
+    }
+}
 
 // Helper para atualizar estado do overlay e menu do tray
 const setOverlayVisible = (visible: boolean) => {
@@ -153,6 +176,13 @@ function abrirJanelaChat(messages: unknown[] = []) {
 }
 
 const dispararColarGlobal = () => {
+    const robot = obterRobot()
+
+    if (!robot) {
+        console.error('[colagem-global] robotjs indisponível; atalho global de colagem foi ignorado')
+        return
+    }
+
     try {
         robot.keyTap('v', process.platform === 'darwin' ? 'command' : 'control')
     } catch (error) {
@@ -720,6 +750,38 @@ function createWindow() {
     configurarMenuInspecionar(win)
 }
 
+// Drag customizado via JS — substitui -webkit-app-region: drag
+// que quebra seleção de texto no Electron frameless (Windows)
+let dragInterval: NodeJS.Timeout | null = null
+
+ipcMain.on('window-start-drag', (event) => {
+    const janela = BrowserWindow.fromWebContents(event.sender)
+    if (!janela || janela.isDestroyed() || janela.isMaximized()) return
+
+    const cursor = screen.getCursorScreenPoint()
+    const bounds = janela.getBounds()
+    const offsetX = cursor.x - bounds.x
+    const offsetY = cursor.y - bounds.y
+
+    if (dragInterval) clearInterval(dragInterval)
+
+    dragInterval = setInterval(() => {
+        if (janela.isDestroyed()) {
+            if (dragInterval) clearInterval(dragInterval)
+            dragInterval = null
+            return
+        }
+        const pos = screen.getCursorScreenPoint()
+        janela.setPosition(pos.x - offsetX, pos.y - offsetY)
+    }, 16)
+})
+
+ipcMain.on('window-stop-drag', () => {
+    if (dragInterval) {
+        clearInterval(dragInterval)
+        dragInterval = null
+    }
+})
 ipcMain.on('window-minimize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     win?.minimize()

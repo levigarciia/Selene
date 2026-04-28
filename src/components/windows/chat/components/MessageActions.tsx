@@ -72,6 +72,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                                 src={source.favicon || `https://www.google.com/s2/favicons?domain=${new URL(source.url).hostname}&sz=16`}
                                 alt=""
                                 className="w-4 h-4 rounded-full bg-neutral-700 border border-neutral-600"
+                                draggable={false}
                                 onError={(e) => {
                                     (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23888"%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E'
                                 }}
@@ -103,6 +104,7 @@ export const MessageActions: React.FC<MessageActionsProps> = ({
                                             src={source.favicon || `https://www.google.com/s2/favicons?domain=${new URL(source.url).hostname}&sz=16`}
                                             alt=""
                                             className="w-4 h-4 rounded"
+                                            draggable={false}
                                             onError={(e) => {
                                                 (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23888"%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E'
                                             }}

@@ -67,6 +67,8 @@ declare global {
             minimizeWindow?: () => void;
             toggleMaximizeWindow?: () => void;
             closeWindow?: () => void;
+            startWindowDrag?: () => void;
+            stopWindowDrag?: () => void;
             onWindowMaximizedChange?: (callback: (maximizada: boolean) => void) => (() => void) | void;
             onCollapseToolbar?: (callback: () => void) => (() => void) | void;
             // Auto-update API

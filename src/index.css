@@ -29,3 +29,12 @@ body {
     transform: scaleY(0.95);
   }
 }
+
+/* Garante seleção de texto nos blocos de mensagem do chat */
+[data-bloco-mensagem="true"],
+[data-bloco-mensagem="true"] * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-app-region: no-drag !important;
+  -webkit-user-drag: none !important;
+}

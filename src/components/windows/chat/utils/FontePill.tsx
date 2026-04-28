@@ -18,6 +18,7 @@ export const FontePill: React.FC<FontePillProps> = ({ rotulo, fonte }) => {
                         src={fonte.favicon}
                         alt=""
                         className="w-3 h-3 rounded-full"
+                        draggable={false}
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23888"%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E'
                         }}
@@ -41,6 +42,7 @@ export const FontePill: React.FC<FontePillProps> = ({ rotulo, fonte }) => {
                                     src={fonte.favicon || `https://www.google.com/s2/favicons?domain=${new URL(fonte.url).hostname}&sz=32`}
                                     alt=""
                                     className="w-4 h-4 rounded"
+                                    draggable={false}
                                     onError={(e) => {
                                         (e.target as HTMLImageElement).src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23888"%3E%3Ccircle cx="12" cy="12" r="10"/%3E%3C/svg%3E'
                                     }}

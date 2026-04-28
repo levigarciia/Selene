@@ -23,11 +23,107 @@ interface MessageListProps {
     onCopyMessage: (msgId: string, content: string) => void
     onEditUserMessage: (msgId: string, content: string) => void
     onRegenerateResponse: () => void
-    onSelecaoTextoAtivaChange?: (ativa: boolean) => void
     profileName?: string
     hasInvestigationTrace?: boolean
     onShowReasoning?: () => void
 }
+
+interface BlocoMarkdownMensagemProps {
+    conteudo: string
+    fontesDaMensagem: WebSource[]
+    mostrarCursor: boolean
+    ultimaMensagem: boolean
+    papel: string
+    estaGerando: boolean
+}
+
+const BlocoMarkdownMensagem = React.memo(({
+    conteudo,
+    fontesDaMensagem,
+    mostrarCursor,
+    ultimaMensagem,
+    papel,
+    estaGerando,
+}: BlocoMarkdownMensagemProps) => (
+    <div
+        data-bloco-mensagem="true"
+        className={`w-full min-w-0 break-words select-text px-4 py-3 rounded-2xl text-sm leading-relaxed ${papel === 'user'
+            ? 'bg-purple-600 text-white rounded-tr-sm shadow-md shadow-purple-900/30'
+            : 'bg-neutral-800/60 border border-white/5 text-neutral-200 rounded-tl-sm'
+            } ${mostrarCursor && estaGerando && ultimaMensagem && papel === 'assistant'
+                ? "[&>*:last-child]:after:content-[''] [&>*:last-child]:after:inline-block [&>*:last-child]:after:w-2.5 [&>*:last-child]:after:h-2.5 [&>*:last-child]:after:bg-purple-400 [&>*:last-child]:after:rounded-full [&>*:last-child]:after:ml-1.5 [&>*:last-child]:after:align-baseline [&>*:last-child]:after:animate-pulse"
+                : ''
+            }`}
+        style={{ WebkitUserSelect: 'text', userSelect: 'text' } as React.CSSProperties}
+    >
+        {mostrarCursor && estaGerando && ultimaMensagem && papel === 'assistant' && !conteudo && (
+            <div className="inline-block w-2.5 h-2.5 bg-purple-400 rounded-full animate-pulse" />
+        )}
+        <ReactMarkdown
+            components={{
+                p: ({ children }) => (
+                    <p className="mb-2 break-words last:mb-0">
+                        {renderizarNosComFontes(children, fontesDaMensagem)}
+                    </p>
+                ),
+                strong: ({ children }) => (
+                    <strong className="font-semibold text-white">
+                        {renderizarNosComFontes(children, fontesDaMensagem)}
+                    </strong>
+                ),
+                ul: ({ children }) => <ul className="mb-2 ml-4 list-disc list-outside space-y-1 break-words marker:text-purple-400">{children}</ul>,
+                ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal list-outside space-y-1 break-words marker:text-purple-400">{children}</ol>,
+                li: ({ children }) => (
+                    <li className="pl-1">
+                        {renderizarNosComFontes(children, fontesDaMensagem)}
+                    </li>
+                ),
+                code: ({ className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || '')
+                    const isInline = !match && !String(children).includes('\n')
+                    return isInline ? (
+                        <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs font-mono text-purple-200 border border-white/5 break-all" {...props}>
+                            {children}
+                        </code>
+                    ) : (
+                        <div className="my-3 w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-white/10 bg-[#0d1117]">
+                            <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/5">
+                                <div className="flex items-center gap-1.5">
+                                    <Terminal size={12} className="text-white/40" />
+                                    <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider">{match?.[1] || 'code'}</span>
+                                </div>
+                            </div>
+                            <div className="min-w-0 max-w-full overflow-x-auto p-3 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-purple-400/40">
+                                <code className="block min-w-full w-max text-xs font-mono whitespace-pre text-neutral-300" {...props}>
+                                    {children}
+                                </code>
+                            </div>
+                        </div>
+                    )
+                },
+                a: ({ href, children }) => (
+                    <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline underline-offset-2">
+                        {children}
+                    </a>
+                ),
+                blockquote: ({ children }) => (
+                    <blockquote className="my-2 rounded-r border-l-2 border-purple-500/50 bg-purple-500/5 py-1 pl-3 text-sm italic text-white/70 break-words">
+                        {renderizarNosComFontes(children, fontesDaMensagem)}
+                    </blockquote>
+                ),
+            }}
+        >
+            {conteudo}
+        </ReactMarkdown>
+    </div>
+), (anterior, atual) => (
+    anterior.conteudo === atual.conteudo
+    && anterior.fontesDaMensagem === atual.fontesDaMensagem
+    && anterior.mostrarCursor === atual.mostrarCursor
+    && anterior.ultimaMensagem === atual.ultimaMensagem
+    && anterior.papel === atual.papel
+    && anterior.estaGerando === atual.estaGerando
+))
 
 export const MessageList: React.FC<MessageListProps> = ({
     messages,
@@ -43,41 +139,12 @@ export const MessageList: React.FC<MessageListProps> = ({
     onCopyMessage,
     onEditUserMessage,
     onRegenerateResponse,
-    onSelecaoTextoAtivaChange,
     hasInvestigationTrace,
     onShowReasoning,
 }) => {
     const [raciocinioExpandidoPorMensagem, setRaciocinioExpandidoPorMensagem] = React.useState<Record<string, boolean>>({})
     const [mensagemEmEdicaoId, setMensagemEmEdicaoId] = React.useState<string | null>(null)
     const [conteudoEditado, setConteudoEditado] = React.useState('')
-    const [selecaoTextoAtiva, setSelecaoTextoAtiva] = React.useState(false)
-    const [mensagensCongeladas, setMensagensCongeladas] = React.useState<ChatMessage[] | null>(null)
-    const ponteiroPressionadoRef = React.useRef(false)
-    const cliqueIniciadoEmMensagemAssistenteRef = React.useRef(false)
-
-    const definirSelecaoTextoAtiva = React.useCallback((ativa: boolean) => {
-        setSelecaoTextoAtiva((valorAtual) => (valorAtual === ativa ? valorAtual : ativa))
-        onSelecaoTextoAtivaChange?.(ativa)
-    }, [onSelecaoTextoAtivaChange])
-
-    const possuiSelecaoNaLista = React.useCallback(() => {
-        const container = messagesContainerRef.current
-        const selecao = window.getSelection()
-
-        if (!container || !selecao || selecao.rangeCount === 0 || selecao.isCollapsed) {
-            return false
-        }
-
-        const textoSelecionado = selecao.toString().trim()
-        if (!textoSelecionado) return false
-
-        const range = selecao.getRangeAt(0)
-        return container.contains(range.commonAncestorContainer)
-    }, [messagesContainerRef])
-
-    const congelarMensagensSeNecessario = React.useCallback(() => {
-        setMensagensCongeladas((valorAtual) => valorAtual ?? messages)
-    }, [messages])
 
     const cancelarEdicao = React.useCallback(() => {
         setMensagemEmEdicaoId(null)
@@ -108,60 +175,6 @@ export const MessageList: React.FC<MessageListProps> = ({
         }
     }, [cancelarEdicao, mensagemEmEdicaoId, messages])
 
-    React.useEffect(() => {
-        if (selecaoTextoAtiva) return
-        setMensagensCongeladas(null)
-    }, [selecaoTextoAtiva])
-
-    React.useEffect(() => {
-        const atualizarEstadoSelecao = () => {
-            if (possuiSelecaoNaLista()) {
-                congelarMensagensSeNecessario()
-                definirSelecaoTextoAtiva(true)
-                return
-            }
-
-            definirSelecaoTextoAtiva(false)
-        }
-
-        const handleSelectionChange = () => {
-            // Evita rerender no meio do drag para não quebrar a âncora da seleção.
-            if (ponteiroPressionadoRef.current && cliqueIniciadoEmMensagemAssistenteRef.current) {
-                return
-            }
-
-            atualizarEstadoSelecao()
-        }
-
-        const handlePointerUp = () => {
-            const iniciouEmMensagemAssistente = cliqueIniciadoEmMensagemAssistenteRef.current
-
-            ponteiroPressionadoRef.current = false
-            cliqueIniciadoEmMensagemAssistenteRef.current = false
-
-            if (iniciouEmMensagemAssistente) {
-                window.requestAnimationFrame(() => {
-                    atualizarEstadoSelecao()
-                })
-                return
-            }
-
-            atualizarEstadoSelecao()
-        }
-
-        document.addEventListener('selectionchange', handleSelectionChange)
-        document.addEventListener('pointerup', handlePointerUp)
-        document.addEventListener('pointercancel', handlePointerUp)
-
-        return () => {
-            document.removeEventListener('selectionchange', handleSelectionChange)
-            document.removeEventListener('pointerup', handlePointerUp)
-            document.removeEventListener('pointercancel', handlePointerUp)
-        }
-    }, [congelarMensagensSeNecessario, definirSelecaoTextoAtiva, possuiSelecaoNaLista])
-
-    const mensagensRenderizadas = selecaoTextoAtiva && mensagensCongeladas ? mensagensCongeladas : messages
-
     const renderMarkdown = (
         content: string,
         fontesDaMensagem: WebSource[],
@@ -169,77 +182,14 @@ export const MessageList: React.FC<MessageListProps> = ({
         isLastMessage: boolean,
         role: string
     ) => (
-        <div
-            data-bloco-mensagem-assistente={role === 'assistant' ? 'true' : undefined}
-            className={`w-full min-w-0 break-words select-text px-4 py-3 rounded-2xl text-sm leading-relaxed ${role === 'user'
-                ? 'bg-purple-600 text-white rounded-tr-sm shadow-md shadow-purple-900/30'
-                : 'bg-neutral-800/60 border border-white/5 text-neutral-200 rounded-tl-sm'
-                } ${showCursor && isGenerating && isLastMessage && role === 'assistant'
-                    ? "[&>*:last-child]:after:content-[''] [&>*:last-child]:after:inline-block [&>*:last-child]:after:w-2.5 [&>*:last-child]:after:h-2.5 [&>*:last-child]:after:bg-purple-400 [&>*:last-child]:after:rounded-full [&>*:last-child]:after:ml-1.5 [&>*:last-child]:after:align-baseline [&>*:last-child]:after:animate-pulse"
-                    : ''
-                }`}
-            style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
-        >
-            {showCursor && isGenerating && isLastMessage && role === 'assistant' && !content && (
-                <div className="inline-block w-2.5 h-2.5 bg-purple-400 rounded-full animate-pulse" />
-            )}
-            <ReactMarkdown
-                components={{
-                    p: ({ children }) => (
-                        <p className="mb-2 break-words last:mb-0">
-                            {renderizarNosComFontes(children, fontesDaMensagem)}
-                        </p>
-                    ),
-                    strong: ({ children }) => (
-                        <strong className="font-semibold text-white">
-                            {renderizarNosComFontes(children, fontesDaMensagem)}
-                        </strong>
-                    ),
-                    ul: ({ children }) => <ul className="mb-2 ml-4 list-disc list-outside space-y-1 break-words marker:text-purple-400">{children}</ul>,
-                    ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal list-outside space-y-1 break-words marker:text-purple-400">{children}</ol>,
-                    li: ({ children }) => (
-                        <li className="pl-1">
-                            {renderizarNosComFontes(children, fontesDaMensagem)}
-                        </li>
-                    ),
-                    code: ({ className, children, ...props }) => {
-                        const match = /language-(\w+)/.exec(className || '')
-                        const isInline = !match && !String(children).includes('\n')
-                        return isInline ? (
-                            <code className="bg-black/30 px-1.5 py-0.5 rounded text-xs font-mono text-purple-200 border border-white/5 break-all" {...props}>
-                                {children}
-                            </code>
-                        ) : (
-                            <div className="my-3 w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-white/10 bg-[#0d1117]">
-                                <div className="flex items-center justify-between px-3 py-1.5 bg-white/5 border-b border-white/5">
-                                    <div className="flex items-center gap-1.5">
-                                        <Terminal size={12} className="text-white/40" />
-                                        <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider">{match?.[1] || 'code'}</span>
-                                    </div>
-                                </div>
-                                <div className="min-w-0 max-w-full overflow-x-auto p-3 [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/20 hover:[&::-webkit-scrollbar-thumb]:bg-purple-400/40">
-                                    <code className="block min-w-full w-max text-xs font-mono whitespace-pre text-neutral-300" {...props}>
-                                        {children}
-                                    </code>
-                                </div>
-                            </div>
-                        )
-                    },
-                    a: ({ href, children }) => (
-                        <a href={href} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 underline underline-offset-2">
-                            {children}
-                        </a>
-                    ),
-                    blockquote: ({ children }) => (
-                        <blockquote className="my-2 rounded-r border-l-2 border-purple-500/50 bg-purple-500/5 py-1 pl-3 text-sm italic text-white/70 break-words">
-                            {renderizarNosComFontes(children, fontesDaMensagem)}
-                        </blockquote>
-                    ),
-                }}
-            >
-                {content}
-            </ReactMarkdown>
-        </div>
+        <BlocoMarkdownMensagem
+            conteudo={content}
+            fontesDaMensagem={fontesDaMensagem}
+            mostrarCursor={showCursor}
+            ultimaMensagem={isLastMessage}
+            papel={role}
+            estaGerando={isGenerating}
+        />
     )
 
     const renderBlocoRaciocinio = (msgId: string, raciocinio: string) => {
@@ -317,20 +267,17 @@ export const MessageList: React.FC<MessageListProps> = ({
     return (
         <main
             ref={messagesContainerRef}
-            onPointerDownCapture={(event) => {
-                ponteiroPressionadoRef.current = true
-
-                const alvo = event.target as HTMLElement | null
-                const clicouEmMensagemAssistente = Boolean(alvo?.closest('[data-bloco-mensagem-assistente="true"]'))
-
-                cliqueIniciadoEmMensagemAssistenteRef.current = clicouEmMensagemAssistente
-            }}
             className="flex-1 min-h-0 min-w-0 space-y-5 overflow-x-hidden overflow-y-auto bg-transparent px-8 py-8 select-text [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-track]:bg-transparent"
-            style={{ WebkitAppRegion: 'no-drag', WebkitUserSelect: 'text', userSelect: 'text' } as React.CSSProperties}
+            style={{
+                WebkitAppRegion: 'no-drag',
+                WebkitUserSelect: 'text',
+                userSelect: 'text',
+                WebkitUserDrag: 'none',
+            } as React.CSSProperties}
         >
-            {mensagensRenderizadas.map((msg, index) => {
+            {messages.map((msg, index) => {
                 const fontesDaMensagem = messageSources[msg.id] || []
-                const isLastMessage = index === mensagensRenderizadas.length - 1
+                const isLastMessage = index === messages.length - 1
                 const raciocinioDaMensagem = (msg.raciocinio || '').trim()
                 const estaEditandoMensagem = msg.role === 'user' && mensagemEmEdicaoId === msg.id
 
@@ -341,11 +288,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                 const hasCards = msg.role === 'assistant' && messageSearchCards[msg.id]?.length > 0
 
                 return (
-                    <motion.div
+                    <div
                         key={msg.id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2 }}
                         className={`flex min-w-0 max-w-full group ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                         {msg.role === 'assistant' && (
@@ -386,6 +330,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                                             src={img}
                                                             alt={`Anexo ${imgIdx + 1}`}
                                                             className="max-h-50 max-w-50 cursor-pointer rounded-xl border border-white/10 object-cover transition-opacity hover:opacity-90"
+                                                            draggable={false}
                                                             onClick={() => window.open(img, '_blank')}
                                                         />
                                                     </div>
@@ -441,7 +386,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                 <div className="h-3 w-3 rounded-full bg-[#6c7483]" />
                             </div>
                         )}
-                    </motion.div>
+                    </div>
                 )
             })}
 
