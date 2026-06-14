@@ -313,7 +313,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     x: { duration: collapsed ? 0.14 : 0.22, ease: [0.22, 1, 0.36, 1] },
                     scale: { duration: 0.2, ease: 'easeOut' },
                 }}
-                className="flex h-full w-full min-h-0 min-w-0 flex-col px-3 pb-3 pt-3"
+                style={{ width: larguraSidebarExpandida }}
+                className="flex h-full min-h-0 flex-col px-3 pb-3 pt-3"
             >
                 <div className="space-y-2.5 border-b border-white/[0.04] pb-3">
                     <div className="flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.035] p-1">
@@ -322,8 +323,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             onClick={onCreateNewConversation}
                             className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-[10px] px-3 text-left text-[13px] font-medium text-white transition-colors hover:bg-white/[0.03]"
                         >
-                            <Plus size={15} />
-                            <span>Nova conversa</span>
+                            <Plus size={15} className="shrink-0" />
+                            <span className="whitespace-nowrap">Nova conversa</span>
                         </button>
 
                         {onAbrirContexto && (

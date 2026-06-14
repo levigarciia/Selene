@@ -8,12 +8,23 @@ export interface ImagemMensagemChat {
     statusResumo?: StatusResumoImagem
 }
 
+export interface ArquivoAnexo {
+    id: string
+    name: string
+    type: 'pdf' | 'docx' | 'txt' | 'md' | 'other'
+    size: number
+    content: string
+    status?: 'processando' | 'concluido' | 'erro'
+    arquivoOriginal?: File
+}
+
 export interface ChatMessage {
     id: string
     role: Role
     content: string
     raciocinio?: string
     timestamp: number
-    images?: string[] // Base64 encoded images
+    images?: string[] // Imagens codificadas em Base64
     imagensContexto?: ImagemMensagemChat[]
+    arquivos?: ArquivoAnexo[]
 }

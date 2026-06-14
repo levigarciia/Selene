@@ -1,4 +1,4 @@
-import type { ChatMessage, ImagemMensagemChat, StatusResumoImagem } from '../types/chat'
+import type { ChatMessage, ImagemMensagemChat, StatusResumoImagem, ArquivoAnexo } from '../types/chat'
 
 const CHAVE_STORAGE_CONVERSAS = 'selene_conversations'
 
@@ -108,6 +108,22 @@ export function normalizarMensagemChat(valor: unknown): ChatMessage | null {
 
     const imagensContexto = Array.from(metadadosPorSrc.values())
 
+    const arquivosBrutos = Array.isArray(registro.arquivos) ? registro.arquivos : []
+    const arquivos: ArquivoAnexo[] = arquivosBrutos
+        .map((arq: unknown) => {
+            if (!arq || typeof arq !== 'object') return null
+            const anexo = arq as Record<string, unknown>
+            const arqId = typeof anexo.id === 'string' ? anexo.id : crypto.randomUUID()
+            const name = typeof anexo.name === 'string' ? anexo.name : 'Arquivo'
+            const type = typeof anexo.type === 'string' && ['pdf', 'docx', 'txt', 'md', 'other'].includes(anexo.type) ? anexo.type : 'other'
+            const size = typeof anexo.size === 'number' ? anexo.size : 0
+            const content = typeof anexo.content === 'string' ? anexo.content : ''
+            const status = typeof anexo.status === 'string' ? anexo.status : undefined
+
+            return { id: arqId, name, type, size, content, status } as ArquivoAnexo
+        })
+        .filter((arq): arq is ArquivoAnexo => Boolean(arq))
+
     return {
         id,
         role,
@@ -120,6 +136,7 @@ export function normalizarMensagemChat(valor: unknown): ChatMessage | null {
             : Date.now(),
         images: imagens.length > 0 ? imagens : undefined,
         imagensContexto: imagensContexto.length > 0 ? imagensContexto : undefined,
+        arquivos: arquivos.length > 0 ? arquivos : undefined,
     }
 }
 

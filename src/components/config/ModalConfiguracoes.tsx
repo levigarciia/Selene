@@ -32,8 +32,8 @@ type ModalConfiguracoesProps = {
   atalhoScreenshot: string
   aoAlterarAtalho: (valor: string) => void
   aoAlterarAtalhoScreenshot: (valor: string) => void
-  provedorAtivo: 'openai' | 'gemini' | 'openrouter' | 'lmstudio'
-  aoAlterarProvedorAtivo: (valor: 'openai' | 'gemini' | 'openrouter' | 'lmstudio') => void
+  provedorAtivo: 'openai' | 'gemini' | 'openrouter' | 'local'
+  aoAlterarProvedorAtivo: (valor: 'openai' | 'gemini' | 'openrouter' | 'local') => void
   overlayProativoConfig: ConfiguracaoOverlayProativo
   aoAlterarOverlayProativoHabilitado: (valor: boolean) => void
   aoAlterarOverlayProativoNivel: (valor: NivelIntervencaoOverlay) => void

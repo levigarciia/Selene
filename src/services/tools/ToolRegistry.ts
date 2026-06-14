@@ -103,6 +103,36 @@ class ToolRegistry {
     }
 
     /**
+     * Busca ferramentas por relevância local, sem chamar IA.
+     */
+    searchTools(query: string, limit: number = 8, tools: ToolDefinition[] = this.getEnabled()): ToolDefinition[] {
+        const consulta = this.normalizarTexto(query)
+        const termos = consulta.split(' ').filter((termo) => termo.length >= 2)
+        if (termos.length === 0) {
+            return tools
+                .filter((tool) => tool.source.type === 'builtin' && !tool.deferLoading)
+                .slice(0, limit)
+        }
+
+        return tools
+            .map((tool, indice) => ({
+                tool,
+                indice,
+                score: this.pontuarFerramenta(tool, termos, consulta),
+            }))
+            .filter((item) => item.score > 0)
+            .sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score
+                if (a.tool.source.type !== b.tool.source.type) {
+                    return a.tool.source.type === 'builtin' ? -1 : 1
+                }
+                return a.indice - b.indice
+            })
+            .slice(0, limit)
+            .map((item) => item.tool)
+    }
+
+    /**
      * Get all built-in tools
      */
     getBuiltIn(): ToolDefinition[] {
@@ -223,6 +253,46 @@ class ToolRegistry {
             return 'Nenhuma ferramenta disponível.'
         }
         return enabledTools.map(t => `${t.name} (${t.id})`).join(', ')
+    }
+
+    private pontuarFerramenta(tool: ToolDefinition, termos: string[], consulta: string): number {
+        const partesParametros = tool.parameters.flatMap((parametro) => [
+            parametro.name,
+            parametro.description,
+            parametro.type,
+            ...(parametro.enum || []),
+        ])
+        const texto = this.normalizarTexto([
+            tool.id,
+            tool.name,
+            tool.description,
+            tool.category,
+            tool.source.mcpServerId,
+            tool.source.mcpServerName,
+            ...partesParametros,
+        ].filter(Boolean).join(' '))
+
+        let score = 0
+        for (const termo of termos) {
+            if (texto.includes(termo)) score += 2
+            if (tool.source.type === 'builtin' && texto.includes(termo)) score += 1
+        }
+
+        if (texto.includes(consulta)) score += 4
+        if (tool.source.type === 'builtin' && !tool.deferLoading) score += 1
+        if (tool.riskLevel === 'destructive') score -= 2
+
+        return score
+    }
+
+    private normalizarTexto(texto: string): string {
+        return (texto || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\w\s:.-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
     }
 
     // ========================================================================

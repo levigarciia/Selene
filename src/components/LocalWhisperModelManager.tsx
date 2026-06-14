@@ -3,7 +3,7 @@
  * Component for managing local Whisper models (download, delete, status)
  */
 
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Download, Trash2, Check, AlertCircle, Loader2, HardDrive, Mic } from 'lucide-react'
 

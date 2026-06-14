@@ -1,6 +1,6 @@
 /**
  * Investigate Types v2
- * 
+ *
  * Tipos estruturados para o modo investigar com:
  * - Evidências rastreáveis
  * - Confiança justificável
@@ -63,7 +63,7 @@ export interface ConfidenceAssessment {
 // ALIGNMENT CHECKPOINT (Checkpoint de Alinhamento)
 // ============================================================================
 
-export type ClarificationReason = 
+export type ClarificationReason =
     | 'multiple_interpretations'
     | 'needs_context'
     | 'user_preferences'
@@ -119,6 +119,23 @@ export interface ValidationResult {
 // ============================================================================
 
 export type RouteDecision = 'direct' | 'clarify' | 'investigate'
+export type ResearchCategory = 'general' | 'product' | 'comparison' | 'howto' | 'factcheck'
+
+export interface ResearchPlan {
+    category: ResearchCategory
+    objective: string
+    searchAngles: string[]
+    requiredEvidence: string[]
+    successCriteria: string[]
+    preferredSourceTypes: SourceType[]
+}
+
+export interface InvestigationStats {
+    uniqueDomains: number
+    highCredibilitySources: number
+    officialOrPrimarySources: number
+    totalEvidence: number
+}
 
 export interface RouteAnalysis {
     decision: RouteDecision
@@ -152,7 +169,7 @@ export interface SubQuestion {
 // INVESTIGATION STATE
 // ============================================================================
 
-export type InvestigationState = 
+export type InvestigationState =
     | 'idle'
     | 'routing'
     | 'decomposing'
@@ -183,28 +200,30 @@ export interface InvestigationTrace {
     runId: string                     // Único por execução (para cancelamento)
     originalQuestion: string
     state: InvestigationState
-    
+
     // Routing
     routeAnalysis?: RouteAnalysis
-    
+
     // Phases
     phases: InvestigationPhase[]
     currentPhase: InvestigationPhase['name'] | null
-    
+
     // Decomposition
     subQuestions: SubQuestion[]
-    
+    researchPlan?: ResearchPlan
+    researchCategory?: ResearchCategory
+
     // Alignment
     alignmentCheckpoint?: AlignmentCheckpoint
     userClarification?: UserClarification
-    
+
     // Evidence (não mais strings soltas)
     evidence: Evidence[]
-    
+
     // Validation
     validationResults: ValidationResult[]
     currentIteration: number
-    
+
     // Synthesis
     finalAnswer: string
     confidence: ConfidenceAssessment | null
@@ -214,13 +233,14 @@ export interface InvestigationTrace {
         url: string
         title: string
     }[]
-    
+
     // Meta
     totalToolCalls: number
     totalDurationMs: number
+    stats?: InvestigationStats
     startedAt: number
     completedAt?: number
-    
+
     // Errors
     errors: {
         phase: string
@@ -233,7 +253,7 @@ export interface InvestigationTrace {
 // UPDATES (Para UI reativa)
 // ============================================================================
 
-export type InvestigationUpdateType = 
+export type InvestigationUpdateType =
     | 'state_changed'
     | 'phase_started'
     | 'phase_completed'

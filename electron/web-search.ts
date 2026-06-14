@@ -32,7 +32,7 @@ function obterMensagemErro(erro: unknown): string {
 /**
  * Fetch URL content with proper handling
  */
-function fetchUrl(url: string, timeout = 10000): Promise<string> {
+function fetchUrl(url: string, timeout = 10000, redirecionamentosRestantes = 3): Promise<string> {
     return new Promise((resolve, reject) => {
         try {
             const urlObj = new URL(url)
@@ -50,9 +50,24 @@ function fetchUrl(url: string, timeout = 10000): Promise<string> {
             }
 
             const req = protocol.request(options, (res) => {
-                // Handle redirects
-                if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-                    fetchUrl(res.headers.location, timeout).then(resolve).catch(reject)
+                // Trata redirecionamentos (301, 302, 303, 307, 308)
+                const redirecionamento = [301, 302, 303, 307, 308].includes(res.statusCode || 0)
+                if (redirecionamento && res.headers.location) {
+                    if (redirecionamentosRestantes <= 0) {
+                        reject(new Error('Limite de redirecionamentos excedido'))
+                        return
+                    }
+
+                    let redirectUrl = res.headers.location
+                    try {
+                        // Trata URL relativa resolvendo com base na URL original
+                        if (!redirectUrl.startsWith('http://') && !redirectUrl.startsWith('https://')) {
+                            redirectUrl = new URL(redirectUrl, url).toString()
+                        }
+                        fetchUrl(redirectUrl, timeout, redirecionamentosRestantes - 1).then(resolve).catch(reject)
+                    } catch (err) {
+                        reject(err)
+                    }
                     return
                 }
 
@@ -77,10 +92,6 @@ function fetchUrl(url: string, timeout = 10000): Promise<string> {
         }
     })
 }
-
-/**
- * Decode HTML entities
- */
 function decodeHtmlEntities(text: string): string {
     return text
         .replace(/&amp;/g, '&')
@@ -180,41 +191,62 @@ async function fetchPageContent(url: string): Promise<string> {
 /**
  * Parse html.duckduckgo.com results
  */
+/**
+ * Extrai o texto completo de um bloco de snippet do DuckDuckGo,
+ * removendo tags HTML internas (como <b>, <em>) mas preservando o texto.
+ * Captura tudo até o fechamento da tag <a> de snippet.
+ */
+function extrairTextoSnippet(html: string, posicaoInicio: number): string {
+    // Encontra o fechamento da tag <a> do snippet
+    const fechamento = html.indexOf('</a>', posicaoInicio)
+    if (fechamento === -1) return ''
+
+    const bloco = html.slice(posicaoInicio, fechamento)
+    // Remove todas as tags HTML e normaliza espaços
+    return decodeHtmlEntities(
+        bloco.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    )
+}
+
 function parseHtmlDuckDuckGo(html: string, maxResults: number): SearchResult[] {
     const results: SearchResult[] = []
-    
-    // html.duckduckgo.com uses different structure
-    // Look for result__a class for links
+
+    // Padrão para links de resultado (result__a)
     const resultPattern = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([^<]+)<\/a>/gi
-    const snippetPattern = /<a[^>]+class="result__snippet"[^>]*>([^<]+)/gi
-    
     let match
     const links: Array<{url: string, title: string}> = []
-    
+
     while ((match = resultPattern.exec(html)) !== null && links.length < maxResults) {
         let url = match[1]
         const title = decodeHtmlEntities(match[2].trim())
-        
-        // Handle DDG redirect
+
+        // Trata redirect do DDG (?uddg=)
         if (url.includes('uddg=')) {
             const uddgMatch = url.match(/uddg=([^&]+)/)
             if (uddgMatch) {
                 url = decodeURIComponent(uddgMatch[1])
             }
         }
-        
+
         if (url.includes('duckduckgo.com')) continue
-        
+
         links.push({ url, title })
     }
-    
-    // Get snippets
+
+    // Extrai snippets capturando o bloco completo (inclusive tags <b>, <em> etc.)
     const snippets: string[] = []
-    while ((match = snippetPattern.exec(html)) !== null) {
-        snippets.push(decodeHtmlEntities(match[1].trim()))
+    // Reinicia o regex do snippet para percorrer todo o HTML
+    const snippetPatternGlobal = /<a[^>]+class="result__snippet"[^>]*>/gi
+    let snippetTagMatch
+    while ((snippetTagMatch = snippetPatternGlobal.exec(html)) !== null) {
+        const posInicioConteudo = snippetTagMatch.index + snippetTagMatch[0].length
+        const textoSnippet = extrairTextoSnippet(html, posInicioConteudo)
+        if (textoSnippet) {
+            snippets.push(textoSnippet)
+        }
     }
-    
-    // Combine
+
+    // Combina links com snippets
     for (let i = 0; i < links.length; i++) {
         results.push({
             url: links[i].url,
@@ -222,79 +254,192 @@ function parseHtmlDuckDuckGo(html: string, maxResults: number): SearchResult[] {
             snippet: snippets[i] || ''
         })
     }
-    
-    // If no results, try fallback pattern
+
+    // Fallback se nenhum resultado foi encontrado
     if (results.length === 0) {
         console.log('[WebSearch] No results with primary pattern, trying fallback...')
-        
-        // Fallback: any link that looks like a result
+
         const fallbackPattern = /<a[^>]+href="(https?:\/\/(?!duckduckgo)[^"]+)"[^>]*>([^<]{15,100})<\/a>/gi
         while ((match = fallbackPattern.exec(html)) !== null && results.length < maxResults) {
             const url = match[1]
             const title = decodeHtmlEntities(match[2].trim())
-            
+
             if (results.some(r => r.url === url)) continue
-            
+
             results.push({ url, title, snippet: '' })
         }
     }
-    
     return results
 }
 
 /**
- * Search using DuckDuckGo HTML and optionally fetch page contents
+ * Search using Brave as a fallback
  */
-async function searchDuckDuckGo(query: string, maxResults = 3, fetchContents = true): Promise<WebSearchResponse> {
-    console.log(`[WebSearch] Searching: "${query}" (fetchContents: ${fetchContents})`)
+async function searchBrave(query: string, maxResults = 3): Promise<SearchResult[]> {
+    console.log(`[WebSearch] Executando busca Brave Search para: "${query}"`)
+    const urlBusca = `https://search.brave.com/search?q=${encodeURIComponent(query)}&source=web`
+    const html = await fetchUrl(urlBusca)
+    const resultados: SearchResult[] = []
     
-    try {
-        const encodedQuery = encodeURIComponent(query)
-        const searchUrl = `https://html.duckduckgo.com/html/?q=${encodedQuery}`
+    // Expressão regular robusta para blocos de resultados do Brave
+    const regexBloco = /<a[^>]+href="([^"]+)"[^>]*class="[^"]*l1[^"]*"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<div[^>]+class="[^"]*generic-snippet[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/gi
+    
+    let correspondencia
+    while ((correspondencia = regexBloco.exec(html)) !== null && resultados.length < maxResults) {
+        const url = correspondencia[1]
+        const conteudoLink = correspondencia[2]
+        const conteudoSnippet = correspondencia[3]
         
-        console.log('[WebSearch] Fetching:', searchUrl)
-        const html = await fetchUrl(searchUrl)
-        console.log('[WebSearch] Got HTML response, length:', html.length)
+        // Extrai o título do elemento com classe title ou search-snippet-title de dentro da tag do link
+        const matchTitulo = conteudoLink.match(/<div[^>]+class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/div>/i) 
+                         || conteudoLink.match(/<div[^>]+class="[^"]*search-snippet-title[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        let titulo = ''
+        if (matchTitulo) {
+            titulo = matchTitulo[1].replace(/<[^>]+>/g, '').trim()
+        } else {
+            titulo = conteudoLink.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        }
         
-        const results = parseHtmlDuckDuckGo(html, maxResults)
-        console.log(`[WebSearch] Found ${results.length} results`)
+        // Extrai o snippet com a classe content de dentro do generic-snippet
+        const matchSnippet = conteudoSnippet.match(/<div[^>]+class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+        let snippet = ''
+        if (matchSnippet) {
+            snippet = matchSnippet[1].replace(/<[^>]+>/g, '').trim()
+        } else {
+            snippet = conteudoSnippet.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        }
         
-        // Fetch content for top results
-        if (fetchContents && results.length > 0) {
-            console.log('[WebSearch] Fetching page contents...')
-            
-            // Fetch contents in parallel (limit to 2 to be fast)
-            const contentPromises = results.slice(0, 2).map(async (result) => {
-                try {
-                    const content = await fetchPageContent(result.url)
-                    return { ...result, content }
-                } catch {
-                    return result
-                }
+        titulo = decodeHtmlEntities(titulo)
+        snippet = decodeHtmlEntities(snippet)
+        
+        if (url && titulo) {
+            resultados.push({
+                url,
+                title: titulo,
+                snippet
             })
+        }
+    }
+    
+    // Se o parser estruturado não retornou nenhum resultado, tenta o parser genérico de fallback
+    if (resultados.length === 0) {
+        console.log('[WebSearch] O parser estruturado do Brave retornou 0 resultados. Executando fallback...')
+        const regexFallback = /<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
+        const urlsVistas = new Set<string>()
+        let correspondenciaFallback
+        
+        while ((correspondenciaFallback = regexFallback.exec(html)) !== null && resultados.length < maxResults) {
+            const url = correspondenciaFallback[1]
+            if (!url.startsWith('http') || url.includes('brave.com') || url.includes('google.com') || url.includes('hackerone.com')) {
+                continue
+            }
+            if (urlsVistas.has(url)) continue
             
-            const resultsWithContent = await Promise.all(contentPromises)
+            const conteudoLink = correspondenciaFallback[2]
+            const possuiClasseTitulo = conteudoLink.includes('title') || conteudoLink.includes('heading') || conteudoLink.includes('search-snippet-title')
+            let titulo = conteudoLink.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
             
-            // Merge back
-            for (let i = 0; i < resultsWithContent.length; i++) {
-                results[i] = resultsWithContent[i]
+            if (titulo.length < 10 && !possuiClasseTitulo) continue
+            
+            const indexFimLink = regexFallback.lastIndex
+            const subHtml = html.substring(indexFimLink, indexFimLink + 1200)
+            
+            const matchSnippet = subHtml.match(/<div[^>]+class="[^"]*(?:generic-snippet|content|description|snippet-description)[^"]*"[^>]*>([\s\S]*?)<\/div>/i)
+                               || subHtml.match(/<(?:div|p|span)[^>]+class="[^"]*(?:snippet-description|description|snippet-text)[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p|span)>/i)
+            
+            let snippet = ''
+            if (matchSnippet) {
+                snippet = matchSnippet[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
             }
             
-            console.log('[WebSearch] Content fetch complete')
+            titulo = decodeHtmlEntities(titulo)
+            snippet = decodeHtmlEntities(snippet)
+            
+            urlsVistas.add(url)
+            resultados.push({
+                url,
+                title: titulo,
+                snippet
+            })
+        }
+    }
+    
+    return resultados
+}
+
+/**
+ * Busca usando o DuckDuckGo HTML e opcionalmente busca conteúdos da página,
+ * realizando fallback automático para o Brave Search em caso de erro (como CAPTCHA) ou falta de resultados.
+ */
+async function searchDuckDuckGo(query: string, maxResults = 3, fetchContents = true): Promise<WebSearchResponse> {
+    console.log(`[WebSearch] Buscando: "${query}" (fetchContents: ${fetchContents})`)
+    let resultados: SearchResult[] = []
+    let erroDuckDuckGo = ''
+    let erroBrave = ''
+    
+    try {
+        const queryCodificada = encodeURIComponent(query)
+        const urlBusca = `https://html.duckduckgo.com/html/?q=${queryCodificada}`
+        
+        console.log('[WebSearch] Requisitando DuckDuckGo:', urlBusca)
+        const html = await fetchUrl(urlBusca)
+        console.log('[WebSearch] Resposta HTML recebida do DDG, tamanho:', html.length)
+        
+        resultados = parseHtmlDuckDuckGo(html, maxResults)
+        console.log(`[WebSearch] DuckDuckGo encontrou ${resultados.length} resultados`)
+    } catch (erro: unknown) {
+        erroDuckDuckGo = obterMensagemErro(erro)
+        console.warn('[WebSearch] Falha ou rate-limit na busca do DuckDuckGo:', erroDuckDuckGo)
+    }
+    
+    // Realiza o fallback para o Brave Search se o DuckDuckGo falhar ou não retornar nada
+    if (resultados.length === 0) {
+        console.log('[WebSearch] DuckDuckGo falhou ou retornou 0 resultados. Tentando Brave Search...')
+        try {
+            resultados = await searchBrave(query, maxResults)
+            console.log(`[WebSearch] Brave Search encontrou ${resultados.length} resultados`)
+        } catch (erro: unknown) {
+            erroBrave = obterMensagemErro(erro)
+            console.error('[WebSearch] Falha na busca alternativa do Brave Search:', erroBrave)
+        }
+    }
+
+    if (resultados.length === 0) {
+        const detalhes = [
+            erroDuckDuckGo ? `DuckDuckGo: ${erroDuckDuckGo}` : 'DuckDuckGo: nenhum resultado',
+            erroBrave ? `Brave: ${erroBrave}` : 'Brave: nenhum resultado',
+        ].join(' | ')
+        throw new Error(`Busca web cancelada: DuckDuckGo e Brave falharam ou não retornaram resultados. ${detalhes}`)
+    }
+    
+    // Busca conteúdo de texto para os principais resultados
+    if (fetchContents && resultados.length > 0) {
+        console.log('[WebSearch] Buscando conteúdos das páginas de resultados...')
+        
+        // Busca conteúdos em paralelo limitando a no máximo 2 para otimização de velocidade
+        const promessasConteudo = resultados.slice(0, 2).map(async (resultado) => {
+            try {
+                const conteudo = await fetchPageContent(resultado.url)
+                return { ...resultado, content: conteudo }
+            } catch {
+                return resultado
+            }
+        })
+        
+        const resultadosComConteudo = await Promise.all(promessasConteudo)
+        
+        // Mescla de volta
+        for (let i = 0; i < resultadosComConteudo.length; i++) {
+            resultados[i] = resultadosComConteudo[i]
         }
         
-        return {
-            query,
-            results,
-            timestamp: Date.now()
-        }
-    } catch (error: unknown) {
-        console.error('[WebSearch] Search failed:', obterMensagemErro(error))
-        return {
-            query,
-            results: [],
-            timestamp: Date.now()
-        }
+        console.log('[WebSearch] Busca de conteúdos das páginas concluída')
+    }
+    
+    return {
+        query,
+        results: resultados,
+        timestamp: Date.now()
     }
 }
 

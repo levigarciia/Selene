@@ -20,11 +20,12 @@ import type { ChatMessage } from './types/chat'
 import { v4 as uuidv4 } from 'uuid'
 import { initializeBuiltInTools } from './services/tools/builtin'
 import { mcpToolBridge } from './services/tools/MCPToolBridge'
-import { toolCallingService } from './services/tools/ToolCallingService'
+import { toolCallingService, type EstrategiaDecisaoTool } from './services/tools/ToolCallingService'
 import { toolRegistry } from './services/tools/ToolRegistry'
 import { obterConfiguracaoPerfilGeracao } from './services/ai/politicaGeracao'
 import { prepararHistoricoMultimodalParaModelo } from './services/ai/historicoMultimodal'
 import { criarMensagensExpansaoIntervencao } from './services/overlay/overlayProativo'
+import { normalizarMensagemErroApi } from './utils/errosApi'
 
 // Initialize built-in tools on app start
 initializeBuiltInTools()
@@ -35,10 +36,7 @@ mcpToolBridge.syncAllTools().catch(err =>
 )
 
 function obterMensagemErro(erro: unknown, fallback: string): string {
-  if (erro instanceof Error && erro.message) {
-    return erro.message
-  }
-  return fallback
+  return normalizarMensagemErroApi(erro, fallback)
 }
 
 function AppOverlay() {
@@ -99,7 +97,8 @@ function AppOverlay() {
     geminiKey, setGeminiKey,
     openRouterKey, setOpenRouterKey,
     modeloOpenRouter, setModeloOpenRouter,
-    modeloLmStudio, setModeloLmStudio,
+    modeloLocal, setModeloLocal,
+    modeloLmStudio,
     baseUrlLmStudio, setBaseUrlLmStudio,
     provedorAtivo, setProvedorAtivo,
     perfilLatencia, setPerfilLatencia,
@@ -190,7 +189,7 @@ function AppOverlay() {
   }, [voiceInput.error, exibirToast])
 
   useEffect(() => {
-    const chatFn = async (prompt: string): Promise<string> => {
+    const chatFn = async (prompt: string, systemPrompt?: string): Promise<string> => {
       const servico = criarOuObterServico()
       if (!servico) throw new Error('No AI service available')
 
@@ -199,7 +198,7 @@ function AppOverlay() {
       await servico.streamChat(
         prompt,
         (chunk: string) => { response += chunk },
-        'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.',
+        systemPrompt !== undefined ? systemPrompt : 'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.',
         [],
         {
           temperature: configGeracao.temperature,
@@ -329,7 +328,7 @@ function AppOverlay() {
   const handleChat = async () => {
     const servico = criarOuObterServico()
     if (!servico) {
-      exibirToast('Informe uma chave de API valida (OpenAI, OpenRouter, Gemini ou LM Studio).', 'erro')
+      exibirToast('Informe uma chave de API valida ou configure o host local.', 'erro')
       return
     }
     const texto = transcription.trim()
@@ -383,7 +382,7 @@ function AppOverlay() {
         const configGeracaoImagem = obterConfiguracaoPerfilGeracao(prompt, { ehImagem: true })
         const historicoImagem = prepararHistoricoMultimodalParaModelo(
           messages,
-          provedorAtivo === 'lmstudio' && perfilLatencia === 'rapido' ? 420 : 500,
+          provedorAtivo === 'local' && perfilLatencia === 'rapido' ? 420 : 500,
           {
             consultaAtual: prompt,
             perfilLatencia,
@@ -434,7 +433,7 @@ function AppOverlay() {
       const toolCallingAtivo = localStorage.getItem('selene_tool_calling') !== 'false'
       const historicoParaModelo = prepararHistoricoMultimodalParaModelo(
         messages,
-        provedorAtivo === 'lmstudio' && perfilLatencia === 'rapido' ? 420 : 500,
+        provedorAtivo === 'local' && perfilLatencia === 'rapido' ? 420 : 500,
         {
           consultaAtual: texto,
           perfilLatencia,
@@ -442,19 +441,53 @@ function AppOverlay() {
       )
 
       if (toolCallingAtivo) {
-        try {
-          await mcpToolBridge.syncAllTools()
-        } catch (error) {
-          console.warn('[App] Falha ao sincronizar MCP:', error)
-        }
+        // Sincroniza em segundo plano para não bloquear a thread síncrona de envio (evita latência IPC e reduz TTFT)
+        mcpToolBridge.syncAllTools().catch((error) => {
+          console.warn('[App] Falha ao sincronizar MCP em segundo plano:', error)
+        })
 
         const ferramentasDisponiveis = toolRegistry.getEnabled()
 
         if (ferramentasDisponiveis.length > 0) {
+          // Determina as políticas de latência e decisão para a barra flutuante baseadas no perfil ativo
+          let timeoutMs = 0
+          let timeoutQueryMs = 0
+          let maxBuscasWebPorMensagem = 2
+          let estrategiaDecisao: EstrategiaDecisaoTool = 'ai_fallback'
+          let pularPlanejamentoWebIA = false
+
+          if (provedorAtivo === 'local' && perfilLatencia === 'rapido') {
+            estrategiaDecisao = 'heuristic_only'
+            timeoutMs = 0
+            timeoutQueryMs = 0
+            maxBuscasWebPorMensagem = 1
+            pularPlanejamentoWebIA = true
+          } else if (provedorAtivo === 'local' && perfilLatencia === 'equilibrado') {
+            estrategiaDecisao = 'ai_fallback'
+            timeoutMs = 1500
+            timeoutQueryMs = 1200
+            maxBuscasWebPorMensagem = 2
+            pularPlanejamentoWebIA = false
+          } else {
+            // Perfil equilibrado ou nuvem
+            estrategiaDecisao = 'ai_fallback'
+            timeoutMs = 2500
+            timeoutQueryMs = 1500
+            maxBuscasWebPorMensagem = 2
+            pularPlanejamentoWebIA = false
+          }
+
           const decisao = await toolCallingService.decideToolUsage(
             texto,
             historicoParaModelo,
-            ferramentasDisponiveis
+            ferramentasDisponiveis,
+            {
+              estrategiaDecisao,
+              timeoutMs,
+              timeoutQueryMs,
+              maxBuscasWebPorMensagem,
+              pularPlanejamentoWebIA,
+            }
           )
 
           if (decisao.shouldUseTool && decisao.toolCalls.length > 0) {
@@ -544,7 +577,7 @@ function AppOverlay() {
   const handleAnalyze = async () => {
     const servico = criarOuObterServico()
     if (!servico) {
-      exibirToast('Informe uma chave de API valida (OpenAI, OpenRouter, Gemini ou LM Studio).', 'erro')
+      exibirToast('Informe uma chave de API valida ou configure o host local.', 'erro')
       return
     }
     const texto = transcription.trim()
@@ -753,7 +786,7 @@ function AppOverlay() {
         apiKey={apiKey}
         geminiKey={geminiKey}
         modeloOpenRouter={modeloOpenRouter}
-        modeloLmStudio={modeloLmStudio}
+        modeloLmStudio={modeloLocal || modeloLmStudio}
         baseUrlLmStudio={baseUrlLmStudio}
         perfilLatencia={perfilLatencia}
         aoAlterarApiKey={setApiKey}
@@ -761,7 +794,7 @@ function AppOverlay() {
         openRouterKey={openRouterKey}
         aoAlterarOpenRouterKey={setOpenRouterKey}
         aoAlterarModeloOpenRouter={setModeloOpenRouter}
-        aoAlterarModeloLmStudio={setModeloLmStudio}
+        aoAlterarModeloLmStudio={setModeloLocal}
         aoAlterarBaseUrlLmStudio={setBaseUrlLmStudio}
         aoAlterarPerfilLatencia={setPerfilLatencia}
         provedorAtivo={provedorAtivo}

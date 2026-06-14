@@ -3,6 +3,7 @@ import { useState, useRef } from 'react'
 import type { InvestigationTrace } from '../../../../services/investigate'
 import type { ToolCardData } from '../../../../types/tools'
 import type { WebSource } from '../types'
+import type { ArquivoAnexo } from '../../../../types/chat'
 
 export interface MCPServerInfo {
     id: string
@@ -25,7 +26,8 @@ export function useChatUI() {
     const [input, setInput] = useState('')
     const [inputMenuOpen, setInputMenuOpen] = useState(false)
     const [pendingScreenshots, setPendingScreenshots] = useState<string[]>([])
-    const [pendingMessage, setPendingMessage] = useState<{text: string; screenshots: string[]} | null>(null)
+    const [pendingFiles, setPendingFiles] = useState<ArquivoAnexo[]>([])
+    const [pendingMessage, setPendingMessage] = useState<{text: string; screenshots: string[]; arquivos?: ArquivoAnexo[]} | null>(null)
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     // Generation state
@@ -46,6 +48,11 @@ export function useChatUI() {
     const [investigateMode, setInvestigateMode] = useState(false)
     const [toolCallingAtivo, setToolCallingAtivo] = useState(() => {
         const salvo = localStorage.getItem('selene_tool_calling')
+        if (salvo === null) return true
+        return salvo === 'true'
+    })
+    const [reasoningAtivo, setReasoningAtivo] = useState(() => {
+        const salvo = localStorage.getItem('selene_reasoning_ativo')
         if (salvo === null) return true
         return salvo === 'true'
     })
@@ -81,6 +88,7 @@ export function useChatUI() {
         input, setInput,
         inputMenuOpen, setInputMenuOpen,
         pendingScreenshots, setPendingScreenshots,
+        pendingFiles, setPendingFiles,
         pendingMessage, setPendingMessage,
         textareaRef,
 
@@ -101,6 +109,7 @@ export function useChatUI() {
         webSearchEnabled, setWebSearchEnabled,
         investigateMode, setInvestigateMode,
         toolCallingAtivo, setToolCallingAtivo,
+        reasoningAtivo, setReasoningAtivo,
 
         // Investigation
         currentTrace, setCurrentTrace,

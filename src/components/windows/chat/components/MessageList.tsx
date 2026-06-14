@@ -1,13 +1,15 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { Brain, Check, ChevronDown, Pencil, Sparkles, Terminal, X } from 'lucide-react'
+import { Brain, Check, ChevronDown, Pencil, Sparkles, Terminal, X, FileText } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import type { ChatMessage } from '../../../../types/chat'
 import type { WebSource } from '../types'
 import type { ToolCardData } from '../../../../types/tools'
 import { ToolCard } from '../../../chat/ToolCard'
+import { WebSearchGroupCard } from '../../../chat/WebSearchGroupCard'
 import { MessageActions } from './MessageActions'
 import { renderizarNosComFontes } from '../utils'
+import { formatFileSize } from '../../../../services/DocumentService'
 
 interface MessageListProps {
     messages: ChatMessage[]
@@ -125,6 +127,117 @@ const BlocoMarkdownMensagem = React.memo(({
     && anterior.estaGerando === atual.estaGerando
 ))
 
+const renderConteudoMensagemInline = (
+    content: string,
+    fontesDaMensagem: WebSource[],
+    isLastMessage: boolean,
+    role: string,
+    msgId: string,
+    messageSearchCards: Record<string, ToolCardData[]>,
+    estaEditandoMensagem: boolean,
+    renderMarkdown: (content: string, fontesDaMensagem: WebSource[], showCursor: boolean, isLastMessage: boolean, role: string) => React.ReactNode,
+    renderEditorMensagem: (mensagem: ChatMessage) => React.ReactNode
+) => {
+    const cards = messageSearchCards[msgId] || []
+    const webSearchCards = cards.filter(c => c.toolId.includes('web_search'))
+    const otherCards = cards.filter(c => !c.toolId.includes('web_search'))
+
+    if (estaEditandoMensagem) {
+        return renderEditorMensagem({ id: msgId, content, role } as ChatMessage)
+    }
+
+    if (cards.length === 0) {
+        return renderMarkdown(content, fontesDaMensagem, true, isLastMessage, role)
+    }
+
+    // Procura por marcadores de ferramentas na mensagem: [tool:web_search] ou [tool:other:X]
+    const pattern = /(\[tool:[a-zA-Z0-9_:-]+\])/g
+    const parts = content.split(pattern)
+
+    // Se não houver marcadores encontrados, usar renderização padrão (fallback)
+    const hasMarkers = parts.some(part => pattern.test(part))
+    if (!hasMarkers) {
+        const isWebSearchConcluido = webSearchCards.length > 0 && webSearchCards.every(c => c.status === 'completed' || c.status === 'failed' || c.status === 'cancelled')
+        return (
+            <>
+                {isWebSearchConcluido && webSearchCards.length > 0 && (
+                    <WebSearchGroupCard cards={webSearchCards} />
+                )}
+                {content && renderMarkdown(content, fontesDaMensagem, true, isLastMessage, role)}
+                {!isWebSearchConcluido && webSearchCards.length > 0 && (
+                    <WebSearchGroupCard cards={webSearchCards} />
+                )}
+                {otherCards.map((card, cardIdx) => (
+                    <React.Fragment key={`tool-group-${msgId}-${card.callId || cardIdx}`}>
+                        <ToolCard data={card} />
+                    </React.Fragment>
+                ))}
+            </>
+        )
+    }
+
+    // Filtra partes e identifica a última parte de texto para exibir o cursor
+    const partsValidas = parts.map((part, idx) => {
+        const isMarker = pattern.test(part)
+        return {
+            content: part,
+            isMarker,
+            originalIndex: idx
+        }
+    }).filter(p => p.isMarker || p.content.trim().length > 0)
+
+    let ultimoIndiceTexto = -1
+    for (let i = partsValidas.length - 1; i >= 0; i--) {
+        if (!partsValidas[i].isMarker) {
+            ultimoIndiceTexto = i
+            break
+        }
+    }
+
+    return (
+        <>
+            {partsValidas.map((partInfo, idx) => {
+                if (partInfo.isMarker) {
+                    const marker = partInfo.content
+                    if (marker === '[tool:web_search]') {
+                        if (webSearchCards.length > 0) {
+                            return (
+                                <WebSearchGroupCard 
+                                    key={`inline-websearch-${msgId}-${idx}`} 
+                                    cards={webSearchCards} 
+                                />
+                            )
+                        }
+                        return null
+                    }
+                    
+                    const otherMatch = marker.match(/\[tool:other:(\d+)\]/)
+                    if (otherMatch) {
+                        const cardIdx = parseInt(otherMatch[1], 10)
+                        const card = otherCards[cardIdx]
+                        if (card) {
+                            return (
+                                <ToolCard 
+                                    key={`inline-tool-${msgId}-${card.callId || idx}`} 
+                                    data={card} 
+                                />
+                            )
+                        }
+                    }
+                    return null
+                } else {
+                    const showCursor = idx === ultimoIndiceTexto
+                    return (
+                        <React.Fragment key={`inline-text-${msgId}-${idx}`}>
+                            {renderMarkdown(partInfo.content.trim(), fontesDaMensagem, showCursor, isLastMessage, role)}
+                        </React.Fragment>
+                    )
+                }
+            })}
+        </>
+    )
+}
+
 export const MessageList: React.FC<MessageListProps> = ({
     messages,
     messagesContainerRef,
@@ -192,8 +305,9 @@ export const MessageList: React.FC<MessageListProps> = ({
         />
     )
 
-    const renderBlocoRaciocinio = (msgId: string, raciocinio: string) => {
-        const expandido = Boolean(raciocinioExpandidoPorMensagem[msgId])
+    const renderBlocoRaciocinio = (msgId: string, raciocinio: string, comecarAberto = false) => {
+        const estadoSalvo = raciocinioExpandidoPorMensagem[msgId]
+        const expandido = estadoSalvo !== undefined ? estadoSalvo : comecarAberto
         return (
             <div className="w-full min-w-0 overflow-hidden rounded-xl border border-white/10 bg-neutral-900/50">
                 <button
@@ -299,42 +413,66 @@ export const MessageList: React.FC<MessageListProps> = ({
                         )}
 
                         <div className={`flex min-w-0 max-w-[min(72%,58rem)] flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                            {msg.role === 'assistant' && raciocinioDaMensagem && renderBlocoRaciocinio(msg.id, raciocinioDaMensagem)}
+                            {msg.role === 'assistant' && raciocinioDaMensagem && renderBlocoRaciocinio(msg.id, raciocinioDaMensagem, isLastMessage && isGenerating)}
                             {(() => {
                                 if (hasCards) {
-                                    const cards = messageSearchCards[msg.id] || []
-                                    return (
-                                        <>
-                                            {cards.map((card, cardIdx) => (
-                                                <React.Fragment key={`tool-group-${msg.id}-${cardIdx}`}>
-                                                    <ToolCard
-                                                        key={`tool-${msg.id}-${cardIdx}`}
-                                                        data={card}
-                                                    />
-                                                </React.Fragment>
-                                            ))}
-                                            {estaEditandoMensagem
-                                                ? renderEditorMensagem(msg)
-                                                : msg.content && renderMarkdown(msg.content, fontesDaMensagem, true, isLastMessage, msg.role)}
-                                        </>
+                                    return renderConteudoMensagemInline(
+                                        msg.content,
+                                        fontesDaMensagem,
+                                        isLastMessage,
+                                        msg.role,
+                                        msg.id,
+                                        messageSearchCards,
+                                        estaEditandoMensagem,
+                                        renderMarkdown,
+                                        renderEditorMensagem
                                     )
                                 }
 
-                                if (msg.role === 'user' && msg.images && msg.images.length > 0) {
+                                const temImagens = msg.role === 'user' && msg.images && msg.images.length > 0
+                                const temArquivos = msg.role === 'user' && msg.arquivos && msg.arquivos.length > 0
+ 
+                                if (temImagens || temArquivos) {
                                     return (
                                         <>
-                                            <div className={`flex max-w-full flex-wrap gap-2 ${msg.images.length > 1 ? 'max-w-75' : ''}`}>
-                                                {msg.images.map((img, imgIdx) => (
-                                                    <div key={imgIdx} className="relative group/img">
-                                                        <img
-                                                            src={img}
-                                                            alt={`Anexo ${imgIdx + 1}`}
-                                                            className="max-h-50 max-w-50 cursor-pointer rounded-xl border border-white/10 object-cover transition-opacity hover:opacity-90"
-                                                            draggable={false}
-                                                            onClick={() => window.open(img, '_blank')}
-                                                        />
+                                            <div className="flex flex-col gap-2 max-w-full">
+                                                {temImagens && (
+                                                    <div className={`flex max-w-full flex-wrap gap-2 ${msg.images!.length > 1 ? 'max-w-75' : ''}`}>
+                                                        {msg.images!.map((img, imgIdx) => (
+                                                            <div key={imgIdx} className="relative group/img">
+                                                                <img
+                                                                    src={img}
+                                                                    alt={`Anexo ${imgIdx + 1}`}
+                                                                    className="max-h-50 max-w-50 cursor-pointer rounded-xl border border-white/10 object-cover transition-opacity hover:opacity-90"
+                                                                    draggable={false}
+                                                                    onClick={() => window.open(img, '_blank')}
+                                                                />
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                ))}
+                                                )}
+                                                {temArquivos && (
+                                                    <div className="flex flex-col gap-1.5 max-w-full">
+                                                        {msg.arquivos!.map((file) => (
+                                                            <div
+                                                                key={file.id}
+                                                                className="flex items-center gap-3 rounded-xl border border-white/10 bg-neutral-900/40 p-2.5 max-w-[240px]"
+                                                            >
+                                                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-600/20 text-purple-400">
+                                                                    <FileText size={18} />
+                                                                </div>
+                                                                <div className="flex flex-col min-w-0">
+                                                                    <span className="truncate text-xs font-medium text-neutral-200" title={file.name}>
+                                                                        {file.name}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-neutral-500">
+                                                                        {formatFileSize(file.size)}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                             {estaEditandoMensagem
                                                 ? renderEditorMensagem(msg)

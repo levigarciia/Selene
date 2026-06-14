@@ -16,6 +16,12 @@ interface MCPTool {
     inputSchema: Record<string, unknown>
     serverId: string
     serverName: string
+    annotations?: {
+        readOnlyHint?: boolean
+        destructiveHint?: boolean
+        idempotentHint?: boolean
+        openWorldHint?: boolean
+    }
 }
 
 class MCPToolBridge {
@@ -80,11 +86,11 @@ class MCPToolBridge {
      * Remove all tools from a disconnected MCP server
      */
     removeServerTools(serverId: string): void {
+        const toolsToRemove = toolRegistry.getMcpToolsByServer(serverId)
         const count = toolRegistry.unregisterByMcpServer(serverId)
         this.syncedServers.delete(serverId)
         
         // Unregister handlers
-        const toolsToRemove = toolRegistry.getMcpToolsByServer(serverId)
         for (const tool of toolsToRemove) {
             toolExecutor.unregisterHandler(tool.id)
         }
@@ -114,7 +120,8 @@ class MCPToolBridge {
             },
             parameters,
             enabled: true,
-            icon: 'Plug'
+            icon: 'Plug',
+            ...this.inferirMetadadosMCP(tool)
         }
 
         // Register in registry
@@ -207,6 +214,22 @@ class MCPToolBridge {
             case 'array': return 'array'
             case 'object': return 'object'
             default: return 'string'
+        }
+    }
+
+    private inferirMetadadosMCP(tool: MCPTool): Pick<ToolDefinition, 'readOnly' | 'supportsParallel' | 'deferLoading' | 'riskLevel'> {
+        const texto = `${tool.name} ${tool.description}`.toLowerCase()
+        const readOnlyHint = tool.annotations?.readOnlyHint === true
+        const destructiveHint = tool.annotations?.destructiveHint === true
+        const pareceDestrutiva = /\b(delete|remove|destroy|drop|truncate|excluir|deletar|remover|apagar)\b/i.test(texto)
+        const pareceEscrita = /\b(write|create|update|edit|patch|send|post|put|upload|insert|criar|editar|enviar|salvar|gravar)\b/i.test(texto)
+        const readOnly = readOnlyHint || (!destructiveHint && !pareceDestrutiva && !pareceEscrita)
+
+        return {
+            readOnly,
+            supportsParallel: readOnly,
+            deferLoading: true,
+            riskLevel: destructiveHint || pareceDestrutiva ? 'destructive' : readOnly ? 'read' : 'write',
         }
     }
 

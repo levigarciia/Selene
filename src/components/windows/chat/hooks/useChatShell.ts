@@ -34,8 +34,8 @@ function normalizarRotuloProvedor(provedor: string): string {
             return 'OpenAI'
         case 'openrouter':
             return 'OpenRouter'
-        case 'lmstudio':
-            return 'LM Studio'
+        case 'local':
+            return 'Local'
         case 'gemini':
             return 'Gemini'
         default:
@@ -49,8 +49,8 @@ function normalizarRotuloLatencia(perfil: PerfilLatencia): string {
             return 'Rápido'
         case 'equilibrado':
             return 'Equilibrado'
-        case 'qualidade':
-            return 'Qualidade'
+        case 'completo':
+            return 'Completo'
         default:
             return perfil
     }
@@ -455,7 +455,6 @@ export function useChatShell({
 
     return {
         overlayAtivo,
-        drawerAberto: overlayAtivo === 'drawer',
         hubContextoAberto: overlayAtivo === 'hub-contexto',
         seletorProjetosAberto: overlayAtivo === 'seletor-projetos',
         perfilAberto: overlayAtivo === 'perfil',

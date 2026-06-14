@@ -54,8 +54,8 @@ export interface SettingsPanelProps {
     modeloLmStudio: string; setModeloLmStudio: (v: string) => void
     baseUrlLmStudio: string; setBaseUrlLmStudio: (v: string) => void
     perfilLatencia: PerfilLatencia; setPerfilLatencia: (v: PerfilLatencia) => void
-    provedorAtivo: 'openai' | 'gemini' | 'openrouter' | 'lmstudio'
-    setProvedorAtivo: (v: 'openai' | 'gemini' | 'openrouter' | 'lmstudio') => void
+    provedorAtivo: 'openai' | 'gemini' | 'openrouter' | 'local'
+    setProvedorAtivo: (v: 'openai' | 'gemini' | 'openrouter' | 'local') => void
     overlayProativoConfig?: ConfiguracaoOverlayProativo
     setOverlayProativoHabilitado?: (v: boolean) => void
     setOverlayProativoNivelIntervencao?: (v: NivelIntervencaoOverlay) => void
@@ -103,7 +103,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
     useEffect(() => {
         const mapeada = mapearSecaoInicial(secaoInicial)
         const existe = secoesVisiveis.some((s) => s.id === mapeada)
-        setSecaoAtiva(existe ? mapeada : secoesVisiveis[0]?.id || 'perfil')
+        const id = window.setTimeout(() => {
+            setSecaoAtiva(existe ? mapeada : secoesVisiveis[0]?.id || 'perfil')
+        }, 0)
+        return () => window.clearTimeout(id)
     }, [secaoInicial, secoesVisiveis])
 
     const containerClass = variant === 'modal'
@@ -195,12 +198,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
                                     <VoiceSettings
                                         provider={voiceInput.provider}
                                         onProviderChange={voiceInput.setProvider}
+                                        motorLocal={voiceInput.motorLocal}
+                                        onMotorLocalChange={voiceInput.setMotorLocal}
                                         whisperModel={voiceInput.whisperConfig.modelSize}
                                         onModelChange={voiceInput.setWhisperModel}
+                                        parakeetModel={voiceInput.parakeetModel}
+                                        onParakeetModelChange={voiceInput.setParakeetModel}
                                         whisperBinaryPath={voiceInput.whisperBinaryPath}
                                         onBinaryPathChange={voiceInput.setWhisperBinaryPath}
                                         isWhisperReady={voiceInput.isWhisperReady}
-                                        onInitialize={voiceInput.initializeWhisper}
+                                        onInitializeWhisper={voiceInput.initializeWhisper}
+                                        isParakeetReady={voiceInput.isParakeetReady}
+                                        onInitializeParakeet={voiceInput.initializeParakeet}
                                         isRecording={voiceInput.isRecording}
                                         error={voiceInput.error}
                                         microfoneId={voiceInput.microfoneId}

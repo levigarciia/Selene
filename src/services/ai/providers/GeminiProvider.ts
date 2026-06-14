@@ -249,10 +249,13 @@ export class GeminiProvider implements AIProvider {
         return t.includes('não consigo ouvir') || t.includes('cannot listen')
     }
 
-    private construirConfigGeracao(opcoes: OpcoesRequisicaoIA): { temperature?: number } | undefined {
-        const config: { temperature?: number } = {}
+    private construirConfigGeracao(opcoes: OpcoesRequisicaoIA): { temperature?: number; maxOutputTokens?: number } | undefined {
+        const config: { temperature?: number; maxOutputTokens?: number } = {}
         if (typeof opcoes.temperature === 'number') {
             config.temperature = opcoes.temperature
+        }
+        if (typeof opcoes.maxTokens === 'number') {
+            config.maxOutputTokens = opcoes.maxTokens
         }
         if (Object.keys(config).length === 0) return undefined
         return config

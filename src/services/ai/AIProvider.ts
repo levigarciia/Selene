@@ -16,9 +16,11 @@ export interface EventoStreamIA {
 export interface OpcoesRequisicaoIA {
     signal?: AbortSignal
     temperature?: number
+    maxTokens?: number
     perfilGeracao?: string
     perfilLatencia?: PerfilLatencia
     systemPromptOverride?: string
+    reasoningAtivo?: boolean
     historico?: MensagemHistoricoIA[]
     onEventoStream?: (evento: EventoStreamIA) => void
     onFimStream?: (meta: MetaFimStream) => void

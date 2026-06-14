@@ -7,7 +7,13 @@ import { initAutoUpdater, cleanupAutoUpdater } from './updater.js'
 import { setupWhisperIPC } from './whisper.js'
 import { setupWebSearchIPC } from './web-search.js'
 import { setupLocalWhisperIPC } from './local-whisper/LocalWhisperService.js'
+import { setupLocalParakeetIPC } from './local-parakeet/LocalParakeetService.js'
+import { setupLocalLLMIPC } from './local-llm/LocalLLMService.js'
+import { localLLMHostService } from './local-llm/LocalLLMHostService.js'
+import { localLLMHttpService } from './local-llm/LocalLLMHttpService.js'
 import { setupMCPIPC } from './mcp/mcpIPC.js'
+import { configurarIpcSistemaArquivos } from './filesystem-ipc.js'
+
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -817,6 +823,11 @@ app.on('window-all-closed', () => {
     }
 })
 
+app.on('before-quit', () => {
+    void localLLMHostService.stop()
+    void localLLMHttpService.stop()
+})
+
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
@@ -850,6 +861,8 @@ app.whenReady().then(() => {
     registrarAtalhoGramatical('Control+Alt+X')
 
     // Initialize Whisper IPC handlers
+
+    // Initialize Whisper IPC handlers
     setupWhisperIPC()
 
     // Initialize Web Search IPC handlers
@@ -858,9 +871,15 @@ app.whenReady().then(() => {
     // Initialize MCP IPC handlers
     setupMCPIPC()
 
+    // Initialize Filesystem IPC handlers
+    configurarIpcSistemaArquivos()
+
+
     // Initialize Local Whisper Streaming IPC handlers
     if (win) {
         setupLocalWhisperIPC(win)
+        setupLocalParakeetIPC(win)
+        void setupLocalLLMIPC(win)
     }
 
     // Initialize auto-updater (respects user preference)

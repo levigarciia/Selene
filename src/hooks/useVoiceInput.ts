@@ -7,17 +7,26 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { AudioService } from '../services/AudioService'
+import { AudioService, type OpcoesChunkVoz } from '../services/AudioService'
 import type { AIService } from '../services/AIService'
 import type { WhisperModelSize } from '../services/whisper'
+import { MODELO_PARAKEET_PADRAO, type ParakeetModelName } from '../services/parakeet'
 
 export type TranscriptionProvider = 'cloud' | 'local'
-export type StatusCapturaVoz = 'ocioso' | 'gravando_local' | 'gravando_cloud' | 'transcrevendo_cloud'
-export type ModoTranscricaoVoz = 'local_realtime' | 'cloud_chunked'
+export type MotorTranscricaoLocal = 'whisper' | 'parakeet'
+export type StatusCapturaVoz =
+    | 'ocioso'
+    | 'gravando_local'
+    | 'transcrevendo_local'
+    | 'gravando_cloud'
+    | 'transcrevendo_cloud'
+export type ModoTranscricaoVoz = 'local_realtime' | 'local_chunked' | 'cloud_chunked'
 
 export interface VoiceInputConfig {
     provider: TranscriptionProvider
+    motorLocal: MotorTranscricaoLocal
     whisperModel?: WhisperModelSize
+    parakeetModel?: ParakeetModelName
     language?: string
     whisperBinaryPath?: string
     microfoneId?: string
@@ -39,6 +48,8 @@ export interface UseVoiceInputReturn {
     // Provider management
     provider: TranscriptionProvider
     setProvider: (provider: TranscriptionProvider) => void
+    motorLocal: MotorTranscricaoLocal
+    setMotorLocal: (motor: MotorTranscricaoLocal) => void
 
     // Local Whisper config
     whisperConfig: {
@@ -47,10 +58,14 @@ export interface UseVoiceInputReturn {
         binaryPath?: string
     }
     setWhisperModel: (model: WhisperModelSize) => void
+    parakeetModel: ParakeetModelName
+    setParakeetModel: (model: ParakeetModelName) => void
     whisperBinaryPath: string
     setWhisperBinaryPath: (path: string) => void
     isWhisperReady: boolean
     initializeWhisper: () => Promise<void>
+    isParakeetReady: boolean
+    initializeParakeet: () => Promise<void>
     microfoneId: string
     setMicrofoneId: (microfoneId: string) => void
     nivelAudio: number
@@ -63,12 +78,44 @@ export interface UseVoiceInputReturn {
 
 const STORAGE_KEY = 'selene_voice_input_config'
 const QTD_BARRAS_AUDIO = 24
+const MODELOS_PARAKEET_VALIDOS = new Set<ParakeetModelName>(['tdt-0.6b-v3-multilingual'])
+const OPCOES_CHUNK_CLOUD: OpcoesChunkVoz = {
+    estrategia: 'vad',
+    limiteMinimoChunkMs: 1600,
+    limiteMaximoChunkMs: null,
+    limiteSilencioMs: 1400,
+    duracaoGracaSilencioMs: 700,
+    limiteRmsAtivacao: 0.018,
+    limiteRmsManutencao: 0.012,
+    preRollMs: 360,
+    multiplicadorRuidoAtivacao: 3.8,
+    multiplicadorRuidoManutencao: 2.6
+}
+const OPCOES_CHUNK_PARAKEET: OpcoesChunkVoz = {
+    estrategia: 'vad',
+    limiteMinimoChunkMs: 1400,
+    limiteMaximoChunkMs: null,
+    limiteSilencioMs: 1200,
+    duracaoGracaSilencioMs: 650,
+    limiteRmsAtivacao: 0.018,
+    limiteRmsManutencao: 0.012,
+    preRollMs: 320,
+    multiplicadorRuidoAtivacao: 3.6,
+    multiplicadorRuidoManutencao: 2.5
+}
 
 function obterMensagemErro(erro: unknown, fallback: string): string {
     if (erro instanceof Error && erro.message) {
         return erro.message
     }
     return fallback
+}
+
+function normalizarModeloParakeet(modelo?: string): ParakeetModelName {
+    if (modelo && MODELOS_PARAKEET_VALIDOS.has(modelo as ParakeetModelName)) {
+        return modelo as ParakeetModelName
+    }
+    return MODELO_PARAKEET_PADRAO
 }
 
 function juntarTrechos(...trechos: string[]): string {
@@ -86,6 +133,7 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
     const [statusCaptura, setStatusCaptura] = useState<StatusCapturaVoz>('ocioso')
     const [error, setError] = useState<string | null>(null)
     const [isWhisperReady, setIsWhisperReady] = useState(false)
+    const [isParakeetReady, setIsParakeetReady] = useState(false)
     const [transcriptionConfirmada, setTranscriptionConfirmada] = useState('')
     const [transcriptionParcial, setTranscriptionParcial] = useState('')
     const [ultimaAtualizacaoTranscricaoEm, setUltimaAtualizacaoTranscricaoEm] = useState(0)
@@ -100,14 +148,26 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         try {
             const stored = localStorage.getItem(STORAGE_KEY)
             if (stored) {
-                return JSON.parse(stored) as VoiceInputConfig
+                const configArmazenada = JSON.parse(stored) as VoiceInputConfig
+                return {
+                    ...configArmazenada,
+                    provider: configArmazenada.provider || 'cloud',
+                    motorLocal: configArmazenada.motorLocal || 'whisper',
+                    whisperModel: configArmazenada.whisperModel || 'base',
+                    parakeetModel: normalizarModeloParakeet(configArmazenada.parakeetModel),
+                    language: configArmazenada.language || 'pt',
+                    whisperBinaryPath: configArmazenada.whisperBinaryPath || '',
+                    microfoneId: configArmazenada.microfoneId || ''
+                }
             }
         } catch (e) {
             console.warn('[useVoiceInput] Failed to load config:', e)
         }
         return {
             provider: 'cloud',
+            motorLocal: 'whisper',
             whisperModel: 'base',
+            parakeetModel: MODELO_PARAKEET_PADRAO,
             language: 'pt',
             whisperBinaryPath: '',
             microfoneId: ''
@@ -117,6 +177,14 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
     // Refs
     const serviceRef = useRef<AIService | null>(aiService)
     const audioServiceRef = useRef<AudioService | null>(null)
+    const configRef = useRef(config)
+    const isRecordingRef = useRef(isRecording)
+    const handleCloudTranscriptionRef = useRef<(audioBlob: Blob, sessaoId: number) => Promise<void>>(
+        async () => undefined
+    )
+    const handleParakeetTranscriptionRef = useRef<(audioBlob: Blob, sessionId: string) => Promise<void>>(
+        async () => undefined
+    )
 
     // Refs de transcrição
     const transcricaoConfirmadaRef = useRef('')
@@ -141,11 +209,21 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
     const barrasSuavizadasRef = useRef<number[]>([])
     const sessoesLocaisValidasRef = useRef<Set<string>>(new Set())
     const timeoutLimpezaSessaoLocalRef = useRef<number | null>(null)
+    const pendenciasParakeetRef = useRef(0)
+    const enviosParakeetPendentesRef = useRef(new Set<Promise<void>>())
 
     // Update AI service ref
     useEffect(() => {
         serviceRef.current = aiService
     }, [aiService])
+
+    useEffect(() => {
+        configRef.current = config
+    }, [config])
+
+    useEffect(() => {
+        isRecordingRef.current = isRecording
+    }, [isRecording])
 
     // Persist config
     useEffect(() => {
@@ -270,6 +348,24 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         }, 2000)
     }, [])
 
+    const atualizarPendenciasParakeet = useCallback((delta: number) => {
+        pendenciasParakeetRef.current = Math.max(0, pendenciasParakeetRef.current + delta)
+
+        if (configRef.current.provider !== 'local' || configRef.current.motorLocal !== 'parakeet') {
+            return
+        }
+
+        const transcrevendo = pendenciasParakeetRef.current > 0
+        setIsTranscribing(transcrevendo)
+
+        if (isRecordingRef.current) {
+            setStatusCaptura('gravando_local')
+            return
+        }
+
+        setStatusCaptura(transcrevendo ? 'transcrevendo_local' : 'ocioso')
+    }, [])
+
     const checkLocalWhisperAvailability = useCallback(async () => {
         try {
             const result = await window.electronAPI?.localWhisper?.checkAvailability()
@@ -280,42 +376,77 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         }
     }, [])
 
-    // Check local whisper availability on mount
+    const checkLocalParakeetAvailability = useCallback(async () => {
+        try {
+            const result = await window.electronAPI?.localParakeet?.checkAvailability()
+            setIsParakeetReady(Boolean(result?.success && result.available))
+        } catch (err) {
+            console.error('[useVoiceInput] Failed to check local parakeet:', err)
+            setIsParakeetReady(false)
+        }
+    }, [])
+
     useEffect(() => {
         void checkLocalWhisperAvailability()
-    }, [checkLocalWhisperAvailability])
+        void checkLocalParakeetAvailability()
+    }, [checkLocalParakeetAvailability, checkLocalWhisperAvailability])
 
-    // Setup streaming transcription listeners
     useEffect(() => {
-        const api = window.electronAPI?.localWhisper
-        if (!api) return
+        const apiWhisper = window.electronAPI?.localWhisper
+        const apiParakeet = window.electronAPI?.localParakeet
+        if (!apiWhisper && !apiParakeet) return
 
-        const unsubDelta = api.onTranscriptionDelta((data) => {
-            if (!sessaoLocalEhValida(data.sessionId)) return
-            console.log('[useVoiceInput] Delta local recebido:', data.sessionId, data.text)
-            atualizarTrechoParcial(data.text)
-        })
-        cleanupListenersRef.current.push(unsubDelta)
+        if (apiWhisper) {
+            const unsubDelta = apiWhisper.onTranscriptionDelta((data) => {
+                if (!sessaoLocalEhValida(data.sessionId)) return
+                console.log('[useVoiceInput] Delta local recebido:', data.sessionId, data.text)
+                atualizarTrechoParcial(data.text)
+            })
+            cleanupListenersRef.current.push(unsubDelta)
 
-        const unsubComplete = api.onTranscriptionComplete((data) => {
-            if (!sessaoLocalEhValida(data.sessionId) || !data.text) return
-            confirmarTrechoTranscricao(data.text)
-            console.log('[useVoiceInput] Transcription complete:', data.text)
-        })
-        cleanupListenersRef.current.push(unsubComplete)
+            const unsubComplete = apiWhisper.onTranscriptionComplete((data) => {
+                if (!sessaoLocalEhValida(data.sessionId) || !data.text) return
+                confirmarTrechoTranscricao(data.text)
+                console.log('[useVoiceInput] Transcription complete:', data.text)
+            })
+            cleanupListenersRef.current.push(unsubComplete)
 
-        const unsubError = api.onTranscriptionError((data) => {
-            if (!sessaoLocalEhValida(data.sessionId)) return
-            console.error('[useVoiceInput] Streaming error:', data.error)
-            setError(data.error)
-        })
-        cleanupListenersRef.current.push(unsubError)
+            const unsubError = apiWhisper.onTranscriptionError((data) => {
+                if (!sessaoLocalEhValida(data.sessionId)) return
+                console.error('[useVoiceInput] Streaming error:', data.error)
+                setError(data.error)
+            })
+            cleanupListenersRef.current.push(unsubError)
+        }
+
+        if (apiParakeet) {
+            const unsubCompleteParakeet = apiParakeet.onTranscriptionComplete((data) => {
+                if (!sessaoLocalEhValida(data.sessionId)) return
+                if (data.text?.trim()) {
+                    confirmarTrechoTranscricao(data.text)
+                }
+                atualizarPendenciasParakeet(-1)
+            })
+            cleanupListenersRef.current.push(unsubCompleteParakeet)
+
+            const unsubErrorParakeet = apiParakeet.onTranscriptionError((data) => {
+                if (!sessaoLocalEhValida(data.sessionId)) return
+                setError(data.error)
+                atualizarPendenciasParakeet(-1)
+            })
+            cleanupListenersRef.current.push(unsubErrorParakeet)
+        }
 
         return () => {
             cleanupListenersRef.current.forEach(unsub => unsub())
             cleanupListenersRef.current = []
         }
-    }, [atualizarTrechoParcial, confirmarTrechoTranscricao, sessaoLocalEhValida])
+    }, [
+        atualizarPendenciasParakeet,
+        atualizarTrechoParcial,
+        confirmarTrechoTranscricao,
+        sessaoLocalEhValida
+    ])
 
     // Initialize (check availability)
     const initializeWhisper = useCallback(async () => {
@@ -343,6 +474,29 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             console.error('[useVoiceInput] Whisper init failed:', e)
             setError(obterMensagemErro(e, 'Falha ao inicializar Whisper'))
             setIsWhisperReady(false)
+        }
+    }, [])
+
+    const initializeParakeet = useCallback(async () => {
+        try {
+            setError(null)
+
+            const result = await window.electronAPI?.localParakeet?.checkAvailability()
+            if (!result?.success) {
+                throw new Error(result?.error || 'Falha ao verificar disponibilidade do Parakeet local')
+            }
+            if (!result.runtimeAvailable) {
+                throw new Error('Runtime local do Parakeet não está disponível.')
+            }
+            if (!result.hasModels) {
+                throw new Error('Nenhum modelo do Parakeet foi baixado ainda.')
+            }
+
+            setIsParakeetReady(true)
+        } catch (e: unknown) {
+            console.error('[useVoiceInput] Parakeet init failed:', e)
+            setError(obterMensagemErro(e, 'Falha ao inicializar Parakeet'))
+            setIsParakeetReady(false)
         }
     }, [])
 
@@ -375,15 +529,73 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         }
     }, [ajustarPendenciasCloud, confirmarTrechoTranscricao])
 
-    // Initialize audio service for cloud mode
-    useEffect(() => {
-        if (config.provider !== 'cloud') return
+    const handleParakeetTranscription = useCallback(async (audioBlob: Blob, sessionId: string) => {
+        atualizarPendenciasParakeet(1)
+        setError(null)
 
-        audioServiceRef.current = new AudioService((blob: Blob) => {
-            const sessaoId = sessaoCloudAtualRef.current
-            void handleCloudTranscription(blob, sessaoId)
-        }, (nivel) => setNivelAudio(nivel), (barras) => setBarrasAudio(barras))
-    }, [config.provider, handleCloudTranscription])
+        try {
+            const arrayBuffer = await audioBlob.arrayBuffer()
+            const result = await window.electronAPI?.localParakeet?.sendAudioChunk(sessionId, arrayBuffer)
+            if (!result?.success) {
+                throw new Error(result?.error || 'Falha ao enviar chunk para o Parakeet')
+            }
+        } catch (e: unknown) {
+            console.error('[useVoiceInput] Parakeet chunk error:', e)
+            setError(obterMensagemErro(e, 'Falha na transcrição local'))
+            atualizarPendenciasParakeet(-1)
+            throw e
+        }
+    }, [atualizarPendenciasParakeet])
+
+    useEffect(() => {
+        handleCloudTranscriptionRef.current = handleCloudTranscription
+    }, [handleCloudTranscription])
+
+    useEffect(() => {
+        handleParakeetTranscriptionRef.current = handleParakeetTranscription
+    }, [handleParakeetTranscription])
+
+    useEffect(() => {
+        audioServiceRef.current?.stop()
+        audioServiceRef.current = null
+
+        if (config.provider === 'cloud') {
+            audioServiceRef.current = new AudioService(
+                (blob: Blob) => {
+                    const sessaoId = sessaoCloudAtualRef.current
+                    void handleCloudTranscriptionRef.current(blob, sessaoId)
+                },
+                (nivel) => setNivelAudio(nivel),
+                (barras) => setBarrasAudio(barras),
+                OPCOES_CHUNK_CLOUD
+            )
+            return
+        }
+
+        if (config.provider !== 'local' || config.motorLocal !== 'parakeet') {
+            return
+        }
+
+        audioServiceRef.current = new AudioService(
+            (blob: Blob) => {
+                const sessionId = sessionIdRef.current
+                if (!sessionId) {
+                    return
+                }
+
+                const promessa = handleParakeetTranscriptionRef.current(blob, sessionId)
+                    .catch(() => undefined)
+                    .finally(() => {
+                        enviosParakeetPendentesRef.current.delete(promessa)
+                    })
+
+                enviosParakeetPendentesRef.current.add(promessa)
+            },
+            (nivel) => setNivelAudio(nivel),
+            (barras) => setBarrasAudio(barras),
+            OPCOES_CHUNK_PARAKEET
+        )
+    }, [config.motorLocal, config.provider])
 
     const calcularBarrasFrequencia = useCallback((dados: Uint8Array<ArrayBuffer>, qtd: number): number[] => {
         const barras = new Array(qtd).fill(0)
@@ -423,6 +635,62 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         barrasSuavizadasRef.current = []
         setBarrasAudio(new Array(QTD_BARRAS_AUDIO).fill(0))
     }, [])
+
+    const startLocalParakeet = useCallback(async () => {
+        try {
+            setError(null)
+            setIsTranscribing(false)
+            pendenciasParakeetRef.current = 0
+            enviosParakeetPendentesRef.current.clear()
+            resetarEstadoTranscricao()
+
+            const availability = await window.electronAPI?.localParakeet?.checkAvailability()
+            if (!availability?.success) {
+                throw new Error(availability?.error || 'Falha ao verificar Parakeet local')
+            }
+            if (!availability.runtimeAvailable) {
+                throw new Error('Runtime local do Parakeet não está disponível.')
+            }
+            if (!availability.hasModels) {
+                throw new Error('Nenhum modelo do Parakeet foi baixado. Baixe um modelo para usar a transcrição local.')
+            }
+            if (!availability.available) {
+                throw new Error('Parakeet local não está disponível no momento.')
+            }
+
+            const sessionResult = await window.electronAPI?.localParakeet?.startSession({
+                model: normalizarModeloParakeet(config.parakeetModel),
+                language: 'multi'
+            })
+
+            if (!sessionResult?.success || !sessionResult.sessionId) {
+                throw new Error(sessionResult?.error || 'Falha ao iniciar sessão do Parakeet')
+            }
+
+            sessionIdRef.current = sessionResult.sessionId
+            registrarSessaoLocal(sessionResult.sessionId)
+            await audioServiceRef.current?.start(config.microfoneId)
+
+            setIsRecording(true)
+            setStatusCaptura('gravando_local')
+        } catch (e: unknown) {
+            console.error('[useVoiceInput] Failed to start local parakeet:', e)
+            setError(obterMensagemErro(e, 'Falha ao iniciar gravação local'))
+            setIsRecording(false)
+            setStatusCaptura('ocioso')
+            setNivelAudio(0)
+            limparBarrasAudio()
+            audioServiceRef.current?.stop()
+            sessionIdRef.current = null
+            throw e
+        }
+    }, [
+        config.microfoneId,
+        config.parakeetModel,
+        limparBarrasAudio,
+        registrarSessaoLocal,
+        resetarEstadoTranscricao
+    ])
 
     // Start local streaming recording
     const startLocalStreaming = useCallback(async () => {
@@ -554,6 +822,41 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         }
     }, [config.whisperModel, config.language, config.microfoneId, calcularBarrasFrequencia, suavizarBarras, limparBarrasAudio, resetarEstadoTranscricao, registrarSessaoLocal])
 
+    const stopLocalParakeet = useCallback(async () => {
+        try {
+            const sessionIdEncerrando = sessionIdRef.current
+
+            audioServiceRef.current?.stop()
+
+            const promessasPendentes = Array.from(enviosParakeetPendentesRef.current)
+            if (promessasPendentes.length > 0) {
+                setIsTranscribing(true)
+                setStatusCaptura('transcrevendo_local')
+                await Promise.allSettled(promessasPendentes)
+            }
+
+            if (sessionIdEncerrando) {
+                await window.electronAPI?.localParakeet?.stopSession(sessionIdEncerrando)
+                agendarLimpezaSessaoLocal(sessionIdEncerrando)
+            }
+
+            setIsRecording(false)
+            setIsTranscribing(false)
+            setStatusCaptura('ocioso')
+            setUltimaParadaGravacaoEm(Date.now())
+            setNivelAudio(0)
+            limparBarrasAudio()
+        } catch (e: unknown) {
+            console.error('[useVoiceInput] Failed to stop local parakeet:', e)
+            setError(obterMensagemErro(e, 'Falha ao parar gravação local'))
+            setIsRecording(false)
+            setStatusCaptura('ocioso')
+            setUltimaParadaGravacaoEm(Date.now())
+            setNivelAudio(0)
+            limparBarrasAudio()
+        }
+    }, [agendarLimpezaSessaoLocal, limparBarrasAudio])
+
     // Stop local streaming recording
     const stopLocalStreaming = useCallback(async () => {
         try {
@@ -615,6 +918,10 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
 
             if (config.provider === 'local') {
                 invalidarSessaoCloudAtual()
+                if (config.motorLocal === 'parakeet') {
+                    await startLocalParakeet()
+                    return
+                }
                 await startLocalStreaming()
                 return
             }
@@ -640,6 +947,10 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         }
 
         if (config.provider === 'local') {
+            if (config.motorLocal === 'parakeet') {
+                await stopLocalParakeet()
+                return
+            }
             await stopLocalStreaming()
             return
         }
@@ -652,9 +963,12 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         setUltimaParadaGravacaoEm(Date.now())
     }, [
         isRecording,
+        config.motorLocal,
         config.provider,
         config.microfoneId,
+        startLocalParakeet,
         startLocalStreaming,
+        stopLocalParakeet,
         stopLocalStreaming,
         limparBarrasAudio,
         resetarEstadoTranscricao,
@@ -667,16 +981,36 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         audioServiceRef.current?.stop()
         invalidarSessaoCloudAtual()
         sessionIdRef.current = null
+        pendenciasParakeetRef.current = 0
+        enviosParakeetPendentesRef.current.clear()
         setConfig(prev => ({ ...prev, provider }))
         resetarEstadoTranscricao()
         setError(null)
+        setIsTranscribing(false)
         setNivelAudio(0)
         limparBarrasAudio()
     }, [invalidarSessaoCloudAtual, limparBarrasAudio, resetarEstadoTranscricao])
 
+    const setMotorLocal = useCallback((motor: MotorTranscricaoLocal) => {
+        audioServiceRef.current?.stop()
+        sessionIdRef.current = null
+        pendenciasParakeetRef.current = 0
+        enviosParakeetPendentesRef.current.clear()
+        setConfig(prev => ({ ...prev, motorLocal: motor }))
+        resetarEstadoTranscricao()
+        setError(null)
+        setIsTranscribing(false)
+        setNivelAudio(0)
+        limparBarrasAudio()
+    }, [limparBarrasAudio, resetarEstadoTranscricao])
+
     // Set Whisper model
     const setWhisperModel = useCallback((model: WhisperModelSize) => {
         setConfig(prev => ({ ...prev, whisperModel: model }))
+    }, [])
+
+    const setParakeetModel = useCallback((model: ParakeetModelName) => {
+        setConfig(prev => ({ ...prev, parakeetModel: normalizarModeloParakeet(model) }))
     }, [])
 
     // Set binary path
@@ -702,6 +1036,8 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
             if (sessionIdRef.current) {
                 window.electronAPI?.localWhisper?.stopSession(sessionIdRef.current)
                     .catch(err => console.error('[useVoiceInput] Cleanup error:', err))
+                window.electronAPI?.localParakeet?.stopSession(sessionIdRef.current)
+                    .catch(err => console.error('[useVoiceInput] Cleanup parakeet error:', err))
             }
             if (timeoutLimpezaSessaoLocalRef.current) {
                 window.clearTimeout(timeoutLimpezaSessaoLocalRef.current)
@@ -727,12 +1063,16 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
                 void audioServiceRef.current?.resumeIfNeeded?.()
                 return
             }
+            if (config.motorLocal === 'parakeet') {
+                void audioServiceRef.current?.resumeIfNeeded?.()
+                return
+            }
             if (audioContextRef.current?.state === 'suspended') {
                 void audioContextRef.current.resume()
             }
         }, 1200)
         return () => window.clearInterval(intervalo)
-    }, [isRecording, config.provider])
+    }, [isRecording, config.motorLocal, config.provider])
 
     return {
         isRecording,
@@ -745,19 +1085,29 @@ export function useVoiceInput(aiService: AIService | null): UseVoiceInputReturn 
         setTranscription,
         toggleRecording,
         statusCaptura,
-        modoTranscricao: config.provider === 'local' ? 'local_realtime' : 'cloud_chunked',
+        modoTranscricao: config.provider === 'local'
+            ? config.motorLocal === 'parakeet'
+                ? 'local_chunked'
+                : 'local_realtime'
+            : 'cloud_chunked',
         provider: config.provider,
         setProvider,
+        motorLocal: config.motorLocal,
+        setMotorLocal,
         whisperConfig: {
             modelSize: config.whisperModel || 'base',
             language: config.language,
             binaryPath: config.whisperBinaryPath
         },
         setWhisperModel,
+        parakeetModel: normalizarModeloParakeet(config.parakeetModel),
+        setParakeetModel,
         whisperBinaryPath: config.whisperBinaryPath || '',
         setWhisperBinaryPath,
         isWhisperReady,
         initializeWhisper,
+        isParakeetReady,
+        initializeParakeet,
         microfoneId: config.microfoneId || '',
         setMicrofoneId,
         nivelAudio,

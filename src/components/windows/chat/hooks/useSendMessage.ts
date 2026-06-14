@@ -1,13 +1,14 @@
 import { useCallback, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { ChatMessage } from '../../../../types/chat'
+import type { ChatMessage, ArquivoAnexo } from '../../../../types/chat'
 import type { Conversation, WebSource } from '../types'
-import type { ToolCardData } from '../../../../types/tools'
+import type { ToolCall, ToolCardData } from '../../../../types/tools'
 import type { Project } from '../../../../types/project'
 import type { InvestigationTrace } from '../../../../services/investigate'
 import type { EventoStreamIA, MetaFimStream } from '../../../../services/ai/AIProvider'
 import type { PerfilLatencia } from '../../../../services/ai/types'
 import type { AIService } from '../../../../services/AIService'
+import { extractTextFromPdfBuffer, formatFileSize } from '../../../../services/DocumentService'
 
 // Services
 import {
@@ -18,16 +19,12 @@ import {
     processUserMessageForMemory,
 } from '../../../../services/PromptPipeline'
 import {
-    extractSearchQuery,
-    fetchUrlContent,
-    formatSearchResultsForAI,
-    generateSearchPlanWithAI,
     shouldSearchWeb,
-    searchWeb,
 } from '../../../../services/WebSearchService'
 import { investigateService } from '../../../../services/investigate'
 import { toolCallingService, type EstrategiaDecisaoTool } from '../../../../services/tools/ToolCallingService'
 import { toolRegistry } from '../../../../services/tools/ToolRegistry'
+import { toolExecutor } from '../../../../services/tools/ToolExecutor'
 import { obterConfiguracaoPerfilGeracao } from '../../../../services/ai/politicaGeracao'
 import {
     addProjectMemory,
@@ -42,12 +39,14 @@ import {
     prepararHistoricoMultimodalParaModelo,
     selecionarMensagensComImagemParaHistorico,
 } from '../../../../services/ai/historicoMultimodal'
+
+
 import {
     atualizarMetadadoImagemMensagem,
     criarMetadadosImagensPendentes,
     normalizarMensagemChat,
 } from '../../../../services/conversasPersistidas'
-import { obterNomeFonte } from '../utils'
+import { normalizarMensagemErroApi, obterMensagemErroApi, obterStatusErroApi } from '../../../../utils/errosApi'
 
 interface FiltroContextoPerfil {
     consulta?: string
@@ -67,6 +66,9 @@ interface PoliticaLatencia {
     webMaxConteudoChars: number
     webQueryPlanTimeoutMs: number
     maxBuscasWebPorMensagem: number
+    pularPlanejamentoWebIA?: boolean
+    maxTentativasPorTarefa?: number
+    modoAutonomia?: 'equilibrado'
 }
 
 interface MetricasLatencia {
@@ -84,6 +86,44 @@ interface MetricasLatencia {
     perfilLatencia: PerfilLatencia
 }
 
+interface EntradaToolCallMarcador {
+    tool?: unknown
+    input?: {
+        toolId?: unknown
+    }
+    toolId?: unknown
+}
+
+function construirConteudoComMarcadores(status: string, toolCalls: EntradaToolCallMarcador[]): string {
+    if (!toolCalls || toolCalls.length === 0) return status || ''
+
+    let resultado = status || ''
+    
+    const obterToolId = (tc: EntradaToolCallMarcador): string => {
+        if (!tc) return ''
+        if (typeof tc.tool === 'string') return tc.tool
+        if (tc.input && typeof tc.input.toolId === 'string') return tc.input.toolId
+        if (typeof tc.toolId === 'string') return tc.toolId
+        return ''
+    }
+
+    const temBuscaWeb = toolCalls.some(tc => obterToolId(tc).includes('web_search'))
+    if (temBuscaWeb) {
+        resultado += '\n\n[tool:web_search]'
+    }
+
+    let otherIndex = 0
+    toolCalls.forEach(tc => {
+        const toolId = obterToolId(tc)
+        if (toolId && !toolId.includes('web_search')) {
+            resultado += `\n\n[tool:other:${otherIndex}]`
+            otherIndex++
+        }
+    })
+
+    return resultado
+}
+
 const POLITICA_LATENCIA_PADRAO: PoliticaLatencia = {
     prestreamBudgetMs: 450,
     maxCharsMensagemHistorico: 500,
@@ -96,6 +136,9 @@ const POLITICA_LATENCIA_PADRAO: PoliticaLatencia = {
     webMaxConteudoChars: 800,
     webQueryPlanTimeoutMs: 0,
     maxBuscasWebPorMensagem: 3,
+    pularPlanejamentoWebIA: false,
+    maxTentativasPorTarefa: 4,
+    modoAutonomia: 'equilibrado',
 }
 
 const MAX_AUTO_CONTINUACOES = 2
@@ -126,8 +169,10 @@ interface UseSendMessageParams {
     setInput: (value: string) => void
     pendingScreenshots: string[]
     setPendingScreenshots: React.Dispatch<React.SetStateAction<string[]>>
-    pendingMessage: { text: string; screenshots: string[] } | null
-    setPendingMessage: React.Dispatch<React.SetStateAction<{ text: string; screenshots: string[] } | null>>
+    pendingFiles: ArquivoAnexo[]
+    setPendingFiles: React.Dispatch<React.SetStateAction<ArquivoAnexo[]>>
+    pendingMessage: { text: string; screenshots: string[]; arquivos?: ArquivoAnexo[] } | null
+    setPendingMessage: React.Dispatch<React.SetStateAction<{ text: string; screenshots: string[]; arquivos?: ArquivoAnexo[] } | null>>
     textareaRef: React.RefObject<HTMLTextAreaElement | null>
 
     // Generation state
@@ -142,6 +187,7 @@ interface UseSendMessageParams {
     webSearchEnabled: boolean
     toolCallingAtivo: boolean
     investigateMode: boolean
+    reasoningAtivo: boolean
     setIsInvestigating: (value: boolean) => void
     setCurrentTrace: (trace: InvestigationTrace | null) => void
 
@@ -173,7 +219,7 @@ function aplicarPerfilLatencia(
     provedorAtivo: string,
     perfilLatencia: PerfilLatencia
 ): PoliticaLatencia {
-    if (provedorAtivo === 'lmstudio' && perfilLatencia === 'rapido') {
+    if (provedorAtivo === 'local' && perfilLatencia === 'rapido') {
         return {
             ...politica,
             prestreamBudgetMs: 220,
@@ -187,10 +233,11 @@ function aplicarPerfilLatencia(
             webMaxConteudoChars: 480,
             webQueryPlanTimeoutMs: 0,
             maxBuscasWebPorMensagem: 1,
+            pularPlanejamentoWebIA: true,
         }
     }
 
-    if (provedorAtivo === 'lmstudio' && perfilLatencia === 'equilibrado') {
+    if (provedorAtivo === 'local' && perfilLatencia === 'equilibrado') {
         return {
             ...politica,
             estrategiaTools: 'ai_fallback',
@@ -203,7 +250,7 @@ function aplicarPerfilLatencia(
 }
 
 function obterOpcoesContextoProjeto(provedorAtivo: string, perfilLatencia: PerfilLatencia) {
-    if (provedorAtivo === 'lmstudio' && perfilLatencia === 'rapido') {
+    if (provedorAtivo === 'local' && perfilLatencia === 'rapido') {
         return {
             maxCaracteresTotais: 900,
             maxArquivosInventario: 6,
@@ -211,7 +258,7 @@ function obterOpcoesContextoProjeto(provedorAtivo: string, perfilLatencia: Perfi
         }
     }
 
-    if (provedorAtivo === 'lmstudio' && perfilLatencia === 'equilibrado') {
+    if (provedorAtivo === 'local' && perfilLatencia === 'equilibrado') {
         return {
             maxCaracteresTotais: 1400,
             maxArquivosInventario: 8,
@@ -227,7 +274,7 @@ function obterOpcoesContextoProjeto(provedorAtivo: string, perfilLatencia: Perfi
 }
 
 function obterOrcamentoPromptEfetivo(provedorAtivo: string, perfilLatencia: PerfilLatencia) {
-    if (provedorAtivo === 'lmstudio' && perfilLatencia === 'rapido') {
+    if (provedorAtivo === 'local' && perfilLatencia === 'rapido') {
         return ORCAMENTO_PROMPT_RAPIDO_LMSTUDIO
     }
 
@@ -294,33 +341,6 @@ function prepararHistoricoParaModelo(
     return prepararHistoricoMultimodalParaModelo(mensagens, maxCharsPorMensagem, opcoes)
 }
 
-async function executarComTimeout<T>(
-    promessa: Promise<T>,
-    timeoutMs: number,
-    fallback: T,
-    opcoes: { aoExpirar?: () => void } = {}
-): Promise<T> {
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-        return promessa.catch(() => fallback)
-    }
-
-    let timer: ReturnType<typeof setTimeout> | null = null
-    const timeout = new Promise<T>((resolve) => {
-        timer = setTimeout(() => {
-            opcoes.aoExpirar?.()
-            resolve(fallback)
-        }, timeoutMs)
-    })
-
-    try {
-        return await Promise.race([promessa, timeout])
-    } catch {
-        return fallback
-    } finally {
-        if (timer) clearTimeout(timer)
-    }
-}
-
 function publicarMetricasLatencia(metricas: MetricasLatencia): void {
     if (typeof window === 'undefined') return
 
@@ -335,27 +355,6 @@ function publicarMetricasLatencia(metricas: MetricasLatencia): void {
 const PROMPT_SISTEMA_INVESTIGACAO = 'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.'
 const PROMPT_SISTEMA_TOOLS = 'Você é um assistente de decisão de ferramentas. Seja extremamente conciso.'
 const PROMPT_SISTEMA_RESUMO_IMAGEM = 'Você resume imagens para contexto de chat. Responda em português do Brasil com uma frase curta, factual e estável. Foque no tipo de tela, documento ou app e nos principais elementos visíveis. Não faça OCR completo, não interprete além do que é visível e não use bullets.'
-
-function obterMensagemErro(erro: unknown, fallback: string): string {
-    if (erro instanceof Error && erro.message) {
-        return erro.message
-    }
-    if (typeof erro === 'object' && erro !== null && 'message' in erro) {
-        const mensagem = (erro as { message?: unknown }).message
-        if (typeof mensagem === 'string' && mensagem.trim()) {
-            return mensagem
-        }
-    }
-    return fallback
-}
-
-function obterStatusErro(erro: unknown): number | null {
-    if (typeof erro === 'object' && erro !== null && 'status' in erro) {
-        const status = (erro as { status?: unknown }).status
-        return typeof status === 'number' ? status : null
-    }
-    return null
-}
 
 function ehAbortError(erro: unknown): boolean {
     return erro instanceof Error && erro.name === 'AbortError'
@@ -384,6 +383,100 @@ function criarPromptResumoImagem(textoMensagem: string, indiceImagem: number, to
             : 'A mensagem do usuário não tem texto adicional relevante.',
         'Descreva a imagem em no máximo 18 palavras. Retorne apenas o resumo final.',
     ].join('\n')
+}
+
+function detectarPaginasSolicitadas(texto: string): { inicio: number; fim: number } | null {
+    const faixa = texto.match(/\bp[áa]g(?:ina|inas)?\.?\s*(\d+)\s*(?:a|at[eé]|-)\s*(\d+)\b/i)
+    if (faixa) {
+        const inicio = Number(faixa[1])
+        const fim = Number(faixa[2])
+        if (Number.isInteger(inicio) && Number.isInteger(fim) && inicio > 0 && fim >= inicio) {
+            return { inicio, fim }
+        }
+    }
+
+    const unica = texto.match(/\bp[áa]g(?:ina)?\.?\s*(\d+)\b/i)
+    if (!unica) return null
+
+    const pagina = Number(unica[1])
+    return Number.isInteger(pagina) && pagina > 0 ? { inicio: pagina, fim: pagina } : null
+}
+
+async function prepararArquivosAnexadosParaMensagem(
+    arquivos: ArquivoAnexo[],
+    textoMensagem: string
+): Promise<ArquivoAnexo[]> {
+    const paginasSolicitadas = detectarPaginasSolicitadas(textoMensagem)
+    if (!paginasSolicitadas) {
+        return arquivos.map(removerArquivoOriginal)
+    }
+
+    const preparados: ArquivoAnexo[] = []
+    for (const arquivo of arquivos) {
+        if (arquivo.type !== 'pdf' || !arquivo.arquivoOriginal) {
+            preparados.push(removerArquivoOriginal(arquivo))
+            continue
+        }
+
+        const buffer = await arquivo.arquivoOriginal.arrayBuffer()
+        const conteudoPagina = await extractTextFromPdfBuffer(
+            buffer,
+            paginasSolicitadas.inicio,
+            paginasSolicitadas.fim
+        )
+        const paginaLabel = paginasSolicitadas.inicio === paginasSolicitadas.fim
+            ? `Página ${paginasSolicitadas.inicio}`
+            : `Páginas ${paginasSolicitadas.inicio} a ${paginasSolicitadas.fim}`
+
+        preparados.push({
+            ...arquivo,
+            arquivoOriginal: undefined,
+            content: `[Extração específica do PDF: ${arquivo.name}]\n${paginaLabel}:\n\n${conteudoPagina}`,
+            status: 'concluido',
+        })
+    }
+
+    return preparados
+}
+
+function removerArquivoOriginal(arquivo: ArquivoAnexo): ArquivoAnexo {
+    return {
+        id: arquivo.id,
+        name: arquivo.name,
+        type: arquivo.type,
+        size: arquivo.size,
+        content: arquivo.content,
+        status: arquivo.status,
+    }
+}
+
+function deveBuscarArquivosDoProjeto(texto: string, project: Project | null): boolean {
+    if (!project || project.files.length === 0) return false
+
+    const normalizado = texto.toLowerCase()
+    if (/^(oi|ol[aá]|ok|obrigad[oa]|valeu)\b/i.test(normalizado.trim())) return false
+
+    const citaArquivo = project.files.some((file) => {
+        const nomeBase = file.name.replace(/\.[^.]+$/, '').toLowerCase()
+        return normalizado.includes(file.name.toLowerCase()) || normalizado.includes(nomeBase)
+    })
+    if (citaArquivo) return true
+
+    return /\b(o que é|oq é|explique|explica|resuma|resumo|onde fala|procure|busque|no pdf|nos arquivos|do projeto)\b/i
+        .test(normalizado) || /["“”][^"“”]{3,80}["“”]/.test(texto)
+}
+
+function detectarArquivoProjetoCitado(texto: string, project: Project | null): string | undefined {
+    if (!project) return undefined
+
+    const normalizado = texto.toLowerCase()
+    const arquivo = project.files.find((file) => {
+        const nome = file.name.toLowerCase()
+        const nomeBase = nome.replace(/\.[^.]+$/, '')
+        return normalizado.includes(nome) || normalizado.includes(nomeBase)
+    })
+
+    return arquivo?.name
 }
 
 function atualizarMensagemNaConversa(
@@ -507,34 +600,36 @@ function anexarBlocosNaMensagem(mensagem: string, blocos: string[]): string {
 function criarChatFnInvestigacao(
     servico: AIService,
     systemPrompt: string
-): (prompt: string) => Promise<string> {
-    return async (prompt: string): Promise<string> => {
+): (prompt: string, systemPromptOverride?: string) => Promise<string> {
+    return async (prompt: string, systemPromptOverride?: string): Promise<string> => {
         const configGeracao = obterConfiguracaoPerfilGeracao(prompt, { investigateMode: true })
         let response = ''
         await servico.streamChat(
             prompt,
             (chunk: string) => { response += chunk },
-            systemPrompt,
+            systemPromptOverride !== undefined ? systemPromptOverride : systemPrompt,
             [],
             {
                 temperature: configGeracao.temperature,
+                reasoningAtivo: false,
             }
         )
         return response
     }
 }
 
-function criarChatFnFerramentas(servico: AIService): (prompt: string) => Promise<string> {
-    return async (prompt: string): Promise<string> => {
+function criarChatFnFerramentas(servico: AIService): (prompt: string, systemPrompt?: string) => Promise<string> {
+    return async (prompt: string, systemPrompt?: string): Promise<string> => {
         const configGeracao = obterConfiguracaoPerfilGeracao(prompt, { forcarPerfil: 'pergunta_curta' })
         let response = ''
         await servico.streamChat(
             prompt,
             (chunk: string) => { response += chunk },
-            PROMPT_SISTEMA_TOOLS,
+            systemPrompt !== undefined ? systemPrompt : PROMPT_SISTEMA_TOOLS,
             [],
             {
                 temperature: configGeracao.temperature,
+                reasoningAtivo: false,
             }
         )
         return response
@@ -552,6 +647,8 @@ export function useSendMessage({
     setInput,
     pendingScreenshots,
     setPendingScreenshots,
+    pendingFiles,
+    setPendingFiles,
     pendingMessage,
     setPendingMessage,
     textareaRef,
@@ -563,6 +660,7 @@ export function useSendMessage({
     webSearchEnabled,
     toolCallingAtivo,
     investigateMode,
+    reasoningAtivo,
     setIsInvestigating,
     setCurrentTrace,
     setMessageSources,
@@ -759,7 +857,7 @@ export function useSendMessage({
         // Subscribe to updates for real-time progress
         const unsubscribe = investigateService.subscribe((update) => {
             setCurrentTrace(update.trace)
-            
+
             // Update the existing message with progress
             if (update.message && update.type !== 'completed') {
                 setConversations(prev => prev.map(c => {
@@ -769,8 +867,8 @@ export function useSendMessage({
                             return {
                                 ...c,
                                 messages: c.messages.map(m =>
-                                    m.id === lastAiMsg.id 
-                                        ? { ...m, content: `🔍 *${update.message}*` } 
+                                    m.id === lastAiMsg.id
+                                        ? { ...m, content: `🔍 *${update.message}*` }
                                         : m
                                 )
                             }
@@ -784,10 +882,10 @@ export function useSendMessage({
         try {
             const trace = await investigateService.investigate(question)
             setCurrentTrace(trace)
-            
+
             // NOTE: Final answer is set by the calling code, NOT here
             // This prevents duplicate messages
-            
+
         } catch (error) {
             console.error('[useSendMessage] Investigation error:', error)
         } finally {
@@ -830,17 +928,20 @@ export function useSendMessage({
     // Main send function
     const handleSend = useCallback(async () => {
         const hasTexto = input.trim().length > 0
-        if (!hasTexto && pendingScreenshots.length === 0) return
+        const hasArquivos = pendingFiles.length > 0
+        if (!hasTexto && pendingScreenshots.length === 0 && !hasArquivos) return
 
         // If currently generating, queue the message
         if (isGenerating) {
             console.log('[useSendMessage] Queueing message for later processing')
             setPendingMessage({
                 text: input.trim(),
-                screenshots: [...pendingScreenshots]
+                screenshots: [...pendingScreenshots],
+                arquivos: [...pendingFiles]
             })
             setInput('')
             setPendingScreenshots([])
+            setPendingFiles([])
             if (textareaRef.current) {
                 textareaRef.current.style.height = 'auto'
             }
@@ -872,6 +973,9 @@ export function useSendMessage({
         const promptImagem = pendingScreenshots.length > 0 ? (hasTexto ? input.trim() : 'Descreva a imagem e responda em português.') : null
         const userContent = promptImagem ?? input.trim()
         const configGeracaoChat = obterConfiguracaoPerfilGeracao(userContent, { investigateMode })
+        const arquivosPreparados = pendingFiles.length > 0
+            ? await prepararArquivosAnexadosParaMensagem(pendingFiles, userContent)
+            : []
 
         let userMsg = normalizarMensagemChat({
             id: uuidv4(),
@@ -880,6 +984,7 @@ export function useSendMessage({
             timestamp: Date.now(),
             images: pendingScreenshots.length > 0 ? [...pendingScreenshots] : undefined,
             imagensContexto: criarMetadadosImagensPendentes(pendingScreenshots),
+            arquivos: arquivosPreparados.length > 0 ? arquivosPreparados : undefined,
         }) as ChatMessage
 
         const aiMsgId = uuidv4()
@@ -894,6 +999,7 @@ export function useSendMessage({
         updateConversationMessages(convId, currentMessages)
         setInput('')
         setPendingScreenshots([])
+        setPendingFiles([])
         if (textareaRef.current) {
             textareaRef.current.style.height = 'auto'
         }
@@ -924,7 +1030,7 @@ export function useSendMessage({
         const inicioPreStream = performance.now()
         let tempoPrompt = 0
         let tempoTools = 0
-        let tempoWeb = 0
+        const tempoWeb = 0
         let ttft: number | null = null
         let modoMetricas: MetricasLatencia['modo'] = 'chat'
         const currentConv = conversations.find(c => c.id === convId)
@@ -1002,6 +1108,7 @@ export function useSendMessage({
                         signal,
                         temperature: configGeracaoImagem.temperature,
                         perfilLatencia,
+                        reasoningAtivo,
                         historico: historicoImagem,
                         systemPromptOverride,
                         onFimStream: (meta: MetaFimStream) => {
@@ -1055,6 +1162,7 @@ export function useSendMessage({
                             signal,
                             temperature: configGeracaoImagem.temperature,
                             perfilLatencia,
+                            reasoningAtivo,
                             onFimStream: (meta: MetaFimStream) => {
                                 metaFimContinuacaoImagem = meta
                             },
@@ -1148,20 +1256,20 @@ export function useSendMessage({
                     let displayedContent = ''
                     const chunkSize = 20 // caracteres por chunk
                     const delay = 15 // ms entre chunks
-                    
+
                     for (let i = 0; i < fullAnswer.length; i += chunkSize) {
                         displayedContent = fullAnswer.slice(0, i + chunkSize)
 
                         if (ttft === null) {
                             ttft = performance.now() - inicioTotal
                         }
-                        
+
                         atualizarMensagemAssistente(displayedContent, '')
-                        
+
                         // Pequeno delay para criar efeito de streaming
                         await new Promise(resolve => setTimeout(resolve, delay))
                     }
-                    
+
                     // Garantir que a resposta final completa está lá
                     setConversations(prev => prev.map(c => {
                         if (c.id === convId) {
@@ -1177,208 +1285,20 @@ export function useSendMessage({
                     }))
                 }
             } else {
-                let webSearchContext = ''
-                let searchSources: WebSource[] = []
+                const webSearchContext = ''
+                const searchSources: WebSource[] = []
                 let contextoFerramentas = ''
                 let cartoesFerramentas: ToolCardData[] = []
                 let houveBuscaWeb = false
                 let buscaWebComResultados = false
-                let buscaWebExpirou = false
+                const buscaWebExpirou = false
 
                 const tempoRestantePreStream = () => Math.max(0, politica.prestreamBudgetMs - (performance.now() - inicioPreStream))
-
-                // Fallback legado: busca direta apenas quando o tool calling está desligado.
-                // Com tool calling ativo, a IA decide se/como usar web_search.
-                if (webSearchEnabled && !toolCallingAtivo) {
-                    const inicioWeb = performance.now()
-                    try {
-                        const historicoBusca = prepararHistoricoParaModelo(
-                            messages,
-                            politica.maxCharsMensagemHistorico,
-                            {
-                                consultaAtual: userMsg.content,
-                                perfilLatencia,
-                                emProjeto: Boolean(currentProject),
-                            }
-                        )
-
-                        let queryBusca = extractSearchQuery(userMsg.content)
-                        const usarPlanejamentoIA = true
-                        let statusMessage = ''
-                        if (usarPlanejamentoIA) {
-                            const configPlanejamentoBusca = obterConfiguracaoPerfilGeracao(userMsg.content, { forcarPerfil: 'pergunta_curta' })
-                            const searchPlan = await generateSearchPlanWithAI(
-                                userMsg.content,
-                                historicoBusca,
-                                async (prompt: string) => await servico.chat(prompt, '', [], {
-                                    signal,
-                                    temperature: configPlanejamentoBusca.temperature,
-                                }),
-                                politica.webQueryPlanTimeoutMs
-                            )
-                            if (!searchPlan.planejamentoValido) {
-                                queryBusca = ''
-                            } else {
-                                queryBusca = searchPlan.queryPrincipal || searchPlan.query || ''
-                                statusMessage = (searchPlan.statusMessage || '').trim()
-                            }
-                        }
-
-                        queryBusca = extractSearchQuery(queryBusca || '')
-                        if (!queryBusca?.trim()) {
-                            queryBusca = ''
-                        }
-
-                        if (queryBusca) {
-                            houveBuscaWeb = true
-                            statusMessage = statusMessage || `Vou buscar informações sobre ${truncarTexto(queryBusca, 50)}.`
-
-                            setConversations(prev => prev.map(c => {
-                                if (c.id === convId) {
-                                    return {
-                                        ...c,
-                                        messages: c.messages.map(m =>
-                                            m.id === aiMsgId ? { ...m, content: statusMessage, raciocinio: undefined } : m
-                                        )
-                                    }
-                                }
-                                return c
-                            }))
-
-                            setMessageSearchCards(prev => ({
-                                ...prev,
-                                [aiMsgId]: [{
-                                    toolId: 'builtin:web_search',
-                                    toolName: 'Busca na Web',
-                                    toolIcon: 'Globe',
-                                    query: queryBusca,
-                                    status: 'executing',
-                                    resultCount: 0,
-                                    results: []
-                                }]
-                            }))
-
-                            const searchResponse = await executarComTimeout(
-                                searchWeb(queryBusca, 5),
-                                politica.webSearchTimeoutMs,
-                                { query: queryBusca, results: [], timestamp: Date.now() },
-                                {
-                                    aoExpirar: () => {
-                                        buscaWebExpirou = true
-                                        console.warn('[useSendMessage] Web search timed out before prompt assembly:', {
-                                            query: queryBusca,
-                                            timeoutMs: politica.webSearchTimeoutMs,
-                                        })
-                                    }
-                                }
-                            )
-
-                            if (searchResponse.results.length > 0) {
-                                buscaWebExpirou = false
-                                buscaWebComResultados = true
-                                const enrichedResults = await Promise.all(
-                                    searchResponse.results.slice(0, politica.webMaxPaginasEnriquecimento).map(async (result) => {
-                                        try {
-                                            if (result.content && result.content.length > 0) {
-                                                return result
-                                            }
-                                            const content = await fetchUrlContent(
-                                                result.url,
-                                                politica.webMaxConteudoChars,
-                                                politica.webFetchTimeoutMs
-                                            )
-                                            return { ...result, content }
-                                        } catch {
-                                            return result
-                                        }
-                                    })
-                                )
-                                searchResponse.results = enrichedResults
-
-                                const blocoWebAplicado = aplicarOrcamentoPrompt(
-                                    formatSearchResultsForAI(searchResponse),
-                                    ORCAMENTO_PROMPT_PADRAO.ferramentasWebTokens
-                                )
-                                webSearchContext = blocoWebAplicado.texto
-
-                                const cardResults = searchResponse.results.map(r => ({
-                                    type: 'link' as const,
-                                    title: r.title,
-                                    content: r.snippet || '',
-                                    url: r.url,
-                                    favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`
-                                }))
-
-                                searchSources = searchResponse.results.map(r => {
-                                    let dominio = ''
-                                    try {
-                                        dominio = new URL(r.url).hostname.replace('www.', '')
-                                    } catch {
-                                        dominio = ''
-                                    }
-                                    return {
-                                        url: r.url,
-                                        title: r.title,
-                                        favicon: `https://www.google.com/s2/favicons?domain=${new URL(r.url).hostname}&sz=32`,
-                                        resumo: r.content && r.content.length > 0 ? r.content : r.snippet,
-                                        nomeFonte: obterNomeFonte(r.url, r.title),
-                                        dominio
-                                    }
-                                })
-
-                                setMessageSearchCards(prev => ({
-                                    ...prev,
-                                    [aiMsgId]: [{
-                                        toolId: 'builtin:web_search',
-                                        toolName: 'Busca na Web',
-                                        toolIcon: 'Globe',
-                                        query: queryBusca,
-                                        status: 'completed',
-                                        resultCount: searchResponse.results.length,
-                                        results: cardResults,
-                                        statusText: statusMessage
-                                    }]
-                                }))
-                            } else {
-                                setMessageSearchCards(prev => ({
-                                    ...prev,
-                                    [aiMsgId]: [{
-                                        toolId: 'builtin:web_search',
-                                        toolName: 'Busca na Web',
-                                        toolIcon: 'Globe',
-                                        query: queryBusca,
-                                        status: 'completed',
-                                        resultCount: 0,
-                                        results: [],
-                                        statusText: statusMessage
-                                    }]
-                                }))
-                            }
-
-                            setConversations(prev => prev.map(c => {
-                                if (c.id === convId) {
-                                    return {
-                                        ...c,
-                                        messages: c.messages.map(m =>
-                                            m.id === aiMsgId ? { ...m, content: '', raciocinio: undefined } : m
-                                        )
-                                    }
-                                }
-                                return c
-                            }))
-                        }
-                    } catch (err) {
-                        console.warn('[useSendMessage] Web search failed:', err)
-                    } finally {
-                        tempoWeb = performance.now() - inicioWeb
-                    }
-                }
 
                 if (toolCallingAtivo) {
                     const inicioTools = performance.now()
                     try {
-                        // No fluxo de tool calling, a IA decide se usa web_search.
-                        // O toggle "Busca na Web" fica apenas para o fallback legado (sem tool calling).
+                        // No fluxo de tool calling, a IA decide se/como usar web_search de forma autônoma.
                         const ferramentasDisponiveis = toolRegistry.getEnabled()
 
                         if (ferramentasDisponiveis.length > 0) {
@@ -1392,88 +1312,351 @@ export function useSendMessage({
                                 }
                             )
 
-                            const decisao = await toolCallingService.decideToolUsage(
-                                userMsg.content,
-                                historicoChat,
-                                ferramentasDisponiveis,
-                                {
-                                    estrategiaDecisao: politica.estrategiaTools,
-                                    timeoutMs: politica.toolDecisionTimeoutMs,
-                                    timeoutQueryMs: politica.webQueryPlanTimeoutMs,
-                                    maxBuscasWebPorMensagem: politica.maxBuscasWebPorMensagem,
-                                }
-                            )
+                            const historicoDecisaoTemporario = [...historicoChat]
+                            const allCalls: ToolCall[] = []
+                            let progressContentAcumulado = ''
 
-                            if (decisao.shouldUseTool && decisao.toolCalls.length > 0) {
-                                const statusMessage = await toolCallingService.generateStatusMessage(
-                                    userMsg.content,
-                                    decisao.toolCalls
-                                )
-
-                                const progressContent = statusMessage || ''
-                                if (progressContent) {
-                                    setConversations(prev => prev.map(c => {
-                                        if (c.id === convId) {
-                                            return {
-                                                ...c,
-                                                messages: c.messages.map(m =>
-                                                    m.id === aiMsgId ? { ...m, content: progressContent, raciocinio: undefined } : m
-                                                )
-                                            }
+                            // Define um status inicial e gera a frase bonita de forma síncrona antes do tool calling
+                            const deveExibirStatusBuscaWeb = shouldSearchWeb(userMsg.content)
+                            if (deveExibirStatusBuscaWeb) {
+                                progressContentAcumulado = 'Pesquisando na web...'
+                                setConversations(prev => prev.map(c => {
+                                    if (c.id === convId) {
+                                        return {
+                                            ...c,
+                                            messages: c.messages.map(m =>
+                                                m.id === aiMsgId ? { ...m, content: progressContentAcumulado, raciocinio: undefined } : m
+                                            )
                                         }
-                                        return c
-                                    }))
-                                }
+                                    }
+                                    return c
+                                }))
 
-                                const convForContext = conversations.find(c => c.id === convId)
-                                const projectIdForTools = convForContext?.projectId
+                                if (servico) {
+                                    try {
+                                        const promptFrase = `Instrução: Com base na pergunta do usuário, crie uma frase muito curta (máximo 12 palavras), direta e natural em português, iniciando com "Vou buscar...", "Vou pesquisar..." ou similar, descrevendo de forma concisa o que você vai procurar na internet.
+Exemplos:
+Pergunta: "Qual foi o resultado da copa hoje? Pesquise" -> Resposta: "Vou pesquisar os resultados da Copa hoje."
+Pergunta: "Quem ganhou o jogo do Palmeiras ontem?" -> Resposta: "Vou buscar o resultado do jogo do Palmeiras de ontem."
+Pergunta: "${userMsg.content}" -> Resposta:`
 
-                                const calls = await toolCallingService.executeToolCalls(
-                                    decisao,
-                                    undefined,
-                                    undefined,
-                                    { conversationId: convId!, projectId: projectIdForTools, userQuery: userMsg.content }
-                                )
-
-                                const chamadasWeb = calls.filter((call) => call.input.toolId.includes('web_search'))
-                                if (chamadasWeb.length > 0) {
-                                    houveBuscaWeb = true
-                                    const encontrouResultadoWeb = chamadasWeb.some((call) => {
-                                        const data = call.result?.data as { results?: unknown[] } | undefined
-                                        return Array.isArray(data?.results) && data.results.length > 0
-                                    })
-                                    if (encontrouResultadoWeb) {
-                                        buscaWebComResultados = true
+                                        const fraseGerada = await servico.chat(
+                                            promptFrase,
+                                            'Você é um assistente conciso que gera status de busca. Responda apenas a frase final, sem raciocínio.',
+                                            [],
+                                            {
+                                                temperature: 0.2,
+                                                reasoningAtivo: false,
+                                            }
+                                        )
+                                        const fraseLimpa = fraseGerada
+                                            .replace(/<think>[\s\S]*?<\/think>/gi, '')
+                                            .replace(/<\/?think>/gi, '')
+                                            .split('\n')
+                                            .map((linha) => linha.trim())
+                                            .find(Boolean)
+                                            ?.replace(/^["']|["']$/g, '')
+                                            .slice(0, 120)
+                                            .trim() || ''
+                                        if (fraseLimpa && fraseLimpa.length > 3) {
+                                            progressContentAcumulado = fraseLimpa
+                                            setConversations(prev => prev.map(c => {
+                                                if (c.id === convId) {
+                                                    return {
+                                                        ...c,
+                                                        messages: c.messages.map(m =>
+                                                            m.id === aiMsgId ? { ...m, content: progressContentAcumulado, raciocinio: undefined } : m
+                                                        )
+                                                    }
+                                                }
+                                                return c
+                                            }))
+                                        }
+                                    } catch (err) {
+                                        console.warn('Erro ao gerar status inicial via IA:', err)
                                     }
                                 }
+                            }
 
+                            let rodadasToolCalling = 0
+                            const projectFileSearchTool = ferramentasDisponiveis.find(
+                                (tool) => tool.id === 'builtin:project_file_search'
+                            )
+                            const arquivoProjetoCitado = detectarArquivoProjetoCitado(userMsg.content, currentProject)
+                            let decisaoRecuperacaoPendente: Awaited<ReturnType<typeof toolCallingService.decideToolUsage>> | null =
+                                projectFileSearchTool && deveBuscarArquivosDoProjeto(userMsg.content, currentProject)
+                                    ? {
+                                        shouldUseTool: true,
+                                        toolCalls: [{
+                                            tool: projectFileSearchTool.id,
+                                            arguments: arquivoProjetoCitado
+                                                ? { query: userMsg.content, fileName: arquivoProjetoCitado }
+                                                : { query: userMsg.content },
+                                            reasoning: 'A pergunta depende dos arquivos anexados ao projeto ativo.',
+                                        }],
+                                    }
+                                    : null
+                            const atualizarCartoesFerramenta = (cartoesNovos: ToolCardData[]) => {
+                                if (cartoesNovos.length === 0) return
+
+                                setMessageSearchCards(prev => {
+                                    const existentes = prev[aiMsgId] || []
+                                    const porId = new Map<string, ToolCardData>()
+
+                                    existentes.forEach((cartao, indice) => {
+                                        porId.set(cartao.callId || `existente-${indice}`, cartao)
+                                    })
+                                    cartoesNovos.forEach((cartao, indice) => {
+                                        // Remove card pendente do mesmo toolId ao receber o card real
+                                        if (cartao.callId && !cartao.callId.startsWith('pending-')) {
+                                            for (const chave of porId.keys()) {
+                                                if (chave.startsWith(`pending-`) && chave.endsWith(cartao.toolId)) {
+                                                    porId.delete(chave)
+                                                    break
+                                                }
+                                            }
+                                        }
+                                        porId.set(cartao.callId || `novo-${indice}-${cartao.toolId}`, cartao)
+                                    })
+                                    return {
+                                        ...prev,
+                                        [aiMsgId]: Array.from(porId.values()),
+                                    }
+                                })
+                            }
+
+                            // Salvaguarda ampla para evitar loops infinitos em caso de comportamento anômalo da IA
+                            const maxRodadasSeguranca = 15
+
+                            while (rodadasToolCalling < maxRodadasSeguranca) {
+                                const decisao = decisaoRecuperacaoPendente || (
+                                    await toolCallingService.decideToolUsage(
+                                        userMsg.content,
+                                        historicoDecisaoTemporario,
+                                        ferramentasDisponiveis,
+                                        {
+                                            estrategiaDecisao: politica.estrategiaTools,
+                                            timeoutMs: politica.toolDecisionTimeoutMs,
+                                            timeoutQueryMs: politica.webQueryPlanTimeoutMs,
+                                            maxBuscasWebPorMensagem: politica.maxBuscasWebPorMensagem,
+                                            pularPlanejamentoWebIA: politica.pularPlanejamentoWebIA,
+                                            maxTentativasPorTarefa: politica.maxTentativasPorTarefa,
+                                            modoAutonomia: politica.modoAutonomia,
+                                            webSearchEnabled,
+                                            onDecisionStart: (decisaoPreliminar) => {
+                                                if (decisaoPreliminar.shouldUseTool && decisaoPreliminar.toolCalls.length > 0) {
+                                                    const statusMessage = toolCallingService.obterMensagemStatusHeuristica(
+                                                        decisaoPreliminar.toolCalls
+                                                    )
+                                                    const cartoesPendentes = toolCallingService.toolRequestsToCardDataPendente(
+                                                        decisaoPreliminar.toolCalls,
+                                                        statusMessage || 'Preparando busca...'
+                                                    )
+                                                    atualizarCartoesFerramenta(cartoesPendentes)
+
+                                                    if (statusMessage) {
+                                                        if (!progressContentAcumulado) {
+                                                            progressContentAcumulado = statusMessage
+                                                        }
+
+                                                        setConversations(prev => prev.map(c => {
+                                                            if (c.id === convId) {
+                                                                return {
+                                                                    ...c,
+                                                                    messages: c.messages.map(m =>
+                                                                        m.id === aiMsgId ? { ...m, content: construirConteudoComMarcadores(progressContentAcumulado, decisaoPreliminar.toolCalls), raciocinio: undefined } : m
+                                                                    )
+                                                                }
+                                                            }
+                                                            return c
+                                                        }))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    )
+                                )
+                                decisaoRecuperacaoPendente = null
+
+                                if (decisao.shouldUseTool && decisao.toolCalls.length > 0) {
+                                    const statusMessage = await toolCallingService.generateStatusMessage(
+                                        userMsg.content,
+                                        decisao.toolCalls
+                                    )
+
+                                    const progressContent = statusMessage || ''
+                                    if (progressContent) {
+                                        const temBuscaWeb = decisao.toolCalls.some(tc => tc.tool.includes('web_search'))
+                                        // Se for outra ferramenta ou se ainda não temos progressContentAcumulado
+                                        if (!progressContentAcumulado || !temBuscaWeb) {
+                                            if (!progressContentAcumulado.includes(progressContent)) {
+                                                progressContentAcumulado = progressContentAcumulado
+                                                    ? `${progressContentAcumulado}\n${progressContent}`
+                                                    : progressContent
+
+                                                setConversations(prev => prev.map(c => {
+                                                    if (c.id === convId) {
+                                                        return {
+                                                            ...c,
+                                                            messages: c.messages.map(m =>
+                                                                m.id === aiMsgId ? { ...m, content: construirConteudoComMarcadores(progressContentAcumulado, decisao.toolCalls), raciocinio: undefined } : m
+                                                            )
+                                                        }
+                                                    }
+                                                    return c
+                                                }))
+                                            }
+                                        }
+                                    }
+
+                                    const convForContext = conversations.find(c => c.id === convId)
+                                    const projectIdForTools = convForContext?.projectId || currentProject?.id
+
+                                    // Exibe o card imediatamente com status 'pending' para feedback instantâneo (com os parâmetros finais refinados se houver)
+                                    const cartoesPendentes = toolCallingService.toolRequestsToCardDataPendente(
+                                        decisao.toolCalls,
+                                        progressContentAcumulado
+                                    )
+                                    atualizarCartoesFerramenta(cartoesPendentes)
+
+                                    const cancelarAssinaturaTool = toolExecutor.subscribe((call) => {
+                                        if (call.input.context?.messageId !== aiMsgId) {
+                                            return
+                                        }
+                                        atualizarCartoesFerramenta(
+                                            toolCallingService.toolCallsToCardData([call], progressContentAcumulado)
+                                        )
+                                    })
+
+                                    let calls: ToolCall[] = []
+                                    try {
+                                        calls = await toolCallingService.executeToolCalls(
+                                            decisao,
+                                            undefined,
+                                            undefined,
+                                            {
+                                                conversationId: convId!,
+                                                messageId: aiMsgId,
+                                                projectId: projectIdForTools,
+                                                userQuery: userMsg.content
+                                            }
+                                        )
+                                    } finally {
+                                        cancelarAssinaturaTool()
+                                    }
+
+                                    allCalls.push(...calls)
+
+                                    // Analisar se houve buscas web
+                                    const chamadasWeb = calls.filter((call) => call.input.toolId.includes('web_search'))
+                                    if (chamadasWeb.length > 0) {
+                                        houveBuscaWeb = true
+                                        const encontrouResultadoWeb = chamadasWeb.some((call) => {
+                                            const data = call.result?.data as { results?: unknown[] } | undefined
+                                            return Array.isArray(data?.results) && data.results.length > 0
+                                        })
+                                        if (encontrouResultadoWeb) {
+                                            buscaWebComResultados = true
+                                        }
+                                    }
+
+                                    // Formatar resultados para a próxima iteração
+                                    const toolCallsSummary = decisao.toolCalls.map(tc => `${tc.tool}(${JSON.stringify(tc.arguments)})`).join(', ')
+                                    const toolResultsSummary = toolCallingService.formatResultsForAI(calls)
+
+                                    historicoDecisaoTemporario.push({
+                                        role: 'assistant',
+                                        content: `Usando ferramentas: ${toolCallsSummary}`
+                                    })
+                                    historicoDecisaoTemporario.push({
+                                        role: 'user',
+                                        content: `[Resultado das ferramentas]:\n${toolResultsSummary}`
+                                    })
+
+                                    const decisaoAutonomia = toolCallingService.avaliarAutonomia(
+                                        userMsg.content,
+                                        calls,
+                                        allCalls,
+                                        ferramentasDisponiveis,
+                                        {
+                                            maxTentativasPorTarefa: politica.maxTentativasPorTarefa,
+                                            modoAutonomia: politica.modoAutonomia,
+                                        }
+                                    )
+
+                                    if (decisaoAutonomia.action === 'continuar' && decisaoAutonomia.toolCalls?.length) {
+                                        // Autonomia quer continuar com mais ferramentas
+                                        decisaoRecuperacaoPendente = {
+                                            shouldUseTool: true,
+                                            toolCalls: decisaoAutonomia.toolCalls,
+                                        }
+                                        rodadasToolCalling++
+                                    } else if (decisaoAutonomia.action === 'continuar') {
+                                        // Autonomia quer continuar, mas deixa a IA decidir recursivamente a próxima query
+                                        decisaoRecuperacaoPendente = null
+                                        rodadasToolCalling++
+                                    } else if (decisaoAutonomia.action === 'perguntar' && decisaoAutonomia.question) {
+                                        // Autonomia quer perguntar algo ao usuário antes de continuar
+                                        streamedContent = decisaoAutonomia.question
+                                        atualizarMensagemAssistente(streamedContent, '', true)
+                                        break
+                                    } else {
+                                        // Autonomia decidiu 'responder' ou 'parar': sai imediatamente
+                                        // sem fazer nova chamada de decisão à LLM
+                                        break
+                                    }
+                                } else {
+                                    // A IA decidiu responder diretamente ou não usar mais ferramentas nesta rodada
+                                    break
+                                }
+                            }
+
+                            if (allCalls.length > 0) {
                                 const blocoToolsAplicado = aplicarOrcamentoPrompt(
-                                    toolCallingService.formatResultsForAI(calls),
+                                    toolCallingService.formatResultsForAI(allCalls),
                                     ORCAMENTO_PROMPT_PADRAO.ferramentasWebTokens
                                 )
                                 contextoFerramentas = blocoToolsAplicado.texto
-                                cartoesFerramentas = toolCallingService.toolCallsToCardData(calls, progressContent)
+                                cartoesFerramentas = toolCallingService.toolCallsToCardData(allCalls, progressContentAcumulado)
 
                                 if (cartoesFerramentas.length > 0) {
                                     setMessageSearchCards(prev => {
                                         const existentes = prev[aiMsgId] || []
+                                        const porId = new Map<string, ToolCardData>()
+                                        existentes.forEach((cartao, indice) => {
+                                            // Mantém apenas cards que não são pendentes (já substituídos)
+                                            const chave = cartao.callId || `existente-${indice}`
+                                            porId.set(chave, cartao)
+                                        })
+                                        cartoesFerramentas.forEach((cartao, indice) => {
+                                            // Remove card pendente do mesmo toolId
+                                            for (const chave of porId.keys()) {
+                                                if (chave.startsWith('pending-') && chave.endsWith(cartao.toolId)) {
+                                                    porId.delete(chave)
+                                                    break
+                                                }
+                                            }
+                                            porId.set(cartao.callId || `final-${indice}-${cartao.toolId}`, cartao)
+                                        })
                                         return {
                                             ...prev,
-                                            [aiMsgId]: [...existentes, ...cartoesFerramentas]
+                                            [aiMsgId]: Array.from(porId.values())
                                         }
                                     })
 
+                                    const conteudoComMarcadores = construirConteudoComMarcadores(progressContentAcumulado, allCalls)
                                     setConversations(prev => prev.map(c => {
                                         if (c.id === convId) {
                                             return {
                                                 ...c,
                                                 messages: c.messages.map(m =>
-                                                    m.id === aiMsgId ? { ...m, content: '', raciocinio: undefined } : m
+                                                    m.id === aiMsgId ? { ...m, content: conteudoComMarcadores, raciocinio: undefined } : m
                                                 )
                                             }
                                         }
                                         return c
                                     }))
+                                    streamedContent = conteudoComMarcadores + '\n\n'
                                 }
                             }
                         }
@@ -1528,7 +1711,18 @@ export function useSendMessage({
                     : ''
                 // Contextos dinâmicos ficam junto da mensagem do usuário para evitar que provedores
                 // locais ignorem ou resumam demais o system prompt.
+                let contextArquivosAnexados = ''
+                if (userMsg.arquivos && userMsg.arquivos.length > 0) {
+                    contextArquivosAnexados = userMsg.arquivos
+                        .filter(file => file.content && file.content.trim())
+                        .map(file => {
+                            return `[Documento Anexado: ${file.name} (${formatFileSize(file.size)})]\n--- Conteúdo do Documento ---\n${file.content}\n--- Fim do Documento ---`
+                        })
+                        .join('\n\n')
+                }
+
                 const mensagemUsuarioComContexto = anexarBlocosNaMensagem(userMsg.content, [
+                    contextArquivosAnexados,
                     webSearchContext,
                     contextoFerramentas,
                 ])
@@ -1596,6 +1790,7 @@ export function useSendMessage({
                         signal,
                         temperature: configGeracaoChat.temperature,
                         perfilLatencia,
+                        reasoningAtivo,
                         onEventoStream: (evento: EventoStreamIA) => {
                             if (!isGenerationActive()) return
                             if (evento.tipo !== 'raciocinio' || !evento.texto) return
@@ -1649,6 +1844,7 @@ export function useSendMessage({
                             signal,
                             temperature: configGeracaoChat.temperature,
                             perfilLatencia,
+                            reasoningAtivo,
                             onEventoStream: (evento: EventoStreamIA) => {
                                 if (!isGenerationActive()) return
                                 if (evento.tipo !== 'raciocinio' || !evento.texto) return
@@ -1754,16 +1950,20 @@ export function useSendMessage({
             } else {
                 console.error('[useSendMessage] Chat error:', error)
 
-                const errorMessage = obterMensagemErro(error, '').toLowerCase()
+                const mensagemErroNormalizada = normalizarMensagemErroApi(
+                    error,
+                    'Falha ao processar mensagem. Verifique sua conexão ou chaves de API.'
+                )
+                const errorMessage = obterMensagemErroApi(error, '').toLowerCase()
                 const isContextOverflow =
                     errorMessage.includes('context') ||
                     errorMessage.includes('token') ||
                     errorMessage.includes('limit') ||
                     errorMessage.includes('maximum') ||
                     errorMessage.includes('too long') ||
-                    obterStatusErro(error) === 400
+                    obterStatusErroApi(error) === 400
 
-                let errorContent = 'Falha ao processar mensagem. Verifique sua conexão ou chaves de API.'
+                let errorContent = mensagemErroNormalizada
 
                 if (isContextOverflow) {
                     errorContent = '⚠️ **Limite de contexto atingido**\n\nPor favor:\n- Inicie uma nova conversa\n- Ou apague mensagens antigas manualmente\n\n_Dica: Clique em "+" para iniciar nova conversa._'
@@ -1804,17 +2004,17 @@ export function useSendMessage({
             ;(abortControllerRef as React.MutableRefObject<AbortController | null>).current = null
         }
     }, [
-        input, pendingScreenshots, isGenerating, activeConversationId, messages,
+        input, pendingScreenshots, pendingFiles, isGenerating, activeConversationId, messages,
         conversations, projects, webSearchEnabled, toolCallingAtivo, investigateMode,
         promptBase, getProfileContext, criarOuObterServico, updateConversationMessages,
         runInvestigation, setConversations, setActiveConversationId, setInput,
-        setPendingScreenshots, setPendingMessage, setIsGenerating, setIsAnalyzingImage,
+        setPendingScreenshots, setPendingFiles, setPendingMessage, setIsGenerating, setIsAnalyzingImage,
         setMessageSources, setMessageSearchCards, textareaRef, generationIdRef, abortControllerRef,
         politica.maxCharsMensagemHistorico, politica.prestreamBudgetMs,
-        politica.timeoutCrossChatMs, politica.webMaxPaginasEnriquecimento, politica.webFetchTimeoutMs,
-        politica.webMaxConteudoChars, politica.webSearchTimeoutMs, politica.estrategiaTools, politica.toolDecisionTimeoutMs,
-        politica.webQueryPlanTimeoutMs, politica.maxBuscasWebPorMensagem, perfilLatencia,
-        provedorAtivo, modeloAtivo, garantirResumosImagensMensagem, garantirResumosImagensHistoricas,
+        politica.timeoutCrossChatMs, politica.estrategiaTools, politica.toolDecisionTimeoutMs,
+        politica.webQueryPlanTimeoutMs, politica.maxBuscasWebPorMensagem, politica.maxTentativasPorTarefa,
+        politica.modoAutonomia, politica.pularPlanejamentoWebIA, perfilLatencia,
+        provedorAtivo, modeloAtivo, reasoningAtivo, garantirResumosImagensMensagem, garantirResumosImagensHistoricas,
     ])
 
     // Stop generation
@@ -1828,19 +2028,22 @@ export function useSendMessage({
     useEffect(() => {
         if (!isGenerating && pendingMessage) {
             console.log('[useSendMessage] Processing queued message')
-            const { text, screenshots } = pendingMessage
+            const { text, screenshots, arquivos } = pendingMessage
             setPendingMessage(null)
 
             setTimeout(() => {
                 setInput(text)
                 setPendingScreenshots(screenshots)
+                if (arquivos) {
+                    setPendingFiles(arquivos)
+                }
                 setTimeout(() => {
                     const sendBtn = document.querySelector('[data-send-button]') as HTMLButtonElement
                     sendBtn?.click()
                 }, 50)
             }, 100)
         }
-    }, [isGenerating, pendingMessage, setInput, setPendingScreenshots, setPendingMessage])
+    }, [isGenerating, pendingMessage, setInput, setPendingScreenshots, setPendingFiles, setPendingMessage])
 
     // Regenerate last response
     const regenerateLastResponse = useCallback(async () => {
@@ -1945,9 +2148,21 @@ export function useSendMessage({
             const secaoArquivosProjeto = contextoArquivosProjeto
                 ? `[contexto_projeto_arquivos]\n${contextoArquivosProjeto}`
                 : ''
+            let contextArquivosAnexadosRegen = ''
+            if (ultimaMensagemUsuario.arquivos && ultimaMensagemUsuario.arquivos.length > 0) {
+                contextArquivosAnexadosRegen = ultimaMensagemUsuario.arquivos
+                    .filter(file => file.content && file.content.trim())
+                    .map(file => {
+                        return `[Documento Anexado: ${file.name} (${formatFileSize(file.size)})]\n--- Conteúdo do Documento ---\n${file.content}\n--- Fim do Documento ---`
+                    })
+                    .join('\n\n')
+            }
+            const mensagemUsuarioComContextoRegen = anexarBlocosNaMensagem(userContent, [
+                contextArquivosAnexadosRegen,
+            ])
             const mensagemUsuarioParaModelo = ultimaMensagemUsuario.images?.length
-                ? criarConteudoTextoComImagens(userContent, ultimaMensagemUsuario.images)
-                : userContent
+                ? criarConteudoTextoComImagens(mensagemUsuarioComContextoRegen, ultimaMensagemUsuario.images)
+                : mensagemUsuarioComContextoRegen
             const finalPromptRegen = secaoArquivosProjeto
                 ? [composedPrompt, secaoArquivosProjeto].filter(Boolean).join('\n\n')
                 : composedPrompt
@@ -1983,6 +2198,7 @@ export function useSendMessage({
                     signal,
                     temperature: configGeracaoRegen.temperature,
                     perfilLatencia,
+                    reasoningAtivo,
                     onEventoStream: (evento: EventoStreamIA) => {
                         if (evento.tipo === 'raciocinio' && evento.texto) {
                             responseRaciocinio += evento.texto
@@ -2038,6 +2254,7 @@ export function useSendMessage({
                         signal,
                         temperature: configGeracaoRegen.temperature,
                         perfilLatencia,
+                        reasoningAtivo,
                         onEventoStream: (evento: EventoStreamIA) => {
                             if (evento.tipo === 'raciocinio' && evento.texto) {
                                 responseRaciocinio += evento.texto
@@ -2085,9 +2302,24 @@ export function useSendMessage({
         criarOuObterServico, updateConversationMessages, setConversations, setIsGenerating, abortControllerRef,
         generationIdRef, politica.maxCharsMensagemHistorico,
         politica.timeoutCrossChatMs,
-        perfilLatencia, projects, conversations, provedorAtivo, garantirResumosImagensMensagem,
+        perfilLatencia, projects, conversations, provedorAtivo, reasoningAtivo, garantirResumosImagensMensagem,
         garantirResumosImagensHistoricas,
     ])
+
+    // Efeito para escutar o envio de mensagens do chat vindo de componentes externos (ex: botões de escolhas rápidas)
+    useEffect(() => {
+        const tratarMensagemExterna = (e: Event) => {
+            const ev = e as CustomEvent<{ text: string }>
+            if (ev.detail && ev.detail.text) {
+                setInput(ev.detail.text)
+                setTimeout(() => {
+                    void handleSend()
+                }, 60)
+            }
+        }
+        window.addEventListener('selene:send-chat-message', tratarMensagemExterna)
+        return () => window.removeEventListener('selene:send-chat-message', tratarMensagemExterna)
+    }, [setInput, handleSend])
 
     return {
         handleSend,

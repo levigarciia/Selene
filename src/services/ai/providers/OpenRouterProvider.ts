@@ -4,18 +4,27 @@ import type { OpcoesRequisicaoIA } from '../AIProvider'
 import type { MetaFimStream } from '../AIProvider'
 import type { MensagemChat, MensagemHistoricoIA } from '../types'
 import { criarConteudoTextoComImagens } from '../historicoMultimodal'
+import { normalizarMensagemErroApi, obterStatusErroApi } from '../../../utils/errosApi'
+import { normalizarChaveOpenRouter } from '../../../utils/chavesApi'
 
 type RegistroGenerico = Record<string, unknown>
+const MODELO_PADRAO_OPENROUTER = 'openrouter/auto'
+const PADROES_MODELO_NAO_CONVERSACIONAL = [
+    /(?:^|[/-])rerank(?:[/-]|$)/i,
+    /(?:^|[/-])embed(?:ding)?(?:[/-]|$)/i,
+]
 
 export class OpenRouterProvider implements AIProvider {
     private client: OpenAI | null = null
     private model: string
 
     constructor(apiKey?: string, model?: string) {
-        if (apiKey) {
+        const chaveNormalizada = normalizarChaveOpenRouter(apiKey || '')
+        if (chaveNormalizada) {
             this.client = new OpenAI({
-                apiKey,
+                apiKey: chaveNormalizada,
                 baseURL: 'https://openrouter.ai/api/v1',
+                maxRetries: 0,
                 dangerouslyAllowBrowser: true,
                 defaultHeaders: {
                     'HTTP-Referer': window.location.origin,
@@ -23,7 +32,7 @@ export class OpenRouterProvider implements AIProvider {
                 }
             })
         }
-        this.model = model || 'openai/gpt-3.5-turbo'
+        this.model = model?.trim() || MODELO_PADRAO_OPENROUTER
     }
 
     isReady(): boolean {
@@ -32,18 +41,28 @@ export class OpenRouterProvider implements AIProvider {
 
     async chat(mensagens: MensagemChat[], opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
+        this.validarModeloConversacional()
         try {
-            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
-                messages: mensagens as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+            const payload: Record<string, unknown> = {
+                messages: mensagens as unknown as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
                 model: this.model,
                 ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
+            if (opcoes.reasoningAtivo === false) {
+                payload.include_reasoning = false
+            }
+            if (typeof opcoes.maxTokens === 'number') {
+                payload.max_tokens = opcoes.maxTokens
+            }
 
-            const completion = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
+            const completion = await this.client.chat.completions.create(
+                payload as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+                { signal: opcoes.signal }
+            )
             return completion.choices[0].message.content || ''
         } catch (error: unknown) {
             console.error('Erro no chat OpenRouter:', error)
-            throw error
+            throw this.normalizarErroOpenRouter(error)
         }
     }
 
@@ -53,15 +72,23 @@ export class OpenRouterProvider implements AIProvider {
         opcoes: OpcoesRequisicaoIA = {}
     ): Promise<void> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
+        this.validarModeloConversacional()
         try {
-            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
-                messages: mensagens as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+            const payload: Record<string, unknown> = {
+                messages: mensagens as unknown as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
                 model: this.model,
                 stream: true
             }
             if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
+            if (typeof opcoes.maxTokens === 'number') payload.max_tokens = opcoes.maxTokens
+            if (opcoes.reasoningAtivo === false) {
+                payload.include_reasoning = false
+            }
 
-            const stream = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
+            const stream = await this.client.chat.completions.create(
+                payload as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
+                { signal: opcoes.signal }
+            )
             let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of stream) {
@@ -87,7 +114,7 @@ export class OpenRouterProvider implements AIProvider {
             opcoes.onFimStream?.({ finishReason })
         } catch (error: unknown) {
             console.error('Erro no streaming OpenRouter:', error)
-            throw error
+            throw this.normalizarErroOpenRouter(error)
         }
     }
 
@@ -120,6 +147,7 @@ export class OpenRouterProvider implements AIProvider {
 
     async analisarImagem(pergunta: string, dataUrl: string, opcoes: OpcoesRequisicaoIA = {}): Promise<string> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
+        this.validarModeloConversacional()
         const conteudo = [
             { type: 'text', text: pergunta },
             { type: 'image_url', image_url: { url: dataUrl } }
@@ -138,17 +166,23 @@ export class OpenRouterProvider implements AIProvider {
         // Auto-detect best vision model if default doesn't support it? 
         // Implementation kept simple as per previous logic.
         try {
-            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
+            const payload: Record<string, unknown> = {
                 model: this.model, // User responsibility to pick a vision model
                 messages: mensagens,
                 ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
+            if (opcoes.reasoningAtivo === false) {
+                payload.include_reasoning = false
+            }
 
-            const completion = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
+            const completion = await this.client.chat.completions.create(
+                payload as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+                { signal: opcoes.signal }
+            )
             return completion.choices[0].message.content || ''
         } catch (e) {
             console.error('Falha imagem OpenRouter', e)
-            throw e
+            throw this.normalizarErroOpenRouter(e)
         }
     }
 
@@ -159,6 +193,7 @@ export class OpenRouterProvider implements AIProvider {
         opcoes: OpcoesRequisicaoIA = {}
     ): Promise<void> {
         if (!this.client) throw new Error('OpenRouter não configurado.')
+        this.validarModeloConversacional()
         
         const conteudo = [
             { type: 'text', text: pergunta },
@@ -176,14 +211,20 @@ export class OpenRouterProvider implements AIProvider {
         })
 
         try {
-            const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
+            const payload: Record<string, unknown> = {
                 model: this.model,
                 messages: mensagens,
                 stream: true
             }
             if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
+            if (opcoes.reasoningAtivo === false) {
+                payload.include_reasoning = false
+            }
 
-            const stream = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
+            const stream = await this.client.chat.completions.create(
+                payload as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
+                { signal: opcoes.signal }
+            )
             let finishReason: MetaFimStream['finishReason'] = null
 
             for await (const chunk of stream) {
@@ -209,8 +250,32 @@ export class OpenRouterProvider implements AIProvider {
             opcoes.onFimStream?.({ finishReason })
         } catch (e) {
             console.error('Falha streaming imagem OpenRouter', e)
-            throw e
+            throw this.normalizarErroOpenRouter(e)
         }
+    }
+
+    private normalizarErroOpenRouter(erro: unknown): Error {
+        const status = obterStatusErroApi(erro)
+        const mensagem = normalizarMensagemErroApi(
+            erro,
+            'Falha ao processar mensagem. Verifique sua conexão ou chaves de API.'
+        )
+
+        const erroNormalizado = new Error(mensagem)
+        if (typeof status === 'number') {
+            ;(erroNormalizado as Error & { status?: number }).status = status
+        }
+        return erroNormalizado
+    }
+
+    private validarModeloConversacional(): void {
+        if (!PADROES_MODELO_NAO_CONVERSACIONAL.some((padrao) => padrao.test(this.model))) return
+
+        throw new Error(
+            `O modelo "${this.model}" existe no OpenRouter, mas não é um modelo de chat. ` +
+            'Escolha um LLM conversacional, por exemplo openrouter/auto, openrouter/free, ' +
+            'nvidia/nemotron-nano-9b-v2:free ou nvidia/nemotron-nano-12b-v2-vl:free.'
+        )
     }
 
     private async blobToBase64(blob: Blob): Promise<string> {
@@ -229,15 +294,19 @@ export class OpenRouterProvider implements AIProvider {
     }
 
     private extrairPartesStream(
-        choice?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
-        delta?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
+        choice?: unknown,
+        delta?: unknown
     ): { conteudo: string; raciocinio: string } {
         let conteudo = ''
         let raciocinio = ''
+        const deltaRegistro = this.comoRegistro(delta)
+        const choiceRegistro = this.comoRegistro(choice)
+        const mensagemChoice = this.comoRegistro(choiceRegistro?.message)
 
-        if (Array.isArray(delta?.content)) {
-            for (const item of delta.content) {
-                const tipo = String(item?.type || '').toLowerCase()
+        if (Array.isArray(deltaRegistro?.content)) {
+            for (const item of deltaRegistro.content) {
+                const itemRegistro = this.comoRegistro(item)
+                const tipo = String(itemRegistro?.type || '').toLowerCase()
                 const texto = this.extrairTextoVariado(item)
                 if (!texto) continue
                 if (tipo.includes('reason') || tipo.includes('think')) {
@@ -247,29 +316,29 @@ export class OpenRouterProvider implements AIProvider {
                 }
             }
         } else {
-            conteudo += this.extrairTextoVariado(delta?.content)
+            conteudo += this.extrairTextoVariado(deltaRegistro?.content)
         }
 
         const fallbackConteudo = [
-            delta?.text,
-            choice?.text,
-            choice?.content,
-            choice?.message?.content
+            deltaRegistro?.text,
+            choiceRegistro?.text,
+            choiceRegistro?.content,
+            mensagemChoice?.content
         ].map((valor) => this.extrairTextoVariado(valor)).join('')
         if (!conteudo) {
             conteudo += fallbackConteudo
         }
 
         const fallbackRaciocinio = [
-            delta?.reasoning,
-            delta?.reasoning_content,
-            delta?.reasoningContent,
-            delta?.thinking,
-            choice?.reasoning,
-            choice?.reasoning_content,
-            choice?.reasoningContent,
-            choice?.thinking,
-            choice?.message?.reasoning
+            deltaRegistro?.reasoning,
+            deltaRegistro?.reasoning_content,
+            deltaRegistro?.reasoningContent,
+            deltaRegistro?.thinking,
+            choiceRegistro?.reasoning,
+            choiceRegistro?.reasoning_content,
+            choiceRegistro?.reasoningContent,
+            choiceRegistro?.thinking,
+            mensagemChoice?.reasoning
         ].map((valor) => this.extrairTextoVariado(valor)).join('')
         if (!raciocinio) {
             raciocinio += fallbackRaciocinio
@@ -297,13 +366,17 @@ export class OpenRouterProvider implements AIProvider {
         return ''
     }
 
-    private normalizarHistorico(historico?: MensagemHistoricoIA[]): MensagemChat[] {
+    private comoRegistro(valor: unknown): RegistroGenerico | undefined {
+        return valor && typeof valor === 'object' ? valor as RegistroGenerico : undefined
+    }
+
+    private normalizarHistorico(historico?: MensagemHistoricoIA[]): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
         if (!Array.isArray(historico) || historico.length === 0) return []
         return historico.map((mensagem) => ({
             role: mensagem.role,
             content: mensagem.role === 'user' && mensagem.images?.length
                 ? criarConteudoTextoComImagens(mensagem.content, mensagem.images)
                 : mensagem.content
-        }))
+        } as unknown as OpenAI.Chat.Completions.ChatCompletionMessageParam))
     }
 }

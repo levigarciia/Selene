@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { v4 as uuidv4 } from 'uuid'
 
@@ -9,6 +9,7 @@ import type { AssistantConfig } from '../../../utils/assistentesPadrao'
 
 // Hooks
 import { useAppConfig } from '../../../hooks/useAppConfig'
+import { verificarSuporteReasoningOpenRouter } from './components/SeletorModeloOpenRouter'
 import { useCrossChatContext } from '../../../hooks/useCrossChatContext'
 import { useMemoryAutopilot } from '../../../hooks/useMemoryAutopilot'
 import { useAssistants } from '../../../hooks/useAssistants'
@@ -25,7 +26,6 @@ import {
     BarraSuperiorChat,
     RailChat,
     PainelInicialChat,
-    DrawerNavegacaoChat,
     HubContextoChat,
     SeletorProjetosChat,
 } from './components'
@@ -41,12 +41,17 @@ import { investigateService } from '../../../services/investigate'
 import { toolCallingService } from '../../../services/tools/ToolCallingService'
 import { mcpToolBridge } from '../../../services/tools/MCPToolBridge'
 import { obterConfiguracaoPerfilGeracao } from '../../../services/ai/politicaGeracao'
-import { processFileForProject, isFileSupported, formatFileSize, obterLimiteMaximoArquivo, getFileType } from '../../../services/DocumentService'
+import { processFileForProject, isFileSupported, formatFileSize, obterLimiteMaximoArquivo, getFileType, extractTextFromFile } from '../../../services/DocumentService'
 import { indexProjectFile, removeFileEmbeddings } from '../../../services/ProjectContextService'
 import { carregarConversasPersistidas, normalizarMensagensChat } from '../../../services/conversasPersistidas'
 import type { Project } from '../../../types/project'
 import { createProject } from '../../../types/project'
-import { setProjectUpdateCallback, clearProjectUpdateCallback } from '../../../services/tools/builtin'
+import {
+    setProjectFilesSearchCallback,
+    clearProjectFilesSearchCallback,
+    setProjectUpdateCallback,
+    clearProjectUpdateCallback,
+} from '../../../services/tools/builtin'
 import type { AcaoHomeChat } from './tiposShellChat'
 
 const MENSAGENS_VAZIAS: ChatMessage[] = []
@@ -83,6 +88,7 @@ const ChatWindow: React.FC = () => {
         geminiKey, setGeminiKey,
         openRouterKey, setOpenRouterKey,
         modeloOpenRouter, setModeloOpenRouter,
+        modeloLocal, setModeloLocal,
         modeloLmStudio, setModeloLmStudio,
         baseUrlLmStudio, setBaseUrlLmStudio,
         provedorAtivo, setProvedorAtivo,
@@ -115,6 +121,7 @@ const ChatWindow: React.FC = () => {
         input, setInput,
         inputMenuOpen, setInputMenuOpen,
         pendingScreenshots, setPendingScreenshots,
+        pendingFiles, setPendingFiles,
         pendingMessage, setPendingMessage,
         textareaRef,
         isGenerating, setIsGenerating,
@@ -129,6 +136,7 @@ const ChatWindow: React.FC = () => {
         webSearchEnabled, setWebSearchEnabled,
         investigateMode, setInvestigateMode,
         toolCallingAtivo, setToolCallingAtivo,
+        reasoningAtivo, setReasoningAtivo,
         currentTrace, setCurrentTrace,
         mcpServers, setMcpServers,
         isCreatingProject, setIsCreatingProject,
@@ -176,14 +184,12 @@ const ChatWindow: React.FC = () => {
     const toqueScrollYRef = useRef<number | null>(null)
     // Rastreia se o usuário está selecionando texto para evitar scroll/re-render
     const selecionandoTextoRef = useRef(false)
-    const [viewportDesktop, setViewportDesktop] = useState(() => (
-        typeof window === 'undefined' ? true : window.innerWidth >= 1024
-    ))
     const [janelaMaximizada, setJanelaMaximizada] = useState(false)
     const [secaoConfiguracoesAtiva, setSecaoConfiguracoesAtiva] = useState<SecaoConfiguracoes>('configuracao')
     const [origemEditorAssistente, setOrigemEditorAssistente] = useState<'assistentes' | 'configuracoes'>('assistentes')
     const [conversaPendenteRegeneracaoPosEdicao, setConversaPendenteRegeneracaoPosEdicao] = useState<string | null>(null)
     const currentProjectContextId = activeProjectId || activeConversation?.projectId || null
+
 
     const shell = useChatShell({
         conversations,
@@ -200,8 +206,6 @@ const ChatWindow: React.FC = () => {
         modeloAtivo,
         perfilLatencia,
     })
-    const drawerAberto = shell.drawerAberto
-    const fecharOverlays = shell.fecharOverlays
 
     // ============================================
     // Send Message Hook
@@ -217,6 +221,8 @@ const ChatWindow: React.FC = () => {
         setInput,
         pendingScreenshots,
         setPendingScreenshots,
+        pendingFiles,
+        setPendingFiles,
         pendingMessage,
         setPendingMessage,
         textareaRef,
@@ -229,6 +235,7 @@ const ChatWindow: React.FC = () => {
         webSearchEnabled,
         toolCallingAtivo,
         investigateMode,
+        reasoningAtivo,
         setIsInvestigating,
         setCurrentTrace,
         setMessageSources,
@@ -478,7 +485,7 @@ const ChatWindow: React.FC = () => {
     // Service Configuration
     // ============================================
     useEffect(() => {
-        const chatFnInvestigacao = async (prompt: string): Promise<string> => {
+        const chatFnInvestigacao = async (prompt: string, systemPrompt?: string): Promise<string> => {
             const servico = criarOuObterServico()
             if (!servico) throw new Error('No AI service available')
 
@@ -487,16 +494,17 @@ const ChatWindow: React.FC = () => {
             await servico.streamChat(
                 prompt,
                 (chunk: string) => { response += chunk },
-                'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.',
+                systemPrompt !== undefined ? systemPrompt : 'Você é um assistente de pesquisa. Responda de forma objetiva e estruturada.',
                 [],
                 {
                     temperature: configGeracao.temperature,
+                    reasoningAtivo: false,
                 }
             )
             return response
         }
 
-        const chatFnTools = async (prompt: string): Promise<string> => {
+        const chatFnTools = async (prompt: string, systemPrompt?: string): Promise<string> => {
             const servico = criarOuObterServico()
             if (!servico) throw new Error('No AI service available')
 
@@ -505,10 +513,11 @@ const ChatWindow: React.FC = () => {
             await servico.streamChat(
                 prompt,
                 (chunk: string) => { response += chunk },
-                'Você é um assistente de decisão de ferramentas. Seja extremamente conciso.',
+                systemPrompt !== undefined ? systemPrompt : 'Você é um assistente de decisão de ferramentas. Seja extremamente conciso.',
                 [],
                 {
                     temperature: configGeracao.temperature,
+                    reasoningAtivo: false,
                 }
             )
             return response
@@ -665,6 +674,15 @@ const ChatWindow: React.FC = () => {
         setProjectUpdateCallback(handleToolUpdate)
         return () => clearProjectUpdateCallback()
     }, [updateProject])
+
+    useEffect(() => {
+        setProjectFilesSearchCallback((projectId) => {
+            const projeto = projects.find((item) => item.id === projectId)
+            return projeto ? { id: projeto.id, files: projeto.files } : null
+        })
+
+        return () => clearProjectFilesSearchCallback()
+    }, [projects])
 
     const addFileToProject = useCallback(async (projectId: string, file: File) => {
         if (!isFileSupported(file)) {
@@ -892,6 +910,46 @@ const ChatWindow: React.FC = () => {
         }
     }, [setPendingScreenshots])
 
+    const lidarComAnexoArquivo = useCallback(async (arquivo: File) => {
+        const id = crypto.randomUUID()
+        const tipo = getFileType(arquivo)
+
+        // Adiciona arquivo temporário com status "processando"
+        setPendingFiles(prev => [...prev, {
+            id,
+            name: arquivo.name,
+            type: tipo,
+            size: arquivo.size,
+            content: '',
+            status: 'processando',
+            arquivoOriginal: arquivo,
+        }])
+
+        try {
+            const textoExtraido = await extractTextFromFile(arquivo, tipo === 'pdf' ? { pdfMaxPages: 5 } : {})
+            const texto = tipo === 'pdf'
+                ? [
+                    `[Prévia limitada do PDF: ${arquivo.name}]`,
+                    'Apenas as páginas 1 a 5 foram extraídas ao anexar para evitar ler o PDF inteiro.',
+                    'Se o usuário pedir uma página específica, extraia somente essa página antes de responder.',
+                    '',
+                    textoExtraido,
+                ].join('\n')
+                : textoExtraido
+            setPendingFiles(prev => prev.map(f =>
+                f.id === id ? { ...f, content: texto, status: 'concluido' } : f
+            ))
+        } catch (erro) {
+            console.error('[ChatWindow] Falha ao processar arquivo:', erro)
+            setPendingFiles(prev => prev.map(f =>
+                f.id === id ? { ...f, status: 'erro' } : f
+            ))
+            alert(erro instanceof Error ? erro.message : 'Erro ao processar arquivo')
+            // Remove o arquivo com erro
+            setPendingFiles(prev => prev.filter(f => f.id !== id))
+        }
+    }, [setPendingFiles])
+
     const handleProjectChatPaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
         const items = e.clipboardData?.items
         if (!items) return
@@ -1006,33 +1064,64 @@ const ChatWindow: React.FC = () => {
         }
 
         ultimaTranscricaoSincronizadaRef.current = transcricaoAtual
-    }, [input, setInput, textareaRef, voiceInput.transcription])
+    }, [input, setInput, textareaRef, voiceInput])
 
     useEffect(() => {
         ultimaTranscricaoSincronizadaRef.current = ''
         voiceInput.setTranscription('')
     }, [activeConversationId, activeProjectId, voiceInput])
 
-    useEffect(() => {
-        const atualizarViewport = () => {
-            setViewportDesktop(window.innerWidth >= 1024)
-        }
-
-        atualizarViewport()
-        window.addEventListener('resize', atualizarViewport)
-
-        return () => window.removeEventListener('resize', atualizarViewport)
-    }, [])
-
-    useEffect(() => {
-        if (viewportDesktop && drawerAberto) {
-            fecharOverlays()
-        }
-    }, [viewportDesktop, drawerAberto, fecharOverlays])
-
     // ============================================
     // Render
     // ============================================
+    // ============================================
+    // Verificação de Compatibilidade com Reasoning
+    // ============================================
+    type ModeloLocalDisponivel = NonNullable<
+        Awaited<ReturnType<NonNullable<typeof window.electronAPI.localLLM>['listModels']>>['models']
+    >[number]
+    const [modelosLocais, setModelosLocais] = useState<ModeloLocalDisponivel[]>([])
+
+    useEffect(() => {
+        if (provedorAtivo === 'local') {
+            window.electronAPI?.localLLM?.listModels()
+                .then((resposta) => {
+                    if (resposta?.success && resposta.models) {
+                        setModelosLocais(resposta.models)
+                    }
+                })
+                .catch((erro) => {
+                    console.error('[ChatWindow] Erro ao listar modelos locais:', erro)
+                })
+        }
+    }, [provedorAtivo])
+
+    const modeloCompativelComReasoning = useMemo(() => {
+        if (provedorAtivo === 'openrouter') {
+            return verificarSuporteReasoningOpenRouter(modeloOpenRouter || modeloAtivo)
+        }
+        if (provedorAtivo === 'local') {
+            const modeloResolvido = modeloLocal || modeloAtivo
+            const encontrado = modelosLocais.find((m) => m.id === modeloResolvido)
+            return encontrado ? !!encontrado.capacidades?.reasoning : false
+        }
+        if (provedorAtivo === 'openai') {
+            const nomeLower = (modeloAtivo || '').toLowerCase()
+            return nomeLower.includes('o1') || nomeLower.includes('o3')
+        }
+        if (provedorAtivo === 'gemini') {
+            const nomeLower = (modeloAtivo || '').toLowerCase()
+            return nomeLower.includes('thinking')
+        }
+        return false
+    }, [provedorAtivo, modeloOpenRouter, modeloLocal, modeloAtivo, modelosLocais])
+
+    const alternarReasoning = useCallback((valor?: boolean) => {
+        const novoValor = typeof valor === 'boolean' ? valor : !reasoningAtivo
+        setReasoningAtivo(novoValor)
+        localStorage.setItem('selene_reasoning_ativo', String(novoValor))
+    }, [reasoningAtivo, setReasoningAtivo])
+
     const activeProject = projects.find(p => p.id === activeProjectId)
     const visualizacaoPrincipalAtiva = showAssistantEditor
         ? 'editor-assistente'
@@ -1128,13 +1217,8 @@ const ChatWindow: React.FC = () => {
     }, [assistants, editingAssistant, origemEditorAssistente, setShowAssistantsPanel, setShowAssistantEditor, setShowSettings])
 
     const alternarNavegacaoChat = useCallback(() => {
-        if (viewportDesktop) {
-            setSidebarExpandida((atual) => !atual)
-            return
-        }
-
-        shell.alternarOverlay('drawer')
-    }, [viewportDesktop, setSidebarExpandida, shell])
+        setSidebarExpandida((atual) => !atual)
+    }, [setSidebarExpandida])
 
     const iniciarNovaConversa = useCallback(() => {
         createNewConversation()
@@ -1171,9 +1255,15 @@ const ChatWindow: React.FC = () => {
     const selecionarAssistenteContexto = useCallback((assistantId: string | null) => {
         if (assistantId === null) {
             assistants.selectAssistant(null)
-            if (!assistants.useDefaultPrompt) {
+            if (assistants.useDefaultPrompt) {
                 assistants.toggleDefaultPrompt()
             }
+            shell.fecharOverlays()
+            return
+        }
+
+        if (!assistants.useDefaultPrompt && assistants.activeAssistant?.id === assistantId) {
+            assistants.selectAssistant(null)
             shell.fecharOverlays()
             return
         }
@@ -1182,6 +1272,64 @@ const ChatWindow: React.FC = () => {
         assistants.incrementUsage(assistantId)
         shell.fecharOverlays()
     }, [assistants, shell])
+
+    const selecionarProjetoContexto = useCallback((projectId: string) => {
+        if (!projects.some((project) => project.id === projectId)) return
+
+        if (currentProjectContextId === projectId) {
+            if (activeConversationId) {
+                setConversations((prev) => prev.map((conversation) => (
+                    conversation.id === activeConversationId
+                        ? { ...conversation, projectId: undefined, updatedAt: Date.now() }
+                        : conversation
+                )))
+            }
+
+            setActiveProjectId(null)
+            shell.fecharOverlays()
+            setTimeout(() => textareaRef.current?.focus(), 0)
+            return
+        }
+
+        if (activeConversationId) {
+            setConversations((prev) => prev.map((conversation) => (
+                conversation.id === activeConversationId
+                    ? { ...conversation, projectId, updatedAt: Date.now() }
+                    : conversation
+            )))
+        } else {
+            const newConv: Conversation = {
+                id: uuidv4(),
+                title: 'Nova conversa',
+                messages: [],
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                projectId,
+            }
+
+            setConversations((prev) => [newConv, ...prev])
+            setActiveConversationId(newConv.id)
+        }
+
+        setActiveProjectId(null)
+        setShowSettings(false)
+        setShowAssistantsPanel(false)
+        setShowAssistantEditor(false)
+        setShowMCPPanel(false)
+        setEditingAssistant(null)
+        shell.fecharOverlays()
+        setTimeout(() => textareaRef.current?.focus(), 0)
+    }, [
+        activeConversationId,
+        currentProjectContextId,
+        projects,
+        setShowAssistantsPanel,
+        setShowAssistantEditor,
+        setShowMCPPanel,
+        setShowSettings,
+        shell,
+        textareaRef,
+    ])
 
     const aplicarAcaoHome = useCallback((acao: AcaoHomeChat) => {
         if (acao.assistantId !== undefined) {
@@ -1261,7 +1409,6 @@ const ChatWindow: React.FC = () => {
         onAbrirEditorAssistente: (assistant: AssistantConfig | null) => abrirEditorAssistente(assistant, 'configuracoes'),
     }
 
-    const navegacaoChatAberta = viewportDesktop ? sidebarExpandida : shell.drawerAberto
     const classeCanvasPrincipal = 'mt-3 relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-tl-[18px] border-t border-white/[0.05] bg-[#141416]'
     // Transição CSS pura (sem Framer Motion layout) para não aplicar transform
     // persistente que quebra a seleção de texto no Chromium/Electron.
@@ -1288,8 +1435,8 @@ const ChatWindow: React.FC = () => {
                         <RailChat
                             onAlternarSidebar={alternarNavegacaoChat}
                             onNovaConversa={iniciarNovaConversa}
-                            sidebarExpandida={navegacaoChatAberta}
-                            mostrarNovaConversa={!viewportDesktop || !sidebarExpandida}
+                            sidebarExpandida={sidebarExpandida}
+                            mostrarNovaConversa={!sidebarExpandida}
                         />
 
                         <Sidebar
@@ -1318,7 +1465,6 @@ const ChatWindow: React.FC = () => {
                             onRenameConversation={renameConversation}
                             onMoveConversationToProject={moveConversationToProject}
                             onCreateNewConversation={iniciarNovaConversa}
-                            className="hidden lg:block"
                             busca={shell.buscaSidebar}
                             onBuscaChange={shell.setBuscaSidebar}
                             onAbrirContexto={() => shell.alternarOverlay('hub-contexto')}
@@ -1420,6 +1566,9 @@ const ChatWindow: React.FC = () => {
                                                 pendingScreenshots={pendingScreenshots}
                                                 onRemoveScreenshot={(idx) => setPendingScreenshots((prev) => prev.filter((_, i) => i !== idx))}
                                                 onAddScreenshot={(base64) => setPendingScreenshots((prev) => [...prev, base64])}
+                                                pendingFiles={pendingFiles}
+                                                onRemoveFile={(id) => setPendingFiles((prev) => prev.filter((file) => file.id !== id))}
+                                                onAttachFile={lidarComAnexoArquivo}
                                                 inputMenuOpen={inputMenuOpen}
                                                 onToggleInputMenu={() => {
                                                     if (shell.resumoContextoAberto) {
@@ -1439,11 +1588,22 @@ const ChatWindow: React.FC = () => {
                                                     setToolCallingAtivo(novoValor)
                                                     localStorage.setItem('selene_tool_calling', String(novoValor))
                                                 }}
+                                                reasoningAtivo={reasoningAtivo}
+                                                onToggleReasoning={alternarReasoning}
+                                                modeloCompativelComReasoning={modeloCompativelComReasoning}
                                                 mcpServers={mcpServers}
                                                 onOpenMCPPanel={abrirPainelMcp}
                                                 onConnectMCPServer={handleConnectMCPServer}
+                                                provedorAtivo={provedorAtivo}
+                                                modeloOpenRouter={modeloOpenRouter}
+                                                modeloLocal={modeloLocal}
+                                                modeloAtivo={modeloAtivo}
+                                                openRouterKey={openRouterKey}
+                                                onSelecionarModeloOpenRouter={setModeloOpenRouter}
+                                                onSelecionarModeloLocal={setModeloLocal}
                                                 voiceInput={voiceInput}
                                                 resumoContextoAtivo={shell.resumoContextoAtivo}
+                                                itensContexto={shell.itensHubContexto}
                                                 resumoContextoAberto={shell.resumoContextoAberto}
                                                 onToggleResumoContexto={() => {
                                                     if (inputMenuOpen) {
@@ -1453,6 +1613,8 @@ const ChatWindow: React.FC = () => {
                                                     shell.alternarOverlay('resumo-contexto')
                                                 }}
                                                 onFecharResumoContexto={shell.fecharOverlays}
+                                                onSelecionarAssistenteContexto={selecionarAssistenteContexto}
+                                                onSelecionarProjetoContexto={selecionarProjetoContexto}
                                             />
                                         </motion.div>
                                     )}
@@ -1521,44 +1683,6 @@ const ChatWindow: React.FC = () => {
                                     )}
                                 </AnimatePresence>
                             </div>
-                        </div>
-
-                        <div className="lg:hidden">
-                            <DrawerNavegacaoChat
-                                aberto={shell.drawerAberto}
-                                conversations={shell.conversasRecentes}
-                                projects={shell.projetosRecentes}
-                                activeConversationId={activeConversationId}
-                                currentProjectId={currentProjectContextId}
-                                onClose={shell.fecharOverlays}
-                                onNovaConversa={iniciarNovaConversa}
-                                onSelecionarConversa={(conversationId) => {
-                                    shell.fecharOverlays()
-                                    setActiveConversationId(conversationId)
-                                    setActiveProjectId(null)
-                                    setShowSettings(false)
-                                    setShowAssistantsPanel(false)
-                                    setShowAssistantEditor(false)
-                                    setShowMCPPanel(false)
-                                    setEditingAssistant(null)
-                                }}
-                                onSelecionarProjeto={(projectId) => {
-                                    shell.fecharOverlays()
-                                    abrirProjeto(projectId)
-                                }}
-                                onAbrirAssistentes={() => {
-                                    shell.fecharOverlays()
-                                    abrirPainelAssistentes()
-                                }}
-                                onAbrirApps={() => {
-                                    shell.fecharOverlays()
-                                    abrirPainelMcp()
-                                }}
-                                onAbrirConfiguracoes={() => {
-                                    shell.fecharOverlays()
-                                    abrirConfiguracoes()
-                                }}
-                            />
                         </div>
 
                         <HubContextoChat

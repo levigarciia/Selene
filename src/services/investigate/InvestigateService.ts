@@ -1,6 +1,6 @@
 /**
  * Investigate Service v2
- * 
+ *
  * Pipeline de pesquisa deliberativo com:
  * - Roteador inicial (direct | clarify | investigate)
  * - Checkpoint de alinhamento com usuário
@@ -36,12 +36,14 @@ import type {
     ValidationResult,
     ConfidenceAssessment,
     ConfidenceLevel,
+    ResearchPlan,
+    ResearchCategory,
 } from './types'
 
 // Re-export types
 export * from './types'
 
-type ChatFunction = (prompt: string) => Promise<string>
+type ChatFunction = (prompt: string, systemPrompt?: string) => Promise<string>
 type StreamCallback = (chunk: string) => void
 type ContextoExecucaoInvestigacao = {
     conversationId?: string
@@ -64,10 +66,15 @@ interface RespostaSubPergunta {
 }
 
 interface RespostaDecomposicao {
+    objective?: string
     subQuestions?: RespostaSubPergunta[]
     ambiguities?: string[]
     contextNeeded?: string[]
     scope?: EscopoDecomposicao
+    searchAngles?: string[]
+    requiredEvidence?: string[]
+    successCriteria?: string[]
+    preferredSourceTypes?: SourceType[]
 }
 
 interface ResultadoFerramentaInvestigacao {
@@ -114,7 +121,6 @@ function obterMensagemErro(erro: unknown, fallback: string): string {
 class InvestigateServiceV2 {
     private currentTrace: InvestigationTrace | null = null
     private chatFn: ChatFunction | null = null
-    private streamFn: StreamCallback | null = null
     private listeners: Set<InvestigationListener> = new Set()
     private abortController: AbortController | null = null
     private activeRunId: string | null = null
@@ -130,8 +136,8 @@ class InvestigateServiceV2 {
         toolCallingService.setChatFunction(fn)
     }
 
-    setStreamCallback(fn: StreamCallback | null): void {
-        this.streamFn = fn
+    setStreamCallback(_fn: StreamCallback | null): void {
+        void _fn
     }
 
     setHistoricoChat(historico: Array<{ role: 'user' | 'assistant'; content: string }>): void {
@@ -167,11 +173,11 @@ class InvestigateServiceV2 {
 
     private notify(type: InvestigationUpdateType, message?: string, data?: unknown): void {
         if (!this.currentTrace) return
-        const update: InvestigationUpdate = { 
-            type, 
+        const update: InvestigationUpdate = {
+            type,
             trace: { ...this.currentTrace },
             message,
-            data 
+            data
         }
         this.listeners.forEach(cb => {
             try {
@@ -206,7 +212,7 @@ class InvestigateServiceV2 {
         if (this.isAborted()) return true
         if (!this.checkRunId()) return true
         if (this.isTimedOut()) {
-            console.log('[InvestigateV2] Investigation timed out after', 
+            console.log('[InvestigateV2] Investigation timed out after',
                 INVESTIGATION_LIMITS.MAX_INVESTIGATION_TIME_MS / 1000, 'seconds')
             return true
         }
@@ -299,14 +305,15 @@ class InvestigateServiceV2 {
                         'Por favor, tente uma pergunta mais específica.'
                 }
             } else {
+                const mensagemErro = obterMensagemErro(error, 'Erro desconhecido na investigação')
                 console.error('[InvestigateV2] Error:', error)
                 this.currentTrace!.state = 'failed'
                 this.currentTrace!.errors.push({
                     phase: this.currentTrace!.currentPhase || 'unknown',
-                    message: error.message,
+                    message: mensagemErro,
                     timestamp: Date.now()
                 })
-                this.notify('error', error.message)
+                this.notify('error', mensagemErro)
             }
         } finally {
             if (this.currentTrace) {
@@ -503,26 +510,26 @@ class InvestigateServiceV2 {
     }
 
     private hasComplexTerms(q: string): boolean {
-        const complexTerms = ['compare', 'comparar', 'análise', 'analysis', 'melhor', 'best', 
+        const complexTerms = ['compare', 'comparar', 'análise', 'analysis', 'melhor', 'best',
                              'diferença', 'difference', 'prós e contras', 'pros and cons']
         return complexTerms.some(t => q.includes(t))
     }
 
     private needsCurrentInfo(q: string): boolean {
         const currentTerms = ['atual', 'current', 'hoje', 'today', '2024', '2025', '2026',
-                             'recente', 'recent', 'agora', 'now', 'preço', 'price', 
+                             'recente', 'recent', 'agora', 'now', 'preço', 'price',
                              'cotação', 'notícia', 'news']
         return currentTerms.some(t => q.includes(t))
     }
 
     private needsMultipleSources(q: string): boolean {
-        const multiSourceTerms = ['comparar', 'compare', 'opinião', 'opinion', 
+        const multiSourceTerms = ['comparar', 'compare', 'opinião', 'opinion',
                                   'melhor', 'best', 'recomendação', 'recommend']
         return multiSourceTerms.some(t => q.includes(t))
     }
 
     private isAmbiguous(q: string): boolean {
-        const ambiguousTerms = ['melhor', 'best', 'ideal', 'bom', 'good', 
+        const ambiguousTerms = ['melhor', 'best', 'ideal', 'bom', 'good',
                                 'vale a pena', 'worth', 'deveria', 'should']
         return ambiguousTerms.some(t => q.includes(t))
     }
@@ -544,7 +551,7 @@ class InvestigateServiceV2 {
         this.notify('phase_started', 'Gerando resposta...')
 
         const response = await this.chatFn!(question)
-        
+
         this.currentTrace!.finalAnswer = response
         this.currentTrace!.state = 'completed'
         this.currentTrace!.confidence = {
@@ -576,24 +583,34 @@ class InvestigateServiceV2 {
         this.updatePhase('decomposition', 'running')
         this.notify('phase_started', 'Analisando pergunta...')
 
-        const prompt = `Você é um assistente de pesquisa. Analise a pergunta e decomponha em sub-perguntas.
+        const category = this.classificarCategoriaPesquisa(question)
+        this.currentTrace!.researchCategory = category
+
+        const prompt = `Você é um pesquisador sênior. Crie um plano de Deep Research e decomponha a pergunta em sub-perguntas pesquisáveis.
 
 **Pergunta:** "${question}"
+**Categoria detectada:** ${category}
 
 **Instruções:**
-1. Identifique os aspectos que precisam ser pesquisados
-2. Crie 2-5 sub-perguntas específicas e pesquisáveis
-3. Identifique se há ambiguidades ou dependências de contexto
-4. Ordene por prioridade
+1. Defina o objetivo da pesquisa em uma frase
+2. Liste ângulos de busca distintos para evitar uma única fonte ou uma única interpretação
+3. Crie 2-5 sub-perguntas específicas, verificáveis e ordenadas por prioridade
+4. Diga quais evidências são necessárias para a resposta ser confiável
+5. Identifique ambiguidades ou dependências de contexto
+6. Prefira fontes primárias/oficiais quando a categoria exigir dados atuais, produto, comparação ou fact-check
 
 **Responda em JSON:**
 {
-  "analysis": "Breve análise da pergunta",
+  "objective": "Objetivo da pesquisa",
+  "searchAngles": ["ângulo 1", "ângulo 2"],
   "subQuestions": [
     { "question": "Sub-pergunta específica", "reasoning": "Por que relevante", "priority": 1 }
   ],
+  "requiredEvidence": ["tipo de evidência necessária"],
+  "successCriteria": ["critério para considerar suficiente"],
   "ambiguities": ["Lista de ambiguidades ou interpretações possíveis"],
   "contextNeeded": ["Informações de contexto que ajudariam"],
+  "preferredSourceTypes": ["official", "primary", "secondary"],
   "scope": "amplo" | "focado" | "específico"
 }`
 
@@ -616,6 +633,8 @@ class InvestigateServiceV2 {
                     }))
             }
 
+            this.currentTrace!.researchPlan = this.criarPlanoPesquisa(category, question, parsed)
+
             // Guarda info para checkpoint de alinhamento
             if (parsed) {
                 (this.currentTrace!.phases[1] as FaseDecomposicao).decompositionData = {
@@ -634,28 +653,75 @@ class InvestigateServiceV2 {
         }
     }
 
+    private classificarCategoriaPesquisa(question: string): ResearchCategory {
+        const texto = question.toLowerCase()
+
+        if (/\b(vs|versus|comparar|comparativo|diferen[cç]a|qual (é )?melhor)\b/i.test(texto)) {
+            return 'comparison'
+        }
+
+        if (/\b(como|passo a passo|tutorial|implementar|configurar|resolver|fazer)\b/i.test(texto)) {
+            return 'howto'
+        }
+
+        if (/\b(pre[cç]o|comprar|produto|plano|assinatura|review|recomenda[cç][aã]o)\b/i.test(texto)) {
+            return 'product'
+        }
+
+        if (/\b(verdade|falso|confirma|verificar|fact[- ]?check|checar|prova|evid[eê]ncia)\b/i.test(texto)) {
+            return 'factcheck'
+        }
+
+        return 'general'
+    }
+
+    private criarPlanoPesquisa(
+        category: ResearchCategory,
+        question: string,
+        parsed: RespostaDecomposicao | null
+    ): ResearchPlan {
+        const defaultSourceTypes: Record<ResearchCategory, SourceType[]> = {
+            general: ['official', 'primary', 'secondary'],
+            product: ['official', 'secondary', 'community'],
+            comparison: ['official', 'primary', 'secondary', 'community'],
+            howto: ['official', 'primary', 'secondary'],
+            factcheck: ['official', 'primary', 'news']
+        }
+
+        return {
+            category,
+            objective: parsed?.objective || `Responder com evidências: ${question}`,
+            searchAngles: (parsed?.searchAngles || []).slice(0, 5),
+            requiredEvidence: (parsed?.requiredEvidence || []).slice(0, 5),
+            successCriteria: (parsed?.successCriteria || []).slice(0, 5),
+            preferredSourceTypes: (parsed?.preferredSourceTypes || defaultSourceTypes[category]).slice(0, 4)
+        }
+    }
+
     // ========================================================================
     // FASE 2: ALIGNMENT CHECKPOINT
     // ========================================================================
 
     private async runAlignmentCheck(): Promise<boolean> {
         this.updatePhase('clarification', 'running')
-        
+
         const decompositionData = (this.currentTrace!.phases.find((p) => p.name === 'decomposition') as FaseDecomposicao | undefined)?.decompositionData
+        const ambiguidades = decompositionData?.ambiguities ?? []
+        const contextoNecessario = decompositionData?.contextNeeded ?? []
         const reasons: ClarificationReason[] = []
         const clarifyingQuestions: string[] = []
 
         // Verifica se precisa de clarificação
-        if (decompositionData?.ambiguities?.length > 0) {
+        if (ambiguidades.length > 0) {
             reasons.push('multiple_interpretations')
-            clarifyingQuestions.push(...decompositionData.ambiguities.slice(0, 2).map(
+            clarifyingQuestions.push(...ambiguidades.slice(0, 2).map(
                 (a: string) => `Sobre "${a}", você quer que eu foque em qual aspecto?`
             ))
         }
 
-        if (decompositionData?.contextNeeded?.length > 0) {
+        if (contextoNecessario.length > 0) {
             reasons.push('needs_context')
-            clarifyingQuestions.push(...decompositionData.contextNeeded.slice(0, 2))
+            clarifyingQuestions.push(...contextoNecessario.slice(0, 2))
         }
 
         if (decompositionData?.scope === 'amplo') {
@@ -699,7 +765,7 @@ class InvestigateServiceV2 {
         if (clarification.adjustedScope) {
             // Re-decompor com o novo escopo
             console.log('[InvestigateV2] Adjusting scope:', clarification.adjustedScope)
-            
+
             const prompt = `Ajuste as sub-perguntas considerando a clarificação do usuário:
 
 **Pergunta original:** "${this.currentTrace!.originalQuestion}"
@@ -719,7 +785,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
             try {
                 const response = await this.chatFn!(prompt)
                 const parsed = this.parseJSON(response) as RespostaDecomposicao | null
-                
+
                 if (parsed?.subQuestions) {
                     this.currentTrace!.subQuestions = parsed.subQuestions
                         .slice(0, INVESTIGATION_LIMITS.MAX_SUB_QUESTIONS)
@@ -802,34 +868,66 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
                 // ============================================================
                 // ETAPA A: Busca ampla para mapear termos e candidatos
                 // ============================================================
-                const decision = await toolCallingService.decideToolUsage(
-                    subQ.question,
+                const consultaPesquisa = this.montarConsultaPesquisa(subQ.question)
+                let decision = await toolCallingService.decideToolUsage(
+                    consultaPesquisa,
                     [],
                     enabledTools
                 )
+                let tentativaAutonomia = 0
+                const chamadasSubPergunta: ToolCall[] = []
 
                 if (decision.shouldUseTool && decision.toolCalls.length > 0) {
-                    // Executa busca inicial
-                    const calls = await toolCallingService.executeToolCalls(
-                        decision,
-                        undefined,
-                        (call) => {
-                            subQ.toolCalls.push(call.id)
-                            this.currentTrace!.totalToolCalls++
-                        },
-                        {
-                            conversationId: this.contextoExecucao.conversationId,
-                            projectId: this.contextoExecucao.projectId,
-                            userQuery: subQ.question
-                        }
-                    )
-
-                    // Extrai todas as evidências
                     const allEvidence: Evidence[] = []
-                    for (const call of calls) {
-                        if (call.status === 'completed' && call.result?.data) {
-                            const evidence = this.extractEvidenceFromToolCall(call, subQ)
-                            allEvidence.push(...evidence)
+
+                    while (
+                        decision.shouldUseTool &&
+                        decision.toolCalls.length > 0 &&
+                        tentativaAutonomia < 3 &&
+                        this.currentTrace!.totalToolCalls < INVESTIGATION_LIMITS.MAX_TOTAL_TOOL_CALLS
+                    ) {
+                        const calls = await toolCallingService.executeToolCalls(
+                            decision,
+                            undefined,
+                            (call) => {
+                                subQ.toolCalls.push(call.id)
+                                this.currentTrace!.totalToolCalls++
+                            },
+                            {
+                                conversationId: this.contextoExecucao.conversationId,
+                                projectId: this.contextoExecucao.projectId,
+                                userQuery: consultaPesquisa
+                            }
+                        )
+
+                        chamadasSubPergunta.push(...calls)
+
+                        for (const call of calls) {
+                            if (call.status === 'completed' && call.result?.data) {
+                                const evidence = this.extractEvidenceFromToolCall(call, subQ)
+                                allEvidence.push(...evidence)
+                            }
+                        }
+
+                        const autonomia = toolCallingService.avaliarAutonomia(
+                            consultaPesquisa,
+                            calls,
+                            chamadasSubPergunta,
+                            enabledTools,
+                            {
+                                maxTentativasPorTarefa: 4,
+                                modoAutonomia: 'equilibrado',
+                            }
+                        )
+
+                        tentativaAutonomia++
+                        if (autonomia.action !== 'continuar' || !autonomia.toolCalls?.length) {
+                            break
+                        }
+
+                        decision = {
+                            shouldUseTool: true,
+                            toolCalls: autonomia.toolCalls,
                         }
                     }
 
@@ -837,10 +935,11 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
                     // ETAPA B: Seleção e priorização de qualidade de fontes
                     // ============================================================
                     const rankedEvidence = this.rankAndFilterEvidence(allEvidence, subQ.question)
-                    
+                        .filter(e => !this.isDuplicateEvidence(e))
+
                     subQ.evidence.push(...rankedEvidence)
                     this.currentTrace!.evidence.push(...rankedEvidence)
-                    
+
                     for (const e of rankedEvidence) {
                         this.notify('evidence_found', `Encontrado: ${e.claim.slice(0, 50)}...`)
                     }
@@ -868,6 +967,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
      * Prioriza: fonte primária > oficial > secundária > community
      */
     private rankAndFilterEvidence(evidence: Evidence[], question: string): Evidence[] {
+        const preferredTypes = this.currentTrace!.researchPlan?.preferredSourceTypes || []
         // Score de qualidade por tipo de fonte
         const typeScores: Record<string, number> = {
             'primary': 10,
@@ -893,13 +993,13 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
         // Calcula score para cada evidência
         const scored = evidence.map(e => {
             let score = 0
-            
+
             // Score base por tipo e credibilidade
             score += typeScores[e.source.type] || 3
             score += credibilityScores[e.source.credibility] || 1
 
             // Bonus por contexto
-            if (isTechy && (e.source.type === 'primary' || 
+            if (isTechy && (e.source.type === 'primary' ||
                            e.source.domain.includes('github') ||
                            e.source.domain.includes('stackoverflow'))) {
                 score += 5
@@ -907,6 +1007,10 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
 
             if (isProduct && e.source.type === 'official') {
                 score += 5
+            }
+
+            if (preferredTypes.includes(e.source.type)) {
+                score += 4
             }
 
             // Penaliza duplicatas (mesmo domínio)
@@ -929,7 +1033,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
             if (!isControversial && seenDomains.has(e.source.domain)) {
                 continue
             }
-            
+
             seenDomains.add(e.source.domain)
             result.push(e)
 
@@ -939,6 +1043,44 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
         }
 
         return result
+    }
+
+    private montarConsultaPesquisa(question: string): string {
+        const plan = this.currentTrace!.researchPlan
+        if (!plan || plan.searchAngles.length === 0) {
+            return question
+        }
+
+        const angles = plan.searchAngles.slice(0, 2).join(' | ')
+        const evidence = plan.requiredEvidence.slice(0, 2).join(' | ')
+        return [question, angles, evidence].filter(Boolean).join('\n')
+    }
+
+    private isDuplicateEvidence(evidence: Evidence): boolean {
+        const normalizedUrl = this.normalizarUrlFonte(evidence.source.url)
+        const normalizedClaim = evidence.claim.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+
+        return this.currentTrace!.evidence.some(existing => {
+            if (normalizedUrl && this.normalizarUrlFonte(existing.source.url) === normalizedUrl) {
+                return true
+            }
+
+            const existingClaim = existing.claim.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim()
+            return normalizedClaim.length > 20 && existingClaim === normalizedClaim
+        })
+    }
+
+    private normalizarUrlFonte(url: string): string {
+        if (!url) return ''
+
+        try {
+            const parsed = new URL(url)
+            parsed.hash = ''
+            parsed.search = ''
+            return parsed.toString().replace(/\/$/, '')
+        } catch {
+            return url.trim().toLowerCase()
+        }
     }
 
     private extractEvidenceFromToolCall(call: ToolCall, subQ: SubQuestion): Evidence[] {
@@ -953,7 +1095,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
                 evidence.push({
                     id: uuidv4(),
                     claim: result.title || result.content || '',
-                    source: this.parseSource(result.url, result.title),
+                    source: this.parseSource(result.url || '', result.title),
                     excerpt: result.content || result.snippet || '',
                     subQuestionId: subQ.id,
                     topic: subQ.question.split(' ').slice(0, 3).join(' '),
@@ -987,7 +1129,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
     private parseSource(url: string, title?: string): EvidenceSource {
         let domain = ''
         let name = title || 'Fonte desconhecida'
-        
+
         try {
             const parsed = new URL(url)
             domain = parsed.hostname.replace('www.', '')
@@ -1031,10 +1173,10 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
     }
 
     private guessCredibility(domain: string): SourceCredibility {
-        const highCredibility = ['github.com', 'stackoverflow.com', 'mdn.mozilla.org', 
+        const highCredibility = ['github.com', 'stackoverflow.com', 'mdn.mozilla.org',
                                  'wikipedia.org', 'docs.python.org', 'docs.microsoft.com']
         const mediumCredibility = ['medium.com', 'dev.to', 'reddit.com', 'hackernews.com']
-        
+
         if (highCredibility.some(d => domain.includes(d))) return 'high'
         if (mediumCredibility.some(d => domain.includes(d))) return 'medium'
         if (domain.endsWith('.gov') || domain.endsWith('.edu')) return 'high'
@@ -1069,7 +1211,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
         this.notify('phase_started', 'Validando informações...')
 
         const evidence = this.currentTrace!.evidence
-        
+
         if (evidence.length === 0) {
             const result: ValidationResult = {
                 consistencies: [],
@@ -1087,7 +1229,7 @@ ${this.currentTrace!.subQuestions.map(sq => `- ${sq.question}`).join('\n')}
         }
 
         // Formata evidências para o prompt
-        const evidenceSummary = evidence.map((e, i) => 
+        const evidenceSummary = evidence.map((e, i) =>
             `[${i + 1}] ${e.claim}\n    Fonte: ${e.source.name} (${e.source.credibility})\n    Trecho: "${e.excerpt.slice(0, 100)}..."`
         ).join('\n\n')
 
@@ -1138,7 +1280,7 @@ ${evidenceSummary}
 
             this.currentTrace!.validationResults.push(result)
             this.updatePhase('validation', 'completed', result)
-            this.notify('validation_complete', 
+            this.notify('validation_complete',
                 `Validação: ${result.consistencies.length} consistências, ${result.gaps.length} lacunas`)
 
             return result
@@ -1146,7 +1288,7 @@ ${evidenceSummary}
         } catch (error: unknown) {
             console.error('[InvestigateV2] Validation error:', error)
             this.updatePhase('validation', 'failed', null, obterMensagemErro(error, 'Falha na validação'))
-            
+
             return {
                 consistencies: [],
                 contradictions: [],
@@ -1178,7 +1320,7 @@ ${evidenceSummary}
             citationNumber: i + 1
         }))
 
-        const evidenceText = evidenceWithNumbers.map(e => 
+        const evidenceText = evidenceWithNumbers.map(e =>
             `[${e.citationNumber}] ${e.claim}\n    Fonte: ${e.source.name} (${e.source.url})`
         ).join('\n')
 
@@ -1187,10 +1329,15 @@ ${evidenceSummary}
             ...v.contradictions.map(c => `⚠ Conflito: ${c.topic}`),
             ...v.gaps.map(g => `? Lacuna: ${g}`)
         ]).join('\n')
+        const categoryInstructions = this.obterInstrucoesSintesePorCategoria(this.currentTrace!.researchCategory || 'general')
+        const plan = this.currentTrace!.researchPlan
 
         const prompt = `Você é um pesquisador sintetizando resultados.
 
 **Pergunta:** "${this.currentTrace!.originalQuestion}"
+**Categoria:** ${this.currentTrace!.researchCategory || 'general'}
+**Objetivo do plano:** ${plan?.objective || 'Responder com evidências suficientes'}
+**Critérios de sucesso:** ${(plan?.successCriteria || []).join('; ') || 'resposta clara, citada e honesta sobre lacunas'}
 
 **Evidências numeradas:**
 ${evidenceText || '(Nenhuma evidência específica)'}
@@ -1204,18 +1351,19 @@ ${validationNotes || '(Sem validação adicional)'}
 3. Mencione contradições encontradas
 4. Seja claro sobre limitações ou incertezas
 5. No final, liste as fontes citadas
+${categoryInstructions}
 
 **Sua resposta:**`
 
         try {
             const response = await this.chatFn!(prompt)
-            
+
             this.currentTrace!.finalAnswer = response
-            
+
             // Extrai citações usadas
             const citationMatches = response.match(/\[(\d+)\]/g) || []
             const usedCitations = [...new Set(citationMatches.map((m) => parseInt(m.replaceAll('[', '').replaceAll(']', ''), 10)))]
-            
+
             this.currentTrace!.citations = usedCitations
                 .filter(n => n <= evidence.length)
                 .map(n => {
@@ -1230,6 +1378,7 @@ ${validationNotes || '(Sem validação adicional)'}
 
             // Calcula confiança justificável
             this.currentTrace!.confidence = this.calculateConfidence()
+            this.currentTrace!.stats = this.calcularEstatisticasPesquisa()
 
             this.currentTrace!.state = 'completed'
             this.updatePhase('synthesis', 'completed')
@@ -1244,10 +1393,32 @@ ${validationNotes || '(Sem validação adicional)'}
         }
     }
 
+    private obterInstrucoesSintesePorCategoria(category: ResearchCategory): string {
+        const instructions: Record<ResearchCategory, string> = {
+            general: '6. Organize a resposta por tópicos quando isso melhorar a leitura.',
+            product: '6. Inclua critérios de decisão, ressalvas de preço/disponibilidade e evite recomendar sem evidência recente.',
+            comparison: '6. Inclua uma tabela comparativa quando houver pelo menos dois itens comparáveis.',
+            howto: '6. Responda em passos acionáveis, com pré-requisitos, riscos e validação ao final.',
+            factcheck: '6. Separe evidências a favor, evidências contra e dê um veredito proporcional à força das fontes.'
+        }
+
+        return instructions[category]
+    }
+
+    private calcularEstatisticasPesquisa() {
+        const evidence = this.currentTrace!.evidence
+        return {
+            uniqueDomains: new Set(evidence.map(e => e.source.domain).filter(Boolean)).size,
+            highCredibilitySources: evidence.filter(e => e.source.credibility === 'high').length,
+            officialOrPrimarySources: evidence.filter(e => e.source.type === 'official' || e.source.type === 'primary').length,
+            totalEvidence: evidence.length
+        }
+    }
+
     private calculateConfidence(): ConfidenceAssessment {
         const evidence = this.currentTrace!.evidence
         const validations = this.currentTrace!.validationResults
-        
+
         const factors = {
             independentSources: new Set(evidence.map(e => e.source.domain)).size,
             sourceQuality: this.getAverageSourceQuality(evidence) as ConfidenceLevel,
@@ -1406,9 +1577,9 @@ ${validationNotes || '(Sem validação adicional)'}
     }
 
     private updatePhase(
-        name: InvestigationPhase['name'], 
-        status: InvestigationPhase['status'], 
-        result?: unknown, 
+        name: InvestigationPhase['name'],
+        status: InvestigationPhase['status'],
+        result?: unknown,
         error?: string
     ): void {
         if (!this.currentTrace) return

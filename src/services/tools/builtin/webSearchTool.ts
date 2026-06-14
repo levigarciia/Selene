@@ -4,8 +4,9 @@
  * Handles web search tool calls using the existing WebSearchService.
  */
 
-import { extractSearchQuery, searchWeb, fetchUrlContent, formatSearchResultsForAI } from '../../WebSearchService'
+import { searchWeb, fetchUrlContent, formatSearchResultsForAI } from '../../WebSearchService'
 import type { ToolHandler, ToolCallResult, ToolResultItem } from '../../../types/tools'
+import { toolExecutor } from '../ToolExecutor'
 
 function extrairDominio(url: string): string {
     try {
@@ -52,19 +53,6 @@ function avaliarQualidadeResultados(urls: string[], snippets: string[]): { baixa
     }
 }
 
-function normalizarQueriesSecundarias(
-    valor: unknown,
-    queryPrincipal: string
-): string[] {
-    if (!Array.isArray(valor)) return []
-
-    return valor
-        .map((query) => extractSearchQuery(String(query || '')).slice(0, 100))
-        .filter((query) => query && query.length >= 3)
-        .filter((query, indice, lista) => query !== queryPrincipal && lista.indexOf(query) === indice)
-        .slice(0, 2)
-}
-
 type ResultadoBusca = {
     title: string
     url: string
@@ -97,8 +85,8 @@ function deduplicarResultados(resultados: ResultadoBusca[]): ResultadoBusca[] {
 }
 
 export const webSearchHandler: ToolHandler = async (args, context): Promise<ToolCallResult> => {
-    const queryPrincipalBruta = (args.queryPrincipal as string) || (args.query as string) || (context?.userQuery as string) || ''
-    const queryPrincipal = extractSearchQuery(String(queryPrincipalBruta || '')).slice(0, 100)
+    const queryPrincipalBruta = (args.queryPrincipal as string) || (args.query as string) || ''
+    const queryPrincipal = String(queryPrincipalBruta || '').replace(/\s+/g, ' ').trim().slice(0, 100)
     
     if (!queryPrincipal || typeof queryPrincipal !== 'string') {
         return {
@@ -107,30 +95,23 @@ export const webSearchHandler: ToolHandler = async (args, context): Promise<Tool
         }
     }
 
+    const callId = context?.callId
+
     console.log('[WebSearchTool] Searching:', queryPrincipal)
+    if (callId) {
+        toolExecutor.reportProgress(callId, `Buscando: "${queryPrincipal}"...`)
+    }
 
     try {
-        const queriesSecundarias = normalizarQueriesSecundarias(args.queriesSecundarias, queryPrincipal)
-
         const respostaPrincipal = await searchWeb(queryPrincipal, 5)
-        const respostas = [respostaPrincipal]
-        let escalonou = false
 
         const urlsPrincipais = respostaPrincipal.results.map((resultado) => resultado.url)
         const snippetsPrincipais = respostaPrincipal.results.map((resultado) => resultado.snippet || resultado.content || '')
         const qualidadePrincipal = avaliarQualidadeResultados(urlsPrincipais, snippetsPrincipais)
-        const gatilhoComplexidade = consultaExigeEscalonamento((context?.userQuery as string) || queryPrincipal)
-
-        if (queriesSecundarias.length > 0 && (gatilhoComplexidade || qualidadePrincipal.baixaQualidade)) {
-            escalonou = true
-            for (const querySecundaria of queriesSecundarias) {
-                const respostaSecundaria = await searchWeb(querySecundaria, 5)
-                respostas.push(respostaSecundaria)
-            }
-        }
+        const exigeAnalisePosterior = consultaExigeEscalonamento((context?.userQuery as string) || queryPrincipal)
 
         const resultadosAgregados = deduplicarResultados(
-            respostas.flatMap((resposta) => resposta.results)
+            respostaPrincipal.results
         )
 
         if (resultadosAgregados.length === 0) {
@@ -141,21 +122,34 @@ export const webSearchHandler: ToolHandler = async (args, context): Promise<Tool
                     queryPrincipal,
                     results: [],
                     formattedForAI: `[Nenhum resultado encontrado para: "${queryPrincipal}"]`,
-                    escalonou,
+                    baixaQualidade: qualidadePrincipal.baixaQualidade,
+                    exigeAnalisePosterior,
                     displayResults: []
                 }
             }
         }
 
         // Enriquecer os primeiros resultados com conteúdo da página
+        // Timeout curto (2500ms): sites de placares ao vivo usam JS e bloqueiam fetch estático
+        if (resultadosAgregados.length > 0 && callId) {
+            toolExecutor.reportProgress(callId, `Extraindo conteúdo das principais páginas encontradas...`)
+        }
         const enrichedResults = await Promise.all(
             resultadosAgregados.slice(0, 3).map(async (result) => {
                 try {
                     if (result.content && result.content.length > 0) {
                         return result
                     }
-                    const content = await fetchUrlContent(result.url, 1500)
-                    return { ...result, content }
+                    const content = await fetchUrlContent(result.url, 1500, 2500)
+
+                    // Descarta conteúdo que é mensagem de erro ou muito curto para ser útil
+                    // Nesse caso o formatador usará o snippet do DuckDuckGo
+                    const conteudoUtil = content
+                        && content.length >= 80
+                        && !content.startsWith('[Erro')
+                        && !content.startsWith('[Conteúdo')
+
+                    return { ...result, content: conteudoUtil ? content : undefined }
                 } catch {
                     return result
                 }
@@ -193,7 +187,8 @@ export const webSearchHandler: ToolHandler = async (args, context): Promise<Tool
                 queryPrincipal,
                 results: resultadosFinais,
                 formattedForAI,
-                escalonou,
+                baixaQualidade: qualidadePrincipal.baixaQualidade,
+                exigeAnalisePosterior,
                 displayResults
             }
         }

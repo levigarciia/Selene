@@ -334,6 +334,7 @@ export async function rebuildIndex(
     const messagesToIndex: Array<{
         id: string
         conversationId: string
+        projectId?: string
         content: string
         timestamp: number
     }> = []

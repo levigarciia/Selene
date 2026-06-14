@@ -1,7 +1,7 @@
 /**
  * Memory Extractor
  * Version: 1.0.0
- * 
+ *
  * Responsável por extrair memórias duráveis e de alto sinal das mensagens.
  * Usa heurísticas conservadoras e LLM para extração inteligente.
  */
@@ -14,6 +14,7 @@ import {
     type MemoryCategory
 } from '../../config/memoryConfig'
 import type {
+    AutoMemory,
     ExtractedMemory,
     LLMExtractionResponse,
     ExtractionMetrics
@@ -28,6 +29,45 @@ import {
 // ============================================================================
 // HEURÍSTICAS PRÉ-LLM
 // ============================================================================
+
+const STOPWORDS = new Set([
+    'a', 'as', 'o', 'os', 'um', 'uma', 'uns', 'umas', 'de', 'da', 'do', 'das', 'dos', 'e', 'ou', 'em',
+    'no', 'na', 'nos', 'nas', 'para', 'por', 'com', 'sem', 'que', 'se', 'eu', 'meu', 'minha', 'meus',
+    'minhas', 'voce', 'voces', 'ele', 'ela', 'eles', 'elas', 'isso', 'isto', 'aquele', 'aquela', 'the',
+    'and', 'or', 'to', 'of', 'in', 'on', 'for', 'with', 'without', 'is', 'are', 'i', 'my', 'you'
+])
+
+function normalizarTexto(texto: string): string {
+    return texto
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+}
+
+function obterTokensRelevantes(texto: string): Set<string> {
+    return new Set(
+        normalizarTexto(texto)
+            .split(/\s+/)
+            .filter(token => token.length > 2 && !STOPWORDS.has(token))
+    )
+}
+
+function calcularJaccard(textoA: string, textoB: string): number {
+    const tokensA = obterTokensRelevantes(textoA)
+    const tokensB = obterTokensRelevantes(textoB)
+
+    if (tokensA.size === 0 || tokensB.size === 0) {
+        return 0
+    }
+
+    const intersecao = [...tokensA].filter(token => tokensB.has(token)).length
+    const uniao = new Set([...tokensA, ...tokensB]).size
+
+    return intersecao / uniao
+}
 
 /**
  * Verifica se uma mensagem é candidata para extração
@@ -306,17 +346,65 @@ export async function extractMemories(
  * Usa similaridade de Jaccard para comparação rápida
  */
 export function areSimilar(text1: string, text2: string, threshold: number = 0.85): boolean {
-    const normalize = (s: string) => s.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/)
+    return calcularJaccard(text1, text2) >= threshold
+}
 
-    const words1 = new Set(normalize(text1))
-    const words2 = new Set(normalize(text2))
+export function scoreMemoryRelevance(
+    consulta: string,
+    memoryText: string,
+    tags: string[] = [],
+    category?: string
+): number {
+    const textoConsulta = normalizarTexto(consulta)
+    const textoMemoria = normalizarTexto(memoryText)
 
-    const intersection = new Set([...words1].filter(w => words2.has(w)))
-    const union = new Set([...words1, ...words2])
+    if (!textoConsulta || !textoMemoria) {
+        return 0
+    }
 
-    const jaccard = intersection.size / union.size
+    let score = calcularJaccard(textoConsulta, textoMemoria)
 
-    return jaccard >= threshold
+    for (const tag of tags) {
+        const tagNormalizada = normalizarTexto(tag)
+        if (tagNormalizada && textoConsulta.includes(tagNormalizada)) {
+            score += 0.18
+        }
+    }
+
+    if (category && textoConsulta.includes(normalizarTexto(category))) {
+        score += 0.08
+    }
+
+    if (textoConsulta.includes(textoMemoria) || textoMemoria.includes(textoConsulta)) {
+        score += 0.2
+    }
+
+    return Math.min(1, score)
+}
+
+export function findSimilarMemory(
+    novaMemoria: ExtractedMemory,
+    existingMemories: AutoMemory[],
+    threshold: number = MEMORY_AUTOPILOT_CONFIG.DEDUP_SIMILARITY_THRESHOLD
+): AutoMemory | null {
+    let melhor: { memoria: AutoMemory; score: number } | null = null
+
+    for (const memoria of existingMemories) {
+        if (memoria.category !== novaMemoria.category) {
+            continue
+        }
+
+        const score = Math.max(
+            calcularJaccard(novaMemoria.text, memoria.text),
+            scoreMemoryRelevance(novaMemoria.text, memoria.text, memoria.tags, memoria.category)
+        )
+
+        if (!melhor || score > melhor.score) {
+            melhor = { memoria, score }
+        }
+    }
+
+    return melhor && melhor.score >= threshold ? melhor.memoria : null
 }
 
 /**

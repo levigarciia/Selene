@@ -29,9 +29,10 @@ export class OpenAIProvider implements AIProvider {
         if (!this.client) throw new Error('OpenAI não configurado.')
         try {
             const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
-                messages: mensagens as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+                messages: mensagens as unknown as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
                 model: this.model,
-                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
+                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {}),
+                ...(typeof opcoes.maxTokens === 'number' ? { max_tokens: opcoes.maxTokens } : {})
             }
 
             const completion = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
@@ -51,10 +52,11 @@ export class OpenAIProvider implements AIProvider {
         if (!this.client) throw new Error('OpenAI não configurado.')
         try {
             const payload: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
-                messages: mensagens as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+                messages: mensagens as unknown as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
                 model: this.model,
                 stream: true,
-                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
+                ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {}),
+                ...(typeof opcoes.maxTokens === 'number' ? { max_tokens: opcoes.maxTokens } : {})
             }
 
             const stream = await this.client.chat.completions.create(payload, { signal: opcoes.signal })
@@ -219,14 +221,17 @@ export class OpenAIProvider implements AIProvider {
     }
 
     private extrairPartesStream(
-        choice?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice,
-        delta?: OpenAI.Chat.Completions.ChatCompletionChunk.Choice.Delta
+        choice?: unknown,
+        delta?: unknown
     ): { conteudo: string; raciocinio: string } {
         let conteudo = ''
         let raciocinio = ''
+        const deltaRegistro = this.comoRegistro(delta)
+        const choiceRegistro = this.comoRegistro(choice)
+        const mensagemChoice = this.comoRegistro(choiceRegistro?.message)
 
-        if (Array.isArray(delta?.content)) {
-            for (const item of delta.content) {
+        if (Array.isArray(deltaRegistro?.content)) {
+            for (const item of deltaRegistro.content) {
                 const tipo = String(item?.type || '').toLowerCase()
                 const texto = this.extrairTextoVariado(item)
                 if (!texto) continue
@@ -237,29 +242,29 @@ export class OpenAIProvider implements AIProvider {
                 }
             }
         } else {
-            conteudo += this.extrairTextoVariado(delta?.content)
+            conteudo += this.extrairTextoVariado(deltaRegistro?.content)
         }
 
         const fallbackConteudo = [
-            delta?.text,
-            choice?.text,
-            choice?.content,
-            choice?.message?.content
+            deltaRegistro?.text,
+            choiceRegistro?.text,
+            choiceRegistro?.content,
+            mensagemChoice?.content
         ].map((valor) => this.extrairTextoVariado(valor)).join('')
         if (!conteudo) {
             conteudo += fallbackConteudo
         }
 
         const fallbackRaciocinio = [
-            delta?.reasoning,
-            delta?.reasoning_content,
-            delta?.reasoningContent,
-            delta?.thinking,
-            choice?.reasoning,
-            choice?.reasoning_content,
-            choice?.reasoningContent,
-            choice?.thinking,
-            choice?.message?.reasoning
+            deltaRegistro?.reasoning,
+            deltaRegistro?.reasoning_content,
+            deltaRegistro?.reasoningContent,
+            deltaRegistro?.thinking,
+            choiceRegistro?.reasoning,
+            choiceRegistro?.reasoning_content,
+            choiceRegistro?.reasoningContent,
+            choiceRegistro?.thinking,
+            mensagemChoice?.reasoning
         ].map((valor) => this.extrairTextoVariado(valor)).join('')
         if (!raciocinio) {
             raciocinio += fallbackRaciocinio
@@ -287,13 +292,17 @@ export class OpenAIProvider implements AIProvider {
         return ''
     }
 
-    private normalizarHistorico(historico?: MensagemHistoricoIA[]): MensagemChat[] {
+    private comoRegistro(valor: unknown): RegistroGenerico | undefined {
+        return valor && typeof valor === 'object' ? valor as RegistroGenerico : undefined
+    }
+
+    private normalizarHistorico(historico?: MensagemHistoricoIA[]): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
         if (!Array.isArray(historico) || historico.length === 0) return []
         return historico.map((mensagem) => ({
             role: mensagem.role,
             content: mensagem.role === 'user' && mensagem.images?.length
                 ? criarConteudoTextoComImagens(mensagem.content, mensagem.images)
                 : mensagem.content
-        }))
+        } as unknown as OpenAI.Chat.Completions.ChatCompletionMessageParam))
     }
 }

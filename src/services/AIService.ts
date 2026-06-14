@@ -1,11 +1,11 @@
 export * from './ai/types'
 import type { AIConfig, AcaoTexto, ConteudoMensagemChat, MensagemChat, MensagemHistoricoIA, ProvedorID, TomTexto } from './ai/types'
-import type { AIProvider } from './ai/AIProvider'
+import type { AIProvider, OrigemEventoStreamIA } from './ai/AIProvider'
 import type { OpcoesRequisicaoIA } from './ai/AIProvider'
 import { OpenAIProvider } from './ai/providers/OpenAIProvider'
 import { GeminiProvider } from './ai/providers/GeminiProvider'
 import { OpenRouterProvider } from './ai/providers/OpenRouterProvider'
-import { LMStudioProvider } from './ai/providers/LMStudioProvider'
+import { LocalProvider } from './ai/providers/LocalProvider'
 import { criarConteudoTextoComImagens } from './ai/historicoMultimodal'
 
 class ExtratorRaciocinioThink {
@@ -97,6 +97,12 @@ class ExtratorRaciocinioThink {
   }
 }
 
+type OrigemRaciocinioStream = 'delta_raciocinio' | 'tag_think'
+
+function normalizarOrigemRaciocinio(origem?: OrigemEventoStreamIA): OrigemRaciocinioStream {
+  return origem === 'tag_think' ? 'tag_think' : 'delta_raciocinio'
+}
+
 export class AIService {
   private providers: Record<ProvedorID, AIProvider>
   private activeProviderId: ProvedorID
@@ -106,7 +112,7 @@ export class AIService {
       openai: new OpenAIProvider(config.openai?.key, config.openai?.model),
       gemini: new GeminiProvider(config.gemini?.key),
       openrouter: new OpenRouterProvider(config.openRouter?.key, config.openRouter?.model),
-      lmstudio: new LMStudioProvider(config.lmStudio?.baseUrl, config.lmStudio?.model)
+      local: new LocalProvider(config.local?.model)
     }
 
     this.activeProviderId = this.determinarProvedorAtivo(config)
@@ -118,7 +124,7 @@ export class AIService {
     }
 
     // Auto-detect priority
-    if (this.providers.lmstudio.isReady()) return 'lmstudio'
+    if (this.providers.local.isReady()) return 'local'
     if (this.providers.openai.isReady()) return 'openai'
     if (this.providers.openrouter.isReady()) return 'openrouter'
     if (this.providers.gemini.isReady()) return 'gemini'
@@ -183,7 +189,7 @@ export class AIService {
     }
 
     const emitirRaciocinio = (raciocinio: string, origem: 'delta_raciocinio' | 'tag_think' = 'tag_think') => {
-      if (!raciocinio) return
+      if (!raciocinio || opcoes.reasoningAtivo === false) return
       opcoes.onEventoStream?.({ tipo: 'raciocinio', texto: raciocinio, origem })
     }
 
@@ -199,7 +205,7 @@ export class AIService {
       onEventoStream: (evento) => {
         if (!evento?.texto) return
         if (evento.tipo === 'raciocinio') {
-          emitirRaciocinio(evento.texto, evento.origem || 'delta_raciocinio')
+          emitirRaciocinio(evento.texto, normalizarOrigemRaciocinio(evento.origem))
           return
         }
         const origemConteudo = evento.origem === 'tag_think' ? 'tag_think' : 'delta_conteudo'
@@ -262,7 +268,7 @@ export class AIService {
       opcoes.onEventoStream?.({ tipo: 'conteudo', texto: conteudo, origem })
     }
     const emitirRaciocinio = (raciocinio: string, origem: 'delta_raciocinio' | 'tag_think' = 'tag_think') => {
-      if (!raciocinio) return
+      if (!raciocinio || opcoes.reasoningAtivo === false) return
       opcoes.onEventoStream?.({ tipo: 'raciocinio', texto: raciocinio, origem })
     }
     const processarConteudo = (fragmento: string) => {
@@ -285,7 +291,7 @@ export class AIService {
           onEventoStream: (evento) => {
             if (!evento?.texto) return
             if (evento.tipo === 'raciocinio') {
-              emitirRaciocinio(evento.texto, evento.origem || 'delta_raciocinio')
+              emitirRaciocinio(evento.texto, normalizarOrigemRaciocinio(evento.origem))
               return
             }
             processarConteudo(evento.texto)

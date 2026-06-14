@@ -21,7 +21,6 @@ export interface WebSearchResponse {
 export interface SearchPlan {
     query: string
     queryPrincipal: string
-    queriesSecundarias?: string[]
     statusMessage: string
     motivoEscalonamento?: string
     planejamentoValido: boolean
@@ -46,10 +45,11 @@ async function buscarNaWebViaIpc(query: string, maxResults: number): Promise<Web
             return resposta.data
         }
         if (resposta?.error) {
-            console.warn('[WebSearch] IPC error:', resposta.error)
+            throw new Error(resposta.error)
         }
     } catch (error: unknown) {
         console.warn('[WebSearch] IPC error:', error)
+        throw error
     }
 
     return null
@@ -121,6 +121,9 @@ export async function searchWeb(query: string, maxResults = 5): Promise<WebSearc
         }
     } catch (error: unknown) {
         console.error('[WebSearch] Error:', error)
+        if (error instanceof Error && error.message.includes('Busca web cancelada')) {
+            throw error
+        }
         return {
             query,
             results: [],
@@ -383,51 +386,6 @@ export function shouldSearchWeb(message: string): boolean {
     return false
 }
 
-/**
- * Extract search query from user message
- */
-export function extractSearchQuery(message: string): string {
-    // Remove common prefixes
-    let query = message
-        .replace(/^(pesquise?|busque?|procure?|search|find)\s*(por|for|sobre|about)?\s*/i, '')
-        .replace(/^(o que é|quem é|como|quando|onde|qual|quanto)\s*/i, '$1 ')
-        .trim()
-
-    // Remove comandos conversacionais para focar no tema da busca
-    query = query
-        .replace(/^(na\s+)?(internet|web)\s*/i, '')
-        .replace(/^(pra|para)\s+mim\b[\s,:-]*/i, '')
-        .replace(/^(pesquisa(r)?\s+)?(na\s+)?(internet|web)\s*(pra|para)\s+mim\b[\s,:-]*/i, '')
-        .replace(/^(me\s+)?(explica(r)?|me\s+diz|diz|conta|fala|resuma?|resume|detalha|me\s+atualiza|atualiza|quero\s+saber|me\s+fala)\b[\s,:-]*/i, '')
-        .replace(/^(de\s+forma\s+(simples|f[aá]cil|resumida)|de\s+jeito\s+(simples|f[aá]cil))\b[\s,:-]*/i, '')
-        .replace(/^(por\s+favor|pfv|pls)\b[\s,:-]*/i, '')
-        .replace(/\b(o\s+q|oq)\b/gi, 'o que')
-        .replace(/\btoda?\s+a?\s+treta\s+(do|da|de)\b/gi, '$1 ')
-        .replace(/\b(q|que)\s+ta\b/gi, 'que está')
-        .replace(/\bta\b/gi, 'está')
-        .replace(/\b(que\s+)?est[aá]\s+acontecendo\s+(nesses?|nestes?|nos)\s+[uú]ltimos?\s+dias\b/gi, 'últimos dias')
-        .replace(/\b(que\s+)?est[aá]\s+acontecendo\b/gi, '')
-        .replace(/\b(oq|o que)\s+q\b/gi, 'o que')
-        .replace(/\b(o que)\b/gi, '')
-        .replace(/\b(nesses?|nestes?|nos)\s+[uú]ltimos?\s+dias\b/gi, 'últimos dias')
-        .replace(/^(sobre|do|da|de|o|a|os|as)\s+/i, '')
-        .replace(/^(sobre|do|da|de|o|a|os|as)\s+/i, '')
-        .replace(/[!?]+$/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-
-    // Limit query length
-    if (query.length > 100) {
-        query = query.substring(0, 100)
-    }
-
-    if (!query || query.length < 3) {
-        return message.trim().slice(0, 100)
-    }
-
-    return query
-}
-
 export function mensagemBuscaPareceAmbigua(message: string): boolean {
     const texto = message.trim().toLowerCase()
     if (!texto) return false
@@ -467,29 +425,10 @@ function ehQueryMuitoParecidaAoPrompt(query: string, promptOriginal: string): bo
     return false
 }
 
-function queryPareceConversacionalParaBusca(query: string): boolean {
-    const queryNormalizada = normalizarTextoComparacaoBusca(query)
-    if (!queryNormalizada) return true
-
-    const totalPalavras = queryNormalizada.split(' ').filter(Boolean).length
-    if (totalPalavras < 2) return true
-    if (totalPalavras > 10) return true
-
-    const padroesConversacionais = [
-        /\b(me|voce|vc|quero|explica|fala|conta|diz)\b/i,
-        /\bo que\b/i,
-        /\bque esta acontecendo\b/i,
-        /\bna internet\b/i,
-    ]
-
-    return padroesConversacionais.some((padrao) => padrao.test(queryNormalizada))
-}
-
 export function queryPlanejadaEhValida(query: string, userMessage: string): boolean {
-    const queryNormalizada = extractSearchQuery(String(query || '')).slice(0, 100)
+    const queryNormalizada = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 100)
     if (!queryNormalizada || queryNormalizada.length < 3) return false
     if (ehQueryMuitoParecidaAoPrompt(queryNormalizada, userMessage)) return false
-    if (queryPareceConversacionalParaBusca(queryNormalizada)) return false
     return true
 }
 
@@ -536,13 +475,14 @@ function tokenizarTermosRelevantes(texto: string): string[] {
 function extrairPlanoBuscaFallback(
     respostaBruta: string,
     userMessage: string
-): { queryPrincipal: string; statusMessage: string; queriesSecundarias: string[] } | null {
+): { queryPrincipal: string; statusMessage: string } | null {
     const texto = limparMarkdownJson(respostaBruta)
     if (!texto) return null
 
-    let queryPrincipal = extractSearchQuery(
-        extrairValorCampo(texto, ['queryPrincipal', 'query'])
-    ).slice(0, 100)
+    let queryPrincipal = extrairValorCampo(texto, ['queryPrincipal', 'query'])
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 100)
 
     if (!queryPrincipal) {
         const termosUsuario = new Set(tokenizarTermosRelevantes(userMessage))
@@ -557,10 +497,9 @@ function extrairPlanoBuscaFallback(
                 !linha.startsWith('[') &&
                 !linha.startsWith(']') &&
                 !linha.toLowerCase().startsWith('statusmessage') &&
-                !linha.toLowerCase().startsWith('queriessecundarias') &&
                 tokenizarTermosRelevantes(linha).filter((termo) => termosUsuario.has(termo)).length >= 2
             )
-        queryPrincipal = extractSearchQuery(primeiraLinhaUtil || '').slice(0, 100)
+        queryPrincipal = String(primeiraLinhaUtil || '').replace(/\s+/g, ' ').trim().slice(0, 100)
     }
 
     if (!queryPlanejadaEhValida(queryPrincipal, userMessage)) {
@@ -569,21 +508,9 @@ function extrairPlanoBuscaFallback(
 
     const statusMessage = extrairValorCampo(texto, ['statusMessage']) || `Vou buscar informações sobre ${queryPrincipal}.`
 
-    const queriesSecundariasBrutas = extrairValorCampo(texto, ['queriesSecundarias'])
-    const queriesSecundarias = queriesSecundariasBrutas
-        ? queriesSecundariasBrutas
-            .split(/[;,|]/)
-            .map((item) => extractSearchQuery(item).slice(0, 100))
-            .filter((item) => item && item.length >= 3)
-            .filter((item) => queryPlanejadaEhValida(item, userMessage))
-            .filter((item, indice, lista) => item !== queryPrincipal && lista.indexOf(item) === indice)
-            .slice(0, 2)
-        : []
-
     return {
         queryPrincipal,
         statusMessage: statusMessage.trim(),
-        queriesSecundarias,
     }
 }
 
@@ -603,7 +530,6 @@ export async function generateSearchPlanWithAI(
     ): SearchPlan => ({
         query: '',
         queryPrincipal: '',
-        queriesSecundarias: [],
         statusMessage,
         planejamentoValido: false,
         origem: 'falha',
@@ -615,16 +541,14 @@ export async function generateSearchPlanWithAI(
         ? chatHistory.slice(-6).map(m => `${m.role === 'user' ? 'Usuário' : 'Assistente'}: ${m.content.substring(0, 200)}`).join('\n')
         : ''
 
-    const systemPrompt = `Você é um assistente que gera queries otimizadas para busca na web.
+    const systemPrompt = `Você é um assistente que gera uma query otimizada para busca na web.
 
 ${conversationContext ? `**Contexto da conversa:**\n${conversationContext}\n\n` : ''}**Mensagem atual do usuário:** "${userMessage}"
 
 Responda EXATAMENTE no formato JSON:
 {
-  "queryPrincipal": "query principal otimizada para DuckDuckGo em português",
-  "queriesSecundarias": ["query secundária 1", "query secundária 2"],
-  "statusMessage": "uma frase natural explicando o que você vai buscar (sem emojis)",
-  "motivoEscalonamento": "frase curta do porquê abrir sub-buscas (interno)"
+  "queryPrincipal": "query de busca otimizada para DuckDuckGo/Brave em português",
+  "statusMessage": "uma frase natural explicando o que você vai buscar (sem emojis)"
 }
 
 Exemplos de statusMessage BOM:
@@ -638,16 +562,14 @@ Exemplos de statusMessage RUIM (não use):
 - "Buscando cotação atual do Bitcoin..." ❌
 
 REGRAS:
-1. A queryPrincipal deve ser otimizada para buscadores (palavras-chave relevantes)
-2. A statusMessage deve ser uma frase natural em primeira pessoa, como se você estivesse conversando
-3. Considere o contexto da conversa ao gerar a query
-4. A queryPrincipal deve ter estilo de palavras-chave (3 a 8 termos), sem texto conversacional
-5. Não use nas queries: "me explica", "o que", "que está acontecendo", "sobre isso"
+1. A queryPrincipal deve ser curta e otimizada para buscadores: use no máximo 3 palavras-chave principais
+2. Gere exatamente UMA query: apenas queryPrincipal. Nunca gere listas, alternativas, queries secundárias ou múltiplas buscas.
+3. A statusMessage deve ser uma frase natural em primeira pessoa, como se você estivesse conversando
+4. Considere o contexto da conversa ao gerar a query
+5. A queryPrincipal deve ser decidida por você; não copie comandos conversacionais do usuário
 6. Quando houver pedido temporal (ex.: "últimos dias", "esta semana"), preserve esse recorte na query
-7. queriesSecundarias deve ter 0 a 2 itens
-8. Só inclua queriesSecundarias quando precisar cobrir contexto+causa+atualização
-9. NÃO copie o prompt do usuário literalmente
-10. Responda APENAS o JSON, nada mais`
+7. NÃO copie o prompt do usuário literalmente
+8. Responda APENAS o JSON, nada mais`
 
     try {
         const response = timeoutMs > 0
@@ -662,27 +584,18 @@ REGRAS:
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]) as Partial<SearchPlan> & { query?: string }
-                const queryPrincipal = extractSearchQuery(
-                    String(parsed.queryPrincipal || parsed.query || '')
-                ).slice(0, 100)
+                const queryPrincipal = String(parsed.queryPrincipal || parsed.query || '')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .slice(0, 100)
 
                 if (!queryPlanejadaEhValida(queryPrincipal, userMessage)) {
                     return criarFalha('query_invalida')
                 }
 
-                const queriesSecundarias = Array.isArray(parsed.queriesSecundarias)
-                    ? parsed.queriesSecundarias
-                        .map((item) => extractSearchQuery(String(item || '')).slice(0, 100))
-                        .filter((item) => item && item.length >= 3)
-                        .filter((item) => queryPlanejadaEhValida(item, userMessage))
-                        .filter((item, indice, lista) => item !== queryPrincipal && lista.indexOf(item) === indice)
-                        .slice(0, 2)
-                    : []
-
                 return {
                     query: queryPrincipal,
                     queryPrincipal,
-                    queriesSecundarias,
                     statusMessage: (parsed.statusMessage || `Vou buscar informações sobre ${queryPrincipal}.`).trim(),
                     motivoEscalonamento: parsed.motivoEscalonamento || undefined,
                     planejamentoValido: true,
@@ -698,7 +611,6 @@ REGRAS:
             return {
                 query: planoFallback.queryPrincipal,
                 queryPrincipal: planoFallback.queryPrincipal,
-                queriesSecundarias: planoFallback.queriesSecundarias,
                 statusMessage: planoFallback.statusMessage,
                 planejamentoValido: true,
                 origem: 'ia',

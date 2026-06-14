@@ -19,12 +19,13 @@ import { useVoiceInput } from './useVoiceInput'
 import { useUserProfile } from './useUserProfile'
 import type { PerfilLatencia } from '../services/ai/types'
 import type { ConfiguracaoOverlayProativo, NivelIntervencaoOverlay } from '../types/overlayProativo'
+import { normalizarChaveOpenRouter } from '../utils/chavesApi'
 
 // ============================================
 // Types
 // ============================================
 
-export type ProvedorAtivo = 'openai' | 'gemini' | 'openrouter' | 'lmstudio'
+export type ProvedorAtivo = 'openai' | 'gemini' | 'openrouter' | 'local'
 
 export interface AppConfig {
     // API Keys
@@ -35,7 +36,7 @@ export interface AppConfig {
     // Provider settings
     provedorAtivo: ProvedorAtivo
     modeloOpenRouter: string
-    modeloLmStudio: string
+    modeloLocal: string
     baseUrlLmStudio: string
     perfilLatencia: PerfilLatencia
     
@@ -63,9 +64,17 @@ export interface UseAppConfigOptions {
 const ATALHO_PADRAO = 'Control+Alt+X'
 const ATALHO_SCREENSHOT_PADRAO = 'Control+Alt+S'
 const OVERLAY_COOLDOWN_PADRAO_MS = 25_000
+const MODELO_OPENROUTER_PADRAO = 'openrouter/auto'
 
 function obterPerfilLatenciaPadrao(provedor: ProvedorAtivo): PerfilLatencia {
-    return provedor === 'lmstudio' ? 'rapido' : 'equilibrado'
+    return provedor === 'local' ? 'rapido' : 'equilibrado'
+}
+
+function loadProvedorAtivo(): ProvedorAtivo {
+    const salvo = loadString('selene_provedor_ativo', 'openai')
+    if (salvo === 'lmstudio') return 'local'
+    if (salvo === 'gemini' || salvo === 'openrouter' || salvo === 'local') return salvo
+    return 'openai'
 }
 
 // ============================================
@@ -74,7 +83,11 @@ function obterPerfilLatenciaPadrao(provedor: ProvedorAtivo): PerfilLatencia {
 
 function loadString(key: string, fallback: string): string {
     try {
-        return localStorage.getItem(key) || fallback
+        const valor = localStorage.getItem(key) || fallback
+        if (key === 'selene_openrouter_key') {
+            return normalizarChaveOpenRouter(valor)
+        }
+        return valor
     } catch {
         return fallback
     }
@@ -82,7 +95,10 @@ function loadString(key: string, fallback: string): string {
 
 function saveString(key: string, value: string): void {
     try {
-        localStorage.setItem(key, value)
+        const valorNormalizado = key === 'selene_openrouter_key'
+            ? normalizarChaveOpenRouter(value)
+            : value
+        localStorage.setItem(key, valorNormalizado)
     } catch (e) {
         console.warn(`[useAppConfig] Failed to save ${key}:`, e)
     }
@@ -155,18 +171,16 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     // Provider Settings State
     // ========================================
     
-    const [provedorAtivo, setProvedorAtivoState] = useState<ProvedorAtivo>(() => 
-        loadString('selene_provedor_ativo', 'openai') as ProvedorAtivo
-    )
+    const [provedorAtivo, setProvedorAtivoState] = useState<ProvedorAtivo>(() => loadProvedorAtivo())
     const [perfilLatencia, setPerfilLatenciaState] = useState<PerfilLatencia>(() => {
-        const provedorInicial = loadString('selene_provedor_ativo', 'openai') as ProvedorAtivo
+        const provedorInicial = loadProvedorAtivo()
         return loadString('selene_perfil_latencia', obterPerfilLatenciaPadrao(provedorInicial)) as PerfilLatencia
     })
     const [modeloOpenRouter, setModeloOpenRouterState] = useState(() => 
         loadString('selene_modelo_openrouter', '')
     )
-    const [modeloLmStudio, setModeloLmStudioState] = useState(() => 
-        loadString('selene_modelo_lmstudio', '')
+    const [modeloLocal, setModeloLocalState] = useState(() => 
+        loadString('selene_modelo_local', loadString('selene_modelo_lmstudio', 'qwen3.5-4b-q4'))
     )
     const [baseUrlLmStudio, setBaseUrlLmStudioState] = useState(() => 
         loadString('selene_baseurl_lmstudio', '')
@@ -217,11 +231,10 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         const chaveOpenAi = apiKey.trim()
         const chaveGemini = geminiKey.trim()
         const chaveOpenRouter = openRouterKey.trim()
-        const urlLmStudio = baseUrlLmStudio.trim()
         const modOpenRouter = modeloOpenRouter.trim()
-        const modLmStudio = modeloLmStudio.trim()
+        const modLocal = modeloLocal.trim()
 
-        if (!chaveOpenAi && !chaveGemini && !chaveOpenRouter && !urlLmStudio) {
+        if (!chaveOpenAi && !chaveGemini && !chaveOpenRouter && provedorAtivo !== 'local') {
             return null
         }
 
@@ -230,9 +243,9 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
             openai: chaveOpenAi ? { key: chaveOpenAi } : undefined,
             gemini: chaveGemini ? { key: chaveGemini } : undefined,
             openRouter: chaveOpenRouter ? { key: chaveOpenRouter, model: modOpenRouter } : undefined,
-            lmStudio: urlLmStudio ? { baseUrl: urlLmStudio, model: modLmStudio } : undefined
+            local: { model: modLocal || 'qwen3.5-4b-q4' }
         })
-    }, [apiKey, geminiKey, openRouterKey, modeloOpenRouter, modeloLmStudio, baseUrlLmStudio, provedorAtivo])
+    }, [apiKey, geminiKey, openRouterKey, modeloOpenRouter, modeloLocal, provedorAtivo])
 
     const criarOuObterServico = useCallback(() => {
         return aiService
@@ -253,8 +266,9 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     }, [])
     
     const setOpenRouterKey = useCallback((key: string) => {
-        setOpenRouterKeyState(key)
-        saveString('selene_openrouter_key', key.trim())
+        const chaveNormalizada = normalizarChaveOpenRouter(key)
+        setOpenRouterKeyState(chaveNormalizada)
+        saveString('selene_openrouter_key', chaveNormalizada)
     }, [])
     
     const setProvedorAtivo = useCallback((provedor: ProvedorAtivo) => {
@@ -280,9 +294,9 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         saveString('selene_modelo_openrouter', modelo)
     }, [])
     
-    const setModeloLmStudio = useCallback((modelo: string) => {
-        setModeloLmStudioState(modelo)
-        saveString('selene_modelo_lmstudio', modelo)
+    const setModeloLocal = useCallback((modelo: string) => {
+        setModeloLocalState(modelo)
+        saveString('selene_modelo_local', modelo)
     }, [])
     
     const setBaseUrlLmStudio = useCallback((url: string) => {
@@ -352,6 +366,17 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
     // ========================================
     
     const voiceInput = useVoiceInput(aiService)
+
+    useEffect(() => {
+        const chavePersistida = localStorage.getItem('selene_openrouter_key') || ''
+        const chaveNormalizada = normalizarChaveOpenRouter(chavePersistida)
+        if (chavePersistida !== chaveNormalizada) {
+            saveString('selene_openrouter_key', chaveNormalizada)
+        }
+        if (localStorage.getItem('selene_provedor_ativo') === 'lmstudio') {
+            saveString('selene_provedor_ativo', 'local')
+        }
+    }, [])
     
     // ========================================
     // Effects: Shortcut Registration
@@ -406,7 +431,7 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         provedorAtivo,
         perfilLatencia,
         modeloOpenRouter,
-        modeloLmStudio,
+        modeloLocal,
         baseUrlLmStudio,
         systemPrompt,
         atalhoGramatical,
@@ -442,14 +467,16 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         setPerfilLatencia,
         modeloOpenRouter,
         setModeloOpenRouter,
-        modeloLmStudio,
-        setModeloLmStudio,
+        modeloLocal,
+        setModeloLocal,
+        modeloLmStudio: modeloLocal,
+        setModeloLmStudio: setModeloLocal,
         baseUrlLmStudio,
         setBaseUrlLmStudio,
-        modeloAtivo: provedorAtivo === 'lmstudio'
-            ? modeloLmStudio
+        modeloAtivo: provedorAtivo === 'local'
+            ? modeloLocal || 'qwen3.5-4b-q4'
             : provedorAtivo === 'openrouter'
-            ? modeloOpenRouter
+            ? modeloOpenRouter || MODELO_OPENROUTER_PADRAO
             : provedorAtivo === 'openai'
             ? 'gpt-4o'
             : 'gemini-2.0-flash',

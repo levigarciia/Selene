@@ -7,7 +7,7 @@ export type MensagemHistoricoIA = { role: 'user' | 'assistant'; content: string;
 export type MensagemChat = { role: 'system' | 'user' | 'assistant'; content: ConteudoMensagemChat }
 
 // Provedores suportados
-export type ProvedorID = 'openai' | 'gemini' | 'openrouter' | 'lmstudio'
+export type ProvedorID = 'openai' | 'gemini' | 'openrouter' | 'local'
 
 // Configuração geral (pode ser usada pela Factory ou Service principal)
 export interface AIConfig {
@@ -15,5 +15,5 @@ export interface AIConfig {
     openai?: { key: string; model?: string }
     gemini?: { key: string }
     openRouter?: { key: string; model?: string }
-    lmStudio?: { baseUrl: string; model?: string }
+    local?: { model?: string }
 }

@@ -210,6 +210,19 @@ export function criarConteudoHistoricoComResumoVisual(
         partes.push(conteudoBase)
     }
 
+    // Se a mensagem tiver arquivos anexados, injetamos no histórico também
+    if (mensagem.arquivos && mensagem.arquivos.length > 0) {
+        const blocoArquivos = mensagem.arquivos
+            .filter(file => file.content && file.content.trim())
+            .map(file => {
+                return `[Documento Anexado: ${file.name}]\n--- Conteúdo do Documento ---\n${file.content}\n--- Fim do Documento ---`
+            })
+            .join('\n\n')
+        if (blocoArquivos) {
+            partes.push(blocoArquivos)
+        }
+    }
+
     if (incluirResumoVisual) {
         const blocoResumo = criarBlocoResumoImagens(
             mensagem,

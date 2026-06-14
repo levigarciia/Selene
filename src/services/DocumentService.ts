@@ -49,7 +49,11 @@ export function obterLimiteMaximoArquivo(file: File): number {
 }
 
 // Extrai texto de um arquivo suportado
-export async function extractTextFromFile(file: File): Promise<string> {
+interface OpcoesExtracaoArquivo {
+    pdfMaxPages?: number
+}
+
+export async function extractTextFromFile(file: File, opcoes: OpcoesExtracaoArquivo = {}): Promise<string> {
     const type = getFileType(file)
     
     switch (type) {
@@ -57,7 +61,7 @@ export async function extractTextFromFile(file: File): Promise<string> {
         case 'md':
             return await extractFromText(file)
         case 'pdf':
-            return await extractFromPDF(file)
+            return await extractFromPDF(file, opcoes)
         case 'docx':
             return await extractFromDOCX(file)
         default:
@@ -70,56 +74,116 @@ async function extractFromText(file: File): Promise<string> {
     return await file.text()
 }
 
-// Extrai conteúdo de PDF usando pdfjs-dist
-async function extractFromPDF(file: File): Promise<string> {
+// Extrai texto de um PDF a partir de um ArrayBuffer/Uint8Array
+export async function extractTextFromPdfBuffer(arrayBuffer: ArrayBuffer, startPage?: number, endPage?: number): Promise<string> {
     try {
-        // Import dinâmico para carregar o parser só quando necessário
         const pdfjs = await import('pdfjs-dist')
-        
-        // Usa o worker empacotado localmente para funcionar no Electron sem depender de CDN
         pdfjs.GlobalWorkerOptions.workerSrc = caminhoWorkerPdf
         
-        const arrayBuffer = await file.arrayBuffer()
         const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
         
+        const paginaInicial = startPage ? Math.max(1, startPage) : 1
+        const paginaFinal = endPage ? Math.min(pdf.numPages, endPage) : pdf.numPages
+        
         const textParts: string[] = []
+        for (let i = paginaInicial; i <= paginaFinal; i++) {
+            const page = await pdf.getPage(i)
+            const textContent = await page.getTextContent()
+            const pageText = textContent.items
+                .map((item) => ('str' in item ? item.str : ''))
+                .join(' ')
+            textParts.push(`--- Página ${i} ---\n` + pageText.trim())
+        }
+        
+        return textParts.join('\n\n')
+    } catch (error) {
+        console.error('[DocumentService] Failed to extract PDF from buffer:', error)
+        throw new Error(`Falha ao processar PDF: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+    }
+}
+
+// Extrai texto de um DOCX a partir de um ArrayBuffer/Uint8Array
+export async function extractTextFromDocxBuffer(arrayBuffer: ArrayBuffer): Promise<string> {
+    try {
+        const mammoth = await import('mammoth')
+        const result = await mammoth.extractRawText({ arrayBuffer })
+        return result.value
+    } catch (error) {
+        console.error('[DocumentService] Failed to extract DOCX from buffer:', error)
+        throw new Error(`Falha ao processar DOCX: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+    }
+}
+
+// Busca textual dentro de um PDF a partir de um ArrayBuffer
+export async function searchPdfBuffer(arrayBuffer: ArrayBuffer, query: string): Promise<{ matches: Array<{ page: number; text: string }> }> {
+    try {
+        const pdfjs = await import('pdfjs-dist')
+        pdfjs.GlobalWorkerOptions.workerSrc = caminhoWorkerPdf
+        
+        const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise
+        const normalizedQuery = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+        
+        const matches: Array<{ page: number; text: string }> = []
+        
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i)
             const textContent = await page.getTextContent()
             const pageText = textContent.items
                 .map((item) => ('str' in item ? item.str : ''))
                 .join(' ')
-            textParts.push(pageText)
+            
+            const normalizedPageText = pageText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            
+            if (normalizedPageText.includes(normalizedQuery)) {
+                matches.push({
+                    page: i,
+                    text: pageText.trim()
+                })
+                // Limita a 5 páginas com matches para não estourar o limite de tokens/memória
+                if (matches.length >= 5) {
+                    break
+                }
+            }
         }
         
-        return textParts.join('\n\n')
+        return { matches }
     } catch (error) {
-        console.error('[DocumentService] Failed to extract PDF:', error)
-        throw new Error(`Falha ao processar PDF: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
+        console.error('[DocumentService] Failed to search PDF:', error)
+        throw new Error(`Falha ao buscar no PDF: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
     }
+}
+
+// Extrai conteúdo de PDF usando pdfjs-dist
+async function extractFromPDF(file: File, opcoes: OpcoesExtracaoArquivo = {}): Promise<string> {
+    const arrayBuffer = await file.arrayBuffer()
+    const paginaFinal = opcoes.pdfMaxPages ? Math.max(1, opcoes.pdfMaxPages) : undefined
+    return await extractTextFromPdfBuffer(arrayBuffer, 1, paginaFinal)
 }
 
 // Extrai conteúdo de DOCX usando mammoth
 async function extractFromDOCX(file: File): Promise<string> {
-    try {
-        const mammoth = await import('mammoth')
-        const arrayBuffer = await file.arrayBuffer()
-        const result = await mammoth.extractRawText({ arrayBuffer })
-        return result.value
-    } catch (error) {
-        console.error('[DocumentService] Failed to extract DOCX:', error)
-        throw new Error(`Falha ao processar DOCX: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
-    }
+    const arrayBuffer = await file.arrayBuffer()
+    return await extractTextFromDocxBuffer(arrayBuffer)
 }
 
 // Cria um ProjectFile a partir de um File
 export async function processFileForProject(file: File): Promise<ProjectFile> {
-    const content = await extractTextFromFile(file)
+    const tipo = getFileType(file)
+    const textoExtraido = await extractTextFromFile(file, tipo === 'pdf' ? { pdfMaxPages: 5 } : {})
+    const content = tipo === 'pdf'
+        ? [
+            `[Prévia limitada do PDF: ${file.name}]`,
+            'Apenas as páginas 1 a 5 foram extraídas para o contexto do projeto.',
+            'Para responder sobre uma página específica, anexe o PDF na conversa ou use uma ferramenta de leitura com página explícita.',
+            '',
+            textoExtraido,
+        ].join('\n')
+        : textoExtraido
     
     return {
         id: crypto.randomUUID(),
         name: file.name,
-        type: getFileType(file),
+        type: tipo,
         size: file.size,
         content,
         addedAt: Date.now()

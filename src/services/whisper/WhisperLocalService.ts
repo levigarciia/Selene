@@ -104,7 +104,7 @@ export class WhisperLocalService {
             }
 
             // Initialize whisper-node in main process
-            const initResult = await window.electronAPI?.whisperInitialize?.(this.config)
+            const initResult = await window.electronAPI?.whisperInitialize?.({ ...this.config })
             
             if (!initResult?.success) {
                 throw new Error(initResult?.error || 'Initialization failed')
@@ -151,7 +151,7 @@ export class WhisperLocalService {
             const buffer = Buffer.from(arrayBuffer)
 
             // Call main process to transcribe
-            const result = await window.electronAPI?.whisperTranscribe?.(buffer, this.config)
+            const result = await window.electronAPI?.whisperTranscribe?.(buffer, { ...this.config })
 
             if (!result?.success) {
                 throw new Error(result?.error || 'Transcription failed')

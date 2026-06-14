@@ -246,7 +246,7 @@ export function useLocalWhisperStream(config: LocalWhisperStreamConfig = {}) {
                 ...prev,
                 isSessionActive: true,
                 isRecording: true,
-                sessionId: sessionResult.sessionId,
+                sessionId: sessionResult.sessionId ?? null,
                 currentTranscript: '',
                 error: null
             }))

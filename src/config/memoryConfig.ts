@@ -1,7 +1,7 @@
 /**
  * Selene Memory & Cross-Chat Configuration
  * Version: 1.0.0
- * 
+ *
  * Este arquivo contém todas as configurações para os sistemas de memória
  * automática e referência entre chats. Valores são calibrados para
  * baixo custo de tokens e alta precisão.
@@ -111,6 +111,12 @@ export const MEMORY_AUTOPILOT_CONFIG = {
 // ============================================================================
 
 export const MEMORY_CATEGORIES = {
+    /** Identidade profissional ou preferências de identidade explícitas */
+    IDENTITY: 'identity',
+
+    /** Dados de contato não sensíveis citados como contexto útil */
+    CONTACT: 'contact',
+
     /** Preferências pessoais do usuário */
     PREFERENCE: 'preference',
 
@@ -130,7 +136,10 @@ export const MEMORY_CATEGORIES = {
     COMMUNICATION_STYLE: 'communication_style',
 
     /** Conhecimento ou expertise */
-    EXPERTISE: 'expertise'
+    EXPERTISE: 'expertise',
+
+    /** Fatos duráveis não sensíveis sobre projetos, rotina ou ambiente */
+    FACT: 'fact'
 } as const
 
 export type MemoryCategory = typeof MEMORY_CATEGORIES[keyof typeof MEMORY_CATEGORIES]
@@ -167,26 +176,30 @@ export const INTERNAL_PROMPTS = {
     version: '1.0.0',
 
     /** Prompt para extração de memórias */
-    MEMORY_EXTRACTION: `Você é um sistema de extração de memórias. Analise as mensagens abaixo e extraia APENAS informações duráveis e de alto sinal que seriam úteis lembrar em conversas futuras.
+    MEMORY_EXTRACTION: `Você é um sistema de extração de memórias. Analise as mensagens abaixo e extraia APENAS informações duráveis, explícitas e de alto sinal que seriam úteis lembrar em conversas futuras.
 
 EXTRAIA APENAS:
+- Identidade profissional ou forma explícita como o usuário quer ser tratado
 - Preferências estáveis do usuário (estilo, tom, formato)
 - Contexto recorrente de projetos
 - Stack tecnológico/ferramentas usadas frequentemente
 - Objetivos ou metas repetidos
 - Informações profissionais relevantes
+- Fatos duráveis não sensíveis sobre rotina, ambiente ou constraints de trabalho
+- Dados de contato apenas quando o usuário os apresentar como informação útil para trabalho
 
 NÃO EXTRAIA:
-- Informações sensíveis (senhas, dados financeiros, médicos)
+- Informações sensíveis (senhas, tokens, dados financeiros, médicos, jurídicos)
 - Contexto temporário ou específico de uma tarefa
 - Opiniões momentâneas ou emoções
-- Dados pessoais identificáveis
+- Dados pessoais identificáveis sem utilidade clara em futuras conversas
+- Suposições, inferências fracas ou preferências que o usuário não afirmou
 
 Responda APENAS com um JSON válido no formato:
 {
   "memories": [
     {
-      "category": "preference|project_context|tech_stack|goal|professional|communication_style|expertise",
+      "category": "identity|contact|preference|project_context|tech_stack|goal|professional|communication_style|expertise|fact",
       "text": "texto curto e objetivo (max 200 chars)",
       "tags": ["tag1", "tag2"],
       "confidence": 0.0-1.0,

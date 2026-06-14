@@ -2,13 +2,12 @@ import { describe, expect, test } from 'vitest'
 import { generateSearchPlanWithAI } from '../WebSearchService'
 
 describe('generateSearchPlanWithAI', () => {
-    test('deve transformar query conversacional em query válida de busca', async () => {
+    test('deve preservar a query válida decidida pela IA', async () => {
         const plano = await generateSearchPlanWithAI(
             'Me explica exatamente qual a treta do Banco Master nos últimos dias',
             [],
             async () => JSON.stringify({
-                queryPrincipal: 'explica banco master crise últimos dias',
-                queriesSecundarias: ['banco master explicação crise'],
+                queryPrincipal: 'Banco Master crise',
                 statusMessage: 'Vou buscar o contexto recente do Banco Master.'
             }),
             2500
@@ -16,8 +15,7 @@ describe('generateSearchPlanWithAI', () => {
 
         expect(plano.planejamentoValido).toBe(true)
         expect(plano.origem).toBe('ia')
-        expect(plano.queryPrincipal).toBe('banco master crise últimos dias')
-        expect(plano.queryPrincipal).not.toContain('explica')
+        expect(plano.queryPrincipal).toBe('Banco Master crise')
     })
 
     test('deve marcar timeout como falha de planejamento', async () => {
@@ -53,7 +51,6 @@ describe('generateSearchPlanWithAI', () => {
             [],
             async () => JSON.stringify({
                 queryPrincipal: mensagemUsuario,
-                queriesSecundarias: [],
                 statusMessage: 'Vou buscar informações.'
             }),
             2500

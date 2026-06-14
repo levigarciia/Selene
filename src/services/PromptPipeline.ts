@@ -14,6 +14,8 @@ import { getContextForPrompt, getCrossChatService } from './crosschat/CrossChatC
 import { getAutoMemoriesForPrompt, getMemoryAutopilot } from './memory/MemoryAutopilot'
 import type { Project } from '../types/project'
 import { criarPromptSistemaProjeto } from './ProjectContextService'
+import { detectarSkillsRelevantes } from './tools/skills/skillsDetector'
+
 
 // ============================================================================
 // TIPOS
@@ -286,6 +288,17 @@ export async function composePromptComOrcamento(
     const baseAplicado = aplicarOrcamentoPrompt(context.systemPrompt, orcamento.systemBaseTokens)
     partesPrompt.push(baseAplicado.texto)
     additionalTokens += Math.max(0, baseAplicado.tokensFinais - baseAplicado.tokensOriginais)
+
+    // Injetar Habilidades especializadas (Skills) baseadas em palavras-chave da mensagem do usuário
+    const skillsPrompt = detectarSkillsRelevantes(context.currentUserMessage)
+    if (skillsPrompt) {
+        const skillsAplicadas = aplicarOrcamentoPrompt(skillsPrompt, 800)
+        if (skillsAplicadas.texto) {
+            partesPrompt.push(skillsAplicadas.texto)
+            additionalTokens += skillsAplicadas.tokensFinais
+        }
+    }
+
 
     // 2. Data/hora somente quando necessário
     if (incluirDataHora) {

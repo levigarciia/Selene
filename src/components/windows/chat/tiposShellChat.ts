@@ -1,4 +1,4 @@
-export type AbaShellChat = 'drawer' | 'hub-contexto' | 'seletor-projetos' | 'perfil' | 'resumo-contexto'
+export type AbaShellChat = 'hub-contexto' | 'seletor-projetos' | 'perfil' | 'resumo-contexto'
 
 export interface SeloAcaoHomeChat {
     texto: string

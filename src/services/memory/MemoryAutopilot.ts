@@ -1,7 +1,7 @@
 /**
  * Memory Autopilot Service
  * Version: 1.0.0
- * 
+ *
  * Serviço principal de extração automática de memórias.
  * Detecta, extrai e salva memórias duráveis e de alto sinal.
  */
@@ -25,7 +25,9 @@ import {
 import {
     extractMemories,
     deduplicateMemories,
-    areSimilar
+    areSimilar,
+    findSimilarMemory,
+    scoreMemoryRelevance
 } from './MemoryExtractor'
 import { pertenceAoEscopo } from './escopoMemoria'
 import { carregarMapaProjetosPorConversa } from '../conversasPersistidas'
@@ -251,16 +253,31 @@ export class MemoryAutopilotService {
                 return metrics
             }
 
-            // Deduplicar contra existentes
-            const existingTexts = state.memories.map(m => m.text)
-            const { unique, duplicates } = deduplicateMemories(extracted, existingTexts)
+            const unique: typeof extracted = []
+            let duplicates = 0
+
+            for (const memory of extracted) {
+                const similar = findSimilarMemory(memory, state.memories)
+                if (!similar) {
+                    unique.push(memory)
+                    continue
+                }
+
+                atualizarMemoriaSimilar(similar, memory)
+                duplicates++
+                metrics.updated++
+            }
 
             metrics.discardedDuplicate = duplicates
 
+            const deduplicated = deduplicateMemories(unique, [])
+            const uniqueCandidates = deduplicated.unique
+            metrics.discardedDuplicate += deduplicated.duplicates
+
             // Aplicar limite diário
             const remaining = getRemainingToday()
-            const toSave = unique.slice(0, remaining)
-            metrics.discardedDailyLimit = unique.length - toSave.length
+            const toSave = uniqueCandidates.slice(0, remaining)
+            metrics.discardedDailyLimit = uniqueCandidates.length - toSave.length
 
             // Aplicar limite total
             const spaceAvailable = MEMORY_AUTOPILOT_CONFIG.MAX_AUTO_MEMORIES - state.memories.length
@@ -282,8 +299,10 @@ export class MemoryAutopilotService {
             // Atualizar métricas
             state.metrics.totalGenerated += metrics.generated
             state.metrics.totalSaved += finalToSave.length
-            state.metrics.totalDiscarded += metrics.discardedLowConfidence + duplicates + metrics.discardedDailyLimit
-            state.metrics.totalDeduplicated += duplicates
+            state.metrics.totalDiscarded += metrics.discardedLowConfidence +
+                metrics.discardedDuplicate +
+                metrics.discardedDailyLimit
+            state.metrics.totalDeduplicated += metrics.discardedDuplicate
             state.metrics.lastUpdated = Date.now()
 
             metrics.saved = finalToSave.length
@@ -291,7 +310,7 @@ export class MemoryAutopilotService {
             saveState(state)
 
             if (FEATURE_FLAGS.DEBUG_LOGGING) {
-                console.log('[MemoryAutopilot] Saved', finalToSave.length, 'new memories')
+                console.log('[MemoryAutopilot] Saved', finalToSave.length, 'new memories and updated', metrics.updated)
             }
 
             return metrics
@@ -326,9 +345,19 @@ export class MemoryAutopilotService {
             return ''
         }
 
-        // Ordenar por confiança e data
+        const consultaOrdenacao = consulta || ''
+
+        // Ordenar por relevância, reforço, confiança e data
         const sorted = [...memoriasFiltradas].sort((a, b) => {
-            // Priorizar mais recentes e com maior confiança
+            if (consultaOrdenacao) {
+                const scoreA = calcularScoreMemoria(a, consultaOrdenacao)
+                const scoreB = calcularScoreMemoria(b, consultaOrdenacao)
+                if (Math.abs(scoreB - scoreA) > 0.05) return scoreB - scoreA
+            }
+
+            const reinforceDiff = b.reinforcementCount - a.reinforcementCount
+            if (reinforceDiff !== 0) return reinforceDiff
+
             const confidenceDiff = b.confidence - a.confidence
             if (Math.abs(confidenceDiff) > 0.1) return confidenceDiff
             return b.updatedAt - a.updatedAt
@@ -495,29 +524,45 @@ function filtrarMemoriasPorRelevancia(
         return memoriasNoEscopo
     }
 
-    return memoriasNoEscopo.filter(memoria => {
-        if (areSimilar(consultaNormalizada, memoria.text, MEMORY_AUTOPILOT_CONFIG.RELEVANCIA_MINIMA_PARA_PROMPT)) {
-            return true
-        }
+    return memoriasNoEscopo.filter(memoria =>
+        calcularScoreMemoria(memoria, consultaNormalizada) >= MEMORY_AUTOPILOT_CONFIG.RELEVANCIA_MINIMA_PARA_PROMPT
+    )
+}
 
-        if (memoria.tags.length > 0) {
-            const tagsNormalizadas = memoria.tags.map(tag => normalizarTextoParaRelevancia(tag))
-            return tagsNormalizadas.some(tag => tag && consultaNormalizada.includes(tag))
-        }
+function calcularScoreMemoria(memoria: AutoMemory, consulta: string): number {
+    const scoreBase = scoreMemoryRelevance(consulta, memoria.text, memoria.tags, memoria.category)
+    const reforco = Math.min(0.12, memoria.reinforcementCount * 0.015)
+    const confianca = memoria.confidence * 0.08
+    return Math.min(1, scoreBase + reforco + confianca)
+}
 
-        return false
-    })
+function atualizarMemoriaSimilar(memoria: AutoMemory, novaMemoria: {
+    text: string
+    tags: string[]
+    confidence: number
+}): void {
+    memoria.reinforcementCount++
+    memoria.updatedAt = Date.now()
+    memoria.confidence = Math.max(memoria.confidence, novaMemoria.confidence)
+    memoria.tags = [...new Set([...memoria.tags, ...novaMemoria.tags])].slice(0, 8)
+
+    if (novaMemoria.text.length > memoria.text.length && novaMemoria.confidence >= memoria.confidence - 0.05) {
+        memoria.text = novaMemoria.text.slice(0, MEMORY_AUTOPILOT_CONFIG.MAX_MEMORY_TEXT_LENGTH)
+    }
 }
 
 function formatCategoryLabel(category: string): string {
     const labels: Record<string, string> = {
         preference: 'Preferências',
+        identity: 'Identidade',
+        contact: 'Contato',
         project_context: 'Contexto de Projeto',
         tech_stack: 'Stack Tecnológica',
         goal: 'Objetivos',
         professional: 'Profissional',
         communication_style: 'Estilo de Comunicação',
-        expertise: 'Expertise'
+        expertise: 'Expertise',
+        fact: 'Fatos'
     }
     return labels[category] || category
 }

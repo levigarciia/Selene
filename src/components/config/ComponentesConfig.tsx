@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * Primitivos visuais para a tela de configurações.
  * Design baseado em linhas, sem cards pesados.

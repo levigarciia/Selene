@@ -8,11 +8,12 @@ export { InputArea } from './InputArea'
 export { BarraSuperiorChat } from './BarraSuperiorChat'
 export { RailChat } from './RailChat'
 export { PainelInicialChat } from './PainelInicialChat'
-export { DrawerNavegacaoChat } from './DrawerNavegacaoChat'
 export { HubContextoChat } from './HubContextoChat'
 export { SeletorProjetosChat } from './SeletorProjetosChat'
 export { PopoverPerfilChat } from './PopoverPerfilChat'
 export { PopoverContextoChat } from './PopoverContextoChat'
+export { SeletorModeloOpenRouter } from './SeletorModeloOpenRouter'
+export { SeletorModeloLocal } from './SeletorModeloLocal'
 
 // Investigation Components
 export { ClarificationCard } from './ClarificationCard'

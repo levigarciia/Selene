@@ -6,7 +6,8 @@
         "outDir": "dist-electron",
         "strict": true,
         "sourceMap": true,
-        "esModuleInterop": true
+        "esModuleInterop": true,
+        "skipLibCheck": true
     },
     "include": [
         "electron/**/*"

@@ -1,19 +1,30 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Globe, Search, Wrench } from 'lucide-react'
-import type { ResumoContextoAtivo } from '../tiposShellChat'
+import { Bot, Check, FolderClosed, Images, Plug } from 'lucide-react'
+import type { ItemHubContexto, ResumoContextoAtivo } from '../tiposShellChat'
 
 interface PopoverContextoChatProps {
     aberto: boolean
     resumo: ResumoContextoAtivo
+    itensContexto: ItemHubContexto[]
     onClose: () => void
+    onSelecionarAssistente: (assistantId: string | null) => void
+    onSelecionarProjeto: (projectId: string) => void
 }
 
 export const PopoverContextoChat: React.FC<PopoverContextoChatProps> = ({
     aberto,
     resumo,
+    itensContexto,
     onClose,
+    onSelecionarAssistente,
+    onSelecionarProjeto,
 }) => {
+    const assistentes = itensContexto.filter((item) => item.tipo === 'assistente')
+    const projetos = itensContexto.filter((item) => item.tipo === 'projeto')
+    const imagens = resumo.itens.find((item) => item.id === 'imagens')
+    const apps = resumo.itens.find((item) => item.id === 'apps')
+
     return (
         <AnimatePresence>
             {aberto && (
@@ -37,57 +48,97 @@ export const PopoverContextoChat: React.FC<PopoverContextoChatProps> = ({
                         </button>
                     </div>
 
-                    <div className="space-y-2">
-                        {resumo.itens.map((item) => (
-                            <div
-                                key={item.id}
-                                className={`rounded-2xl border px-3 py-3 ${
-                                    item.ativo
-                                        ? 'border-white/[0.08] bg-white/[0.04] text-white'
-                                        : 'border-white/[0.04] bg-white/[0.02] text-[#98a0ae]'
-                                }`}
-                            >
-                                <div className="flex items-center justify-between gap-3">
-                                    <span className="text-[13px] font-medium">{item.titulo}</span>
-                                    {item.quantidade ? (
-                                        <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px]">
-                                            {item.quantidade}
-                                        </span>
-                                    ) : null}
+                    <div className="space-y-3">
+                        <section className="rounded-2xl border border-white/[0.05] bg-white/[0.025] p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-[13px] font-medium text-white">
+                                    <Bot size={14} className="text-[#b8b6ff]" />
+                                    Assistente
                                 </div>
-                                <div className="mt-1 text-[11px] text-[#88909d]">{item.descricao}</div>
                             </div>
-                        ))}
-                    </div>
 
-                    <div className="mt-3 rounded-2xl border border-white/[0.05] bg-white/[0.03] px-3 py-3 text-xs text-[#a0a7b4]">
-                        <div className="flex items-center justify-between">
-                            <span>Provedor</span>
-                            <span className="text-white">{resumo.provedor}</span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between">
-                            <span>Modelo</span>
-                            <span className="max-w-[160px] truncate text-white">{resumo.modelo}</span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between">
-                            <span>Latência</span>
-                            <span className="text-white">{resumo.perfilLatencia}</span>
-                        </div>
-                    </div>
+                            <div className="space-y-1.5">
+                                {assistentes.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => onSelecionarAssistente(item.assistantId ?? null)}
+                                        className={`flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                                            item.ativo
+                                                ? 'border-[#5b57b0]/55 bg-[#201f38] text-white'
+                                                : 'border-white/[0.04] bg-white/[0.02] text-[#d6dbe5] hover:bg-white/[0.05]'
+                                        }`}
+                                    >
+                                        <span className="min-w-0">
+                                            <span className="block truncate text-[12px] font-medium">{item.titulo}</span>
+                                            <span className="mt-0.5 block truncate text-[11px] text-[#88909d]">
+                                                {item.descricao}
+                                            </span>
+                                        </span>
+                                        {item.ativo && <Check size={13} className="mt-0.5 shrink-0 text-[#b8b6ff]" />}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
 
-                    <div className="mt-3 flex items-center gap-2 text-[11px] text-[#88909d]">
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${resumo.webSearchEnabled ? 'bg-[#223149] text-[#a8bee8]' : 'bg-white/[0.04]'}`}>
-                            <Globe size={12} />
-                            Web
-                        </span>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${resumo.investigateMode ? 'bg-[#30274a] text-[#c2b7ff]' : 'bg-white/[0.04]'}`}>
-                            <Search size={12} />
-                            Investigar
-                        </span>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 ${resumo.toolCallingAtivo ? 'bg-[#23382f] text-[#a8d8c4]' : 'bg-white/[0.04]'}`}>
-                            <Wrench size={12} />
-                            Tools
-                        </span>
+                        <section className="rounded-2xl border border-white/[0.05] bg-white/[0.025] p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-[13px] font-medium text-white">
+                                    <FolderClosed size={14} className="text-[#f0c769]" />
+                                    Projeto
+                                </div>
+                            </div>
+
+                            {projetos.length > 0 ? (
+                                <div className="space-y-1.5">
+                                    {projetos.map((item) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => item.projectId && onSelecionarProjeto(item.projectId)}
+                                            className={`flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
+                                                item.ativo
+                                                    ? 'border-[#5b57b0]/55 bg-[#201f38] text-white'
+                                                    : 'border-white/[0.04] bg-white/[0.02] text-[#d6dbe5] hover:bg-white/[0.05]'
+                                            }`}
+                                        >
+                                            <span className="min-w-0">
+                                                <span className="block truncate text-[12px] font-medium">{item.titulo}</span>
+                                                <span className="mt-0.5 block truncate text-[11px] text-[#88909d]">
+                                                    {item.descricao}
+                                                </span>
+                                            </span>
+                                            {item.ativo && <Check size={13} className="mt-0.5 shrink-0 text-[#b8b6ff]" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] px-3 py-2 text-[12px] text-[#98a0ae]">
+                                    Sem contexto de projeto
+                                </div>
+                            )}
+                        </section>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            {[imagens, apps].filter(Boolean).map((item) => (
+                                <div
+                                    key={item!.id}
+                                    className={`rounded-2xl border px-3 py-3 ${
+                                        item!.ativo
+                                            ? 'border-white/[0.08] bg-white/[0.04] text-white'
+                                            : 'border-white/[0.04] bg-white/[0.02] text-[#98a0ae]'
+                                    }`}
+                                >
+                                    <div className="mb-1 flex items-center gap-2 text-[12px] font-medium">
+                                        {item!.id === 'imagens'
+                                            ? <Images size={13} className="text-[#9fb4de]" />
+                                            : <Plug size={13} className="text-[#9fb4de]" />}
+                                        {item!.titulo}
+                                    </div>
+                                    <div className="truncate text-[11px] text-[#88909d]">{item!.descricao}</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </motion.div>
             )}

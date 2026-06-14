@@ -310,6 +310,13 @@ function formatarTipoArquivo(tipo: ProjectFile['type']): string {
     return tipo.toUpperCase()
 }
 
+function descreverArquivoProjeto(file: ProjectFile): string {
+    const limite = file.type === 'pdf' && file.content.includes('[Prévia limitada do PDF')
+        ? ', prévia limitada'
+        : ''
+    return `${file.name} (${formatarTipoArquivo(file.type)}, ${formatarTamanhoArquivo(file.size)}${limite})`
+}
+
 interface OpcoesPromptProjeto {
     maxCaracteresTotais?: number
     maxArquivosInventario?: number
@@ -348,9 +355,7 @@ export function criarContextoArquivosProjeto(
     const secoes: string[] = []
 
     if (project.files.length > 0) {
-        const linhasArquivos = inventario.map((file, indice) =>
-            `${indice + 1}. ${file.name} (${formatarTipoArquivo(file.type)}, ${formatarTamanhoArquivo(file.size)})`
-        )
+        const linhasArquivos = inventario.map((file, indice) => `${indice + 1}. ${descreverArquivoProjeto(file)}`)
 
         if (arquivosRestantes > 0) {
             linhasArquivos.push(`... e mais ${arquivosRestantes} arquivo(s).`)

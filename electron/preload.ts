@@ -16,6 +16,14 @@ type MensagemChatIPC = {
     raciocinio?: string
 }
 
+type MensagemLocalLLMIPC = { role: 'system' | 'user' | 'assistant'; content: unknown }
+type ConfigServidorLocalLLMIPC = Record<string, string | number | boolean | null | undefined>
+interface OpcoesStreamLocalLLMIPC {
+    temperature?: number
+    maxTokens?: number
+    reasoningAtivo?: boolean
+}
+
 type StatusAtualizacaoIPC = {
     status: string
     version?: string
@@ -216,6 +224,87 @@ contextBridge.exposeInMainWorld('electronAPI', {
             return () => ipcRenderer.removeListener('whisper-local:transcription-error', handler)
         }
     },
+    localParakeet: {
+        listModels: () => ipcRenderer.invoke('parakeet-local:list-models'),
+        getModelStatus: (modelName: string) => ipcRenderer.invoke('parakeet-local:get-model-status', modelName),
+        downloadModel: (modelName: string) => ipcRenderer.invoke('parakeet-local:download-model', modelName),
+        cancelDownload: (modelName: string) => ipcRenderer.invoke('parakeet-local:cancel-download', modelName),
+        deleteModel: (modelName: string) => ipcRenderer.invoke('parakeet-local:delete-model', modelName),
+        startSession: (config: { model?: string; language?: string; speakerLabel?: string }) =>
+            ipcRenderer.invoke('parakeet-local:start-session', config),
+        sendAudioChunk: (sessionId: string, audioData: ArrayBuffer) =>
+            ipcRenderer.invoke('parakeet-local:send-audio-chunk', sessionId, audioData),
+        stopSession: (sessionId: string) => ipcRenderer.invoke('parakeet-local:stop-session', sessionId),
+        checkAvailability: () => ipcRenderer.invoke('parakeet-local:check-availability'),
+        onDownloadProgress: (callback: (data: { modelName: string; downloaded: number; total: number; percent: number }) => void) => {
+            const handler = (_event: unknown, data: { modelName: string; downloaded: number; total: number; percent: number }) => callback(data)
+            ipcRenderer.on('parakeet-local:download-progress', handler)
+            return () => ipcRenderer.removeListener('parakeet-local:download-progress', handler)
+        },
+        onDownloadComplete: (callback: (data: { modelName: string; success: boolean; path: string }) => void) => {
+            const handler = (_event: unknown, data: { modelName: string; success: boolean; path: string }) => callback(data)
+            ipcRenderer.on('parakeet-local:download-complete', handler)
+            return () => ipcRenderer.removeListener('parakeet-local:download-complete', handler)
+        },
+        onDownloadError: (callback: (data: { modelName: string; error: string }) => void) => {
+            const handler = (_event: unknown, data: { modelName: string; error: string }) => callback(data)
+            ipcRenderer.on('parakeet-local:download-error', handler)
+            return () => ipcRenderer.removeListener('parakeet-local:download-error', handler)
+        },
+        onTranscriptionComplete: (callback: (data: { sessionId: string; text: string; chunkIndex?: number; speakerLabel?: string }) => void) => {
+            const handler = (_event: unknown, data: { sessionId: string; text: string; chunkIndex?: number; speakerLabel?: string }) => callback(data)
+            ipcRenderer.on('parakeet-local:transcription-complete', handler)
+            return () => ipcRenderer.removeListener('parakeet-local:transcription-complete', handler)
+        },
+        onTranscriptionError: (callback: (data: { sessionId: string; error: string; chunkIndex?: number; speakerLabel?: string }) => void) => {
+            const handler = (_event: unknown, data: { sessionId: string; error: string; chunkIndex?: number; speakerLabel?: string }) => callback(data)
+            ipcRenderer.on('parakeet-local:transcription-error', handler)
+            return () => ipcRenderer.removeListener('parakeet-local:transcription-error', handler)
+        }
+    },
+    localLLM: {
+        checkAvailability: () => ipcRenderer.invoke('local-llm:check-availability'),
+        listModels: () => ipcRenderer.invoke('local-llm:list-models'),
+        downloadRuntime: (runtimeType: 'cpu' | 'vulkan') => ipcRenderer.invoke('local-llm:download-runtime', runtimeType),
+        downloadModel: (modelId: string) => ipcRenderer.invoke('local-llm:download-model', modelId),
+        cancelDownload: (modelId: string) => ipcRenderer.invoke('local-llm:cancel-download', modelId),
+        deleteModel: (modelId: string) => ipcRenderer.invoke('local-llm:delete-model', modelId),
+        ensureServer: (modelId: string) => ipcRenderer.invoke('local-llm:ensure-server', modelId),
+        getHttpConfig: () => ipcRenderer.invoke('local-llm:get-http-config'),
+        rotateHttpKey: () => ipcRenderer.invoke('local-llm:rotate-http-key'),
+        getServerSettings: () => ipcRenderer.invoke('local-llm:get-server-settings'),
+        setServerSettings: (settings: ConfigServidorLocalLLMIPC) => ipcRenderer.invoke('local-llm:set-server-settings', settings),
+        getHardwareInfo: () => ipcRenderer.invoke('local-llm:get-hardware-info'),
+        onRuntimeProgress: (callback: (data: { downloaded: number; total: number; percent: number }) => void) => {
+            const handler = (_event: unknown, data: { downloaded: number; total: number; percent: number }) => callback(data)
+            ipcRenderer.on('local-llm:runtime-progress', handler)
+            return () => ipcRenderer.removeListener('local-llm:runtime-progress', handler)
+        },
+        onModelProgress: (callback: (data: { modelId: string; downloaded: number; total: number; percent: number }) => void) => {
+            const handler = (_event: unknown, data: { modelId: string; downloaded: number; total: number; percent: number }) => callback(data)
+            ipcRenderer.on('local-llm:model-progress', handler)
+            return () => ipcRenderer.removeListener('local-llm:model-progress', handler)
+        },
+        onDownloadError: (callback: (data: { tipo: 'runtime' | 'model'; modelId?: string; error: string }) => void) => {
+            const handler = (_event: unknown, data: { tipo: 'runtime' | 'model'; modelId?: string; error: string }) => callback(data)
+            ipcRenderer.on('local-llm:download-error', handler)
+            return () => ipcRenderer.removeListener('local-llm:download-error', handler)
+        },
+        streamChat: (reqId: string, modelId: string, mensagens: MensagemLocalLLMIPC[], opcoes: OpcoesStreamLocalLLMIPC) => 
+            ipcRenderer.invoke('local-llm:stream-chat', reqId, modelId, mensagens, opcoes),
+        cancelStreamChat: (reqId: string) => 
+            ipcRenderer.invoke('local-llm:cancel-stream-chat', reqId),
+        onStreamChunk: (callback: (data: { reqId: string; data: string }) => void) => {
+            const handler = (_event: unknown, data: { reqId: string; data: string }) => callback(data)
+            ipcRenderer.on('local-llm:stream-chunk', handler)
+            return () => ipcRenderer.removeListener('local-llm:stream-chunk', handler)
+        },
+        onStreamEnd: (callback: (data: { reqId: string; success: boolean; error?: string }) => void) => {
+            const handler = (_event: unknown, data: { reqId: string; success: boolean; error?: string }) => callback(data)
+            ipcRenderer.on('local-llm:stream-end', handler)
+            return () => ipcRenderer.removeListener('local-llm:stream-end', handler)
+        }
+    },
 
     // ==========================================
     // MCP (Model Context Protocol) API
@@ -238,5 +327,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getAllTools: () => ipcRenderer.invoke('mcp:get-all-tools'),
         callTool: (serverId: string, toolName: string, args: unknown) => 
             ipcRenderer.invoke('mcp:call-tool', serverId, toolName, args)
+    },
+    filesystem: {
+        execCommand: (comando: string) => ipcRenderer.invoke('filesystem:exec-command', comando),
+        writeFile: (caminhoAbsoluto: string, conteudo: string) => ipcRenderer.invoke('filesystem:write-file', caminhoAbsoluto, conteudo),
+        readFile: (caminhoAbsoluto: string, linhaInicio?: number, linhaFim?: number) => ipcRenderer.invoke('filesystem:read-file', caminhoAbsoluto, linhaInicio, linhaFim),
+        replaceText: (caminhoAbsoluto: string, textoAntigo: string, textoNovo: string) => ipcRenderer.invoke('filesystem:replace-text', caminhoAbsoluto, textoAntigo, textoNovo),
+        presentFile: (caminhoAbsoluto: string) => ipcRenderer.invoke('filesystem:present-file', caminhoAbsoluto),
+        deleteFile: (caminhoAbsoluto: string) => ipcRenderer.invoke('filesystem:delete-file', caminhoAbsoluto)
     }
 })

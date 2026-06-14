@@ -52,6 +52,7 @@ interface MCPServerConfig {
 }
 
 interface MCPTool {
+    id?: string
     name: string
     description: string
     inputSchema: Record<string, unknown>
@@ -69,6 +70,7 @@ interface DockerMCPServer {
     path: string
     sha: string
     meta?: {
+        name?: string
         title: string
         description: string
         icon?: string
@@ -528,7 +530,10 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
     const atualizarPermissaoFerramenta = (toolId: string, permitir: boolean) => {
         toolRegistry.setEnabled(toolId, permitir)
         setPermissoesFerramentas((atual) => {
-            const novo = { ...atual, [toolId]: permitir ? 'permitir' : 'bloquear' }
+            const novo: Record<string, 'permitir' | 'bloquear'> = {
+                ...atual,
+                [toolId]: permitir ? 'permitir' : 'bloquear'
+            }
             localStorage.setItem('selene_mcp_tool_permissions', JSON.stringify(novo))
             return novo
         })
@@ -770,7 +775,8 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
     useEffect(() => {
         Object.entries(serverTools).forEach(([serverId, tools]) => {
             tools.forEach((tool) => {
-                const permissao = permissoesFerramentas[tool.name] || permissoesFerramentas[tool.id]
+                const permissao = permissoesFerramentas[tool.name] ||
+                    (tool.id ? permissoesFerramentas[tool.id] : undefined)
                 if (permissao === 'bloquear') {
                     toolRegistry.setEnabled(`mcp:${serverId}:${tool.name}`, false)
                 }
@@ -1138,6 +1144,10 @@ export const MCPPanel: React.FC<MCPPanelProps> = ({ onClose }) => {
                             setServidorEmEdicao(server.config)
                         }}
                         onAddClick={() => setShowAddModal(true)}
+                        onConfigurarNativo={(config) => {
+                            setServidorEmEdicao(config)
+                            setShowAddModal(true)
+                        }}
                         onRefresh={loadServers}
                         getStatusColor={getStatusColor}
                     />
@@ -1235,6 +1245,7 @@ interface InstalledTabProps {
     onToggleExpand: (id: string) => void
     onEditar: (server: MCPServerState) => void
     onAddClick: () => void
+    onConfigurarNativo: (config: MCPServerConfig) => void
     onRefresh: () => void
     getStatusColor: (status: string) => string
 }
@@ -1257,6 +1268,7 @@ const InstalledTab: React.FC<InstalledTabProps> = ({
     onToggleExpand,
     onEditar,
     onAddClick,
+    onConfigurarNativo,
     onRefresh,
     getStatusColor
 }) => (
@@ -1283,7 +1295,7 @@ const InstalledTab: React.FC<InstalledTabProps> = ({
                             ferramentas={ferramentasNativas}
                             onConfigurar={(id) => {
                                 if (id === 'mcp:nativo:filesystem') {
-                                    setServidorEmEdicao({
+                                    onConfigurarNativo({
                                         id: 'mcp-nativo-filesystem',
                                         name: 'Filesystem',
                                         command: 'npx',
@@ -1292,11 +1304,10 @@ const InstalledTab: React.FC<InstalledTabProps> = ({
                                         autoConnect: false,
                                         transport: 'stdio'
                                     })
-                                    setShowAddModal(true)
                                     return
                                 }
                                 if (id === 'mcp:nativo:windows') {
-                                    setServidorEmEdicao({
+                                    onConfigurarNativo({
                                         id: 'mcp-nativo-windows',
                                         name: 'Windows-MCP',
                                         command: 'npx',
@@ -1305,7 +1316,6 @@ const InstalledTab: React.FC<InstalledTabProps> = ({
                                         autoConnect: false,
                                         transport: 'stdio'
                                     })
-                                    setShowAddModal(true)
                                     return
                                 }
                             }}

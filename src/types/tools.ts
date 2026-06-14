@@ -35,6 +35,10 @@ export interface ToolDefinition {
     source: ToolSource
     enabled: boolean
     icon?: string                   // Lucide icon name (e.g., 'Globe', 'Brain', 'File')
+    readOnly?: boolean
+    supportsParallel?: boolean
+    deferLoading?: boolean
+    riskLevel?: 'read' | 'write' | 'external' | 'destructive'
 }
 
 // ============================================================================
@@ -42,12 +46,14 @@ export interface ToolDefinition {
 // ============================================================================
 
 export type ToolCallStatus = 'pending' | 'executing' | 'completed' | 'failed' | 'cancelled'
+export type ToolLifecycleEventType = 'queued' | 'started' | 'progress' | 'completed' | 'failed' | 'blocked' | 'cancelled'
 
 export interface ToolCallContext {
     conversationId?: string
     messageId?: string
     userQuery?: string
     projectId?: string
+    callId?: string
 }
 
 export interface ToolCallInput {
@@ -74,6 +80,8 @@ export interface ToolCall {
     result?: ToolCallResult
     startedAt: number
     completedAt?: number
+    lifecycleEvent?: ToolLifecycleEventType
+    progressStatus?: string
 }
 
 // ============================================================================
@@ -90,6 +98,21 @@ export interface AIToolCallDecision {
     shouldUseTool: boolean
     toolCalls: AIToolCallRequest[]
     directResponse?: string         // If no tool needed, AI's direct response
+}
+
+export interface ToolAttemptSummary {
+    toolId: string
+    arguments: Record<string, unknown>
+    status: ToolCallStatus
+    error?: string
+    signature: string
+}
+
+export interface ToolAutonomyDecision {
+    action: 'continuar' | 'responder' | 'perguntar' | 'parar'
+    reason: string
+    toolCalls?: AIToolCallRequest[]
+    question?: string
 }
 
 // ============================================================================
@@ -109,6 +132,7 @@ export interface ToolResultItem {
 }
 
 export interface ToolCardData {
+    callId?: string
     toolId: string
     toolName: string
     toolIcon: string
