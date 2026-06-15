@@ -16,8 +16,7 @@ import { CabecalhoGrupo } from './ComponentesConfig'
 import type { UserProfile, Memory } from '../../hooks/useUserProfile'
 import type { UseVoiceInputReturn } from '../../hooks/useVoiceInput'
 import type { PerfilLatencia } from '../../services/ai/types'
-import type { UseAssistantsReturn } from '../../hooks/useAssistants'
-import type { AssistenteConfig } from '../../utils/assistentesPadrao'
+import type { UsePersonalizacaoReturn } from '../../hooks/usePersonalizacao'
 import type { ConfiguracaoOverlayProativo, NivelIntervencaoOverlay } from '../../types/overlayProativo'
 
 export type { AutoMemory } from './ComponentesConfig'
@@ -69,8 +68,7 @@ export interface SettingsPanelProps {
     variant?: 'modal' | 'inline'
     visibleTabs?: SettingsTab[]
     secaoInicial?: SecaoConfiguracoes
-    assistentes?: UseAssistantsReturn
-    onAbrirEditorAssistente?: (a: AssistenteConfig | null) => void
+    personalizacao?: UsePersonalizacaoReturn
 }
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
@@ -79,7 +77,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
         autoMemories, removeAutoMemory, clearAutoMemories,
         crossChatEnabled, setCrossChatEnabled,
         memoryAutopilotEnabled, setMemoryAutopilotEnabled,
-        assistentes, onAbrirEditorAssistente,
+        personalizacao,
         onClose, variant = 'inline', visibleTabs,
         secaoInicial, voiceInput,
     } = props
@@ -187,7 +185,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = (props) => {
                                 crossChatEnabled={crossChatEnabled} setCrossChatEnabled={setCrossChatEnabled}
                                 memoryAutopilotEnabled={memoryAutopilotEnabled}
                                 setMemoryAutopilotEnabled={setMemoryAutopilotEnabled}
-                                assistentes={assistentes} onAbrirEditorAssistente={onAbrirEditorAssistente}
+                                personalizacao={personalizacao}
                             />
                         )}
 

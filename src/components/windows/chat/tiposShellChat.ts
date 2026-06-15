@@ -1,4 +1,4 @@
-export type AbaShellChat = 'hub-contexto' | 'seletor-projetos' | 'perfil' | 'resumo-contexto'
+export type AbaShellChat = 'seletor-projetos' | 'perfil' | 'resumo-contexto'
 
 export interface SeloAcaoHomeChat {
     texto: string
@@ -10,9 +10,8 @@ export interface AcaoHomeChat {
     titulo: string
     descricao: string
     prompt: string
-    tipo: 'assistente' | 'projeto' | 'mcp' | 'investigacao' | 'web' | 'conversa' | 'geral'
+    tipo: 'projeto' | 'mcp' | 'investigacao' | 'web' | 'conversa' | 'geral'
     selos: SeloAcaoHomeChat[]
-    assistantId?: string | null
     projectId?: string
     conversationId?: string
     ativarWeb?: boolean
@@ -22,12 +21,11 @@ export interface AcaoHomeChat {
 
 export interface ItemHubContexto {
     id: string
-    tipo: 'assistente' | 'projeto' | 'atalho'
+    tipo: 'projeto' | 'atalho'
     titulo: string
     descricao: string
     badge?: string
     ativo?: boolean
-    assistantId?: string | null
     projectId?: string
 }
 
@@ -48,12 +46,4 @@ export interface ResumoContextoAtivo {
     toolCallingAtivo: boolean
     webSearchEnabled: boolean
     investigateMode: boolean
-}
-
-export interface ContextoSidebarChat {
-    assistente: string
-    projeto: string
-    possuiAssistente: boolean
-    possuiProjeto: boolean
-    resumo: string
 }

@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { AIService } from '../services/AIService'
-import { ASSISTENTES_PADRAO } from '../utils/assistentesPadrao'
+import { SELENE_BASE_PROMPT } from '../utils/personalizacao'
 import { normalizarChaveOpenRouter } from '../utils/chavesApi'
 
 export function useAI() {
@@ -17,7 +17,7 @@ export function useAI() {
     )
     const [baseUrlLmStudio, setBaseUrlLmStudio] = useState(() => localStorage.getItem('selene_baseurl_lmstudio') || '')
     const [systemPrompt, setSystemPrompt] = useState(
-        () => localStorage.getItem('selene_system_prompt') || ASSISTENTES_PADRAO[0].prompt
+        () => localStorage.getItem('selene_system_prompt') || SELENE_BASE_PROMPT
     )
 
     // Provedor ativo

@@ -6,7 +6,6 @@ import {
     MessageSquare,
     Plus,
     Search,
-    Sparkles,
 } from 'lucide-react'
 import type { Conversation } from '../types'
 import type { Project } from '../../../../types/project'
@@ -34,7 +33,6 @@ interface SidebarProps {
     className?: string
     busca?: string
     onBuscaChange?: (valor: string) => void
-    onAbrirContexto?: () => void
     nomePerfil?: string
     fotoPerfil?: string
     perfilAberto?: boolean
@@ -178,7 +176,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     className = '',
     busca = '',
     onBuscaChange,
-    onAbrirContexto,
     nomePerfil,
     fotoPerfil,
     perfilAberto = false,
@@ -317,26 +314,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="flex h-full min-h-0 flex-col px-3 pb-3 pt-3"
             >
                 <div className="space-y-2.5 border-b border-white/[0.04] pb-3">
-                    <div className="flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.035] p-1">
+                    <div className="rounded-xl border border-white/[0.06] bg-white/[0.035] p-1">
                         <button
                             type="button"
                             onClick={onCreateNewConversation}
-                            className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-[10px] px-3 text-left text-[13px] font-medium text-white transition-colors hover:bg-white/[0.03]"
+                            className="flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] px-3 text-left text-[13px] font-medium text-white transition-colors hover:bg-white/[0.03]"
                         >
                             <Plus size={15} className="shrink-0" />
                             <span className="whitespace-nowrap">Nova conversa</span>
                         </button>
-
-                        {onAbrirContexto && (
-                            <button
-                                type="button"
-                                onClick={onAbrirContexto}
-                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.06] bg-white/[0.02] text-[#cdd3de] transition-colors hover:bg-white/[0.06]"
-                                aria-label="Abrir contexto"
-                            >
-                                <Sparkles size={14} />
-                            </button>
-                        )}
                     </div>
 
                     <label className="flex h-9 items-center gap-2.5 rounded-xl border border-white/[0.05] bg-[#121318] px-3 text-[#737b8a] focus-within:border-white/[0.08] focus-within:text-[#cad0db]">

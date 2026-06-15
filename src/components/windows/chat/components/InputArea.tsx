@@ -77,7 +77,6 @@ interface InputAreaProps {
     resumoContextoAberto: boolean
     onToggleResumoContexto: () => void
     onFecharResumoContexto: () => void
-    onSelecionarAssistenteContexto: (assistantId: string | null) => void
     onSelecionarProjetoContexto: (projectId: string) => void
 }
 
@@ -141,7 +140,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
     resumoContextoAberto,
     onToggleResumoContexto,
     onFecharResumoContexto,
-    onSelecionarAssistenteContexto,
     onSelecionarProjetoContexto,
 }) => {
     const entradaArquivoRef = React.useRef<HTMLInputElement>(null)
@@ -480,7 +478,6 @@ export const InputArea: React.FC<InputAreaProps> = ({
                                         resumo={resumoContextoAtivo}
                                         itensContexto={itensContexto}
                                         onClose={onFecharResumoContexto}
-                                        onSelecionarAssistente={onSelecionarAssistenteContexto}
                                         onSelecionarProjeto={onSelecionarProjetoContexto}
                                     />
                                 </div>

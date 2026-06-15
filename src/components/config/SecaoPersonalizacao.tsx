@@ -1,23 +1,22 @@
 /**
- * Seção de personalização — assistentes, memórias e comportamento.
+ * Seção de personalização — estilo/tom, instruções personalizadas e memórias.
  * Design em linhas compactas, sem cards de wrapper.
  */
 
-import React, { useMemo, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import React, { useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { CabecalhoGrupo, Divisor, LinhaConfig, Toggle, classeInput } from './ComponentesConfig'
 import type { AutoMemory } from './ComponentesConfig'
 import type { Memory } from '../../hooks/useUserProfile'
-import type { UseAssistantsReturn } from '../../hooks/useAssistants'
-import type { AssistenteConfig } from '../../utils/assistentesPadrao'
+import type { EstiloTom, UsePersonalizacaoReturn } from '../../hooks/usePersonalizacao'
+import { ESTILOS_TOM } from '../../utils/personalizacao'
 
 export interface SecaoPersonalizacaoProps {
     memories: Memory[]; addMemory: (c: string) => void; removeMemory: (id: string) => void
     autoMemories?: AutoMemory[]; removeAutoMemory?: (id: string) => void; clearAutoMemories?: () => void
     crossChatEnabled?: boolean; setCrossChatEnabled?: (v: boolean) => void
     memoryAutopilotEnabled?: boolean; setMemoryAutopilotEnabled?: (v: boolean) => void
-    assistentes?: UseAssistantsReturn
-    onAbrirEditorAssistente?: (a: AssistenteConfig | null) => void
+    personalizacao?: UsePersonalizacaoReturn
 }
 
 export const SecaoPersonalizacao: React.FC<SecaoPersonalizacaoProps> = ({
@@ -25,17 +24,9 @@ export const SecaoPersonalizacao: React.FC<SecaoPersonalizacaoProps> = ({
     autoMemories, removeAutoMemory, clearAutoMemories,
     crossChatEnabled, setCrossChatEnabled,
     memoryAutopilotEnabled, setMemoryAutopilotEnabled,
-    assistentes, onAbrirEditorAssistente,
+    personalizacao,
 }) => {
     const [novaMemoria, setNovaMemoria] = useState('')
-
-    const assistentesOrdenados = useMemo(() => {
-        if (!assistentes) return []
-        return [...assistentes.assistants].sort((a, b) => {
-            if (a.origem !== b.origem) return a.origem === 'padrao' ? -1 : 1
-            return a.nome.localeCompare(b.nome, 'pt-BR')
-        })
-    }, [assistentes])
 
     const adicionarMemoria = () => {
         if (!novaMemoria.trim()) return
@@ -45,63 +36,51 @@ export const SecaoPersonalizacao: React.FC<SecaoPersonalizacaoProps> = ({
 
     return (
         <>
-            {/* Assistentes */}
-            {assistentes && (
+            {/* Personalização — estilo/tom e instruções */}
+            {personalizacao && (
                 <>
-                    <CabecalhoGrupo titulo="Assistentes" />
+                    <CabecalhoGrupo titulo="Personalização" />
 
-                    <div className="space-y-1 py-2">
-                        {/* Selene padrão */}
-                        <button
-                            type="button"
-                            onClick={() => { assistentes.selectAssistant(null); if (!assistentes.useDefaultPrompt) assistentes.toggleDefaultPrompt() }}
-                            className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all ${
-                                assistentes.useDefaultPrompt ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'
-                            }`}
+                    {/* Dropdown de estilo e tom */}
+                    <LinhaConfig
+                        titulo="Estilo e tom"
+                        descricao="Define como a Selene se comunica nas respostas."
+                    >
+                        <select
+                            id="select-estilo-tom"
+                            value={personalizacao.estiloTom}
+                            onChange={(e) => personalizacao.setEstiloTom(e.target.value as EstiloTom)}
+                            className="rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-[#cdd4e0] outline-none transition-colors focus:border-white/20 hover:bg-white/[0.06] cursor-pointer"
                         >
-                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-sm">🌙</span>
-                            <span className="min-w-0 flex-1">
-                                <span className="text-[13px] text-[#cdd4e0]">Selene padrão</span>
-                                {assistentes.useDefaultPrompt && <span className="ml-2 text-[10px] text-[#5c6675]">ativo</span>}
-                            </span>
-                        </button>
+                            {(Object.entries(ESTILOS_TOM) as [EstiloTom, typeof ESTILOS_TOM[EstiloTom]][]).map(([chave, info]) => (
+                                <option key={chave} value={chave} className="bg-[#131316] text-[#cdd4e0]">
+                                    {info.label}
+                                </option>
+                            ))}
+                        </select>
+                    </LinhaConfig>
 
-                        {assistentesOrdenados.map((a) => {
-                            const ativo = !assistentes.useDefaultPrompt && assistentes.activeAssistant?.id === a.id
-                            return (
-                                <div key={a.id} className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all ${ativo ? 'bg-white/[0.04]' : 'hover:bg-white/[0.02]'}`}>
-                                    <button type="button" onClick={() => assistentes.selectAssistant(a.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-sm"
-                                            style={{ color: a.color || '#8b5cf6', borderColor: `${a.color || '#8b5cf6'}33`, backgroundColor: `${a.color || '#8b5cf6'}15` }}>
-                                            {a.icon || '✨'}
-                                        </span>
-                                        <span className="min-w-0 flex-1">
-                                            <span className="text-[13px] text-[#cdd4e0]">{a.nome}</span>
-                                            {ativo && <span className="ml-2 text-[10px] text-[#5c6675]">ativo</span>}
-                                            <span className="mt-0.5 block truncate text-[11px] text-[#4e5768]">{a.descricao || '–'}</span>
-                                        </span>
-                                    </button>
-                                    <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                        {onAbrirEditorAssistente && <button type="button" onClick={() => onAbrirEditorAssistente(a)} className="rounded-md p-1 text-[#5c6675] hover:bg-white/[0.04] hover:text-[#9ca3b2]" title="Editar"><Plus size={12} className="rotate-45" /></button>}
-                                        {a.origem === 'personalizado' && (
-                                            <button type="button" onClick={() => { if (confirm(`Remover "${a.nome}"?`)) assistentes.removeAssistant(a.id) }}
-                                                className="rounded-md p-1 text-[#5c6675] hover:bg-[#1f1318] hover:text-[#c4808f]" title="Excluir"><Trash2 size={12} /></button>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                    {/* Descrição do estilo selecionado */}
+                    <p className="px-1 pb-2 text-[11px] text-[#4e5768]">
+                        {ESTILOS_TOM[personalizacao.estiloTom].descricao}
+                    </p>
 
-                    <div className="flex gap-2 py-2">
-                        <button type="button" onClick={() => onAbrirEditorAssistente?.(null)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs text-[#838d9e] transition-colors hover:bg-white/[0.03] hover:text-[#cdd4e0]">
-                            <Plus size={12} /> Novo
-                        </button>
-                        <button type="button" onClick={assistentes.restoreDefaults}
-                            className="rounded-lg border border-white/[0.06] px-3 py-1.5 text-xs text-[#838d9e] transition-colors hover:bg-white/[0.03] hover:text-[#cdd4e0]">
-                            Restaurar padrões
-                        </button>
+                    <Divisor />
+
+                    {/* Instruções personalizadas */}
+                    <div className="py-3 space-y-2">
+                        <p className="text-[12px] font-medium text-[#cdd4e0]">Instruções personalizadas</p>
+                        <p className="text-[11px] text-[#4e5768]">
+                            Outras preferências de tom, estilo e comportamento que a Selene deve seguir.
+                        </p>
+                        <textarea
+                            id="instrucoes-personalizadas"
+                            value={personalizacao.instrucoesPersonalizadas}
+                            onChange={(e) => personalizacao.setInstrucoesPersonalizadas(e.target.value)}
+                            placeholder="Outras preferências de tom, estilo e comportamento"
+                            rows={4}
+                            className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-[13px] text-[#cdd4e0] placeholder:text-[#3a404d] outline-none transition-colors focus:border-white/20 focus:bg-white/[0.04] leading-relaxed"
+                        />
                     </div>
                 </>
             )}

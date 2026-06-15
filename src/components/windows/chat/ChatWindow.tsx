@@ -5,14 +5,13 @@ import { v4 as uuidv4 } from 'uuid'
 // Types
 import type { Conversation } from './types'
 import type { ChatMessage } from '../../../types/chat'
-import type { AssistantConfig } from '../../../utils/assistentesPadrao'
 
 // Hooks
 import { useAppConfig } from '../../../hooks/useAppConfig'
 import { verificarSuporteReasoningOpenRouter } from './components/SeletorModeloOpenRouter'
 import { useCrossChatContext } from '../../../hooks/useCrossChatContext'
 import { useMemoryAutopilot } from '../../../hooks/useMemoryAutopilot'
-import { useAssistants } from '../../../hooks/useAssistants'
+import { usePersonalizacao } from '../../../hooks/usePersonalizacao'
 import { useChatUI, useChatShell } from './hooks'
 import { useSendMessage } from './hooks'
 
@@ -26,13 +25,10 @@ import {
     BarraSuperiorChat,
     RailChat,
     PainelInicialChat,
-    HubContextoChat,
     SeletorProjetosChat,
 } from './components'
 import { SettingsPanel } from '../../config/SettingsPanel'
 import type { SecaoConfiguracoes } from '../../config/SettingsPanel'
-import { AssistantsPanel } from './AssistantsPanel'
-import { AssistantEditor } from './AssistantEditor'
 import { MCPPanel } from '../../config/MCPPanel'
 import { ReasoningTrailModal } from '../../modals/ReasoningTrailModal'
 
@@ -105,7 +101,7 @@ const ChatWindow: React.FC = () => {
 
     const crossChat = useCrossChatContext()
     const memoryAutopilot = useMemoryAutopilot()
-    const assistants = useAssistants()
+    const personalizacao = usePersonalizacao()
 
     // ============================================
     // UI State (from hook)
@@ -114,8 +110,6 @@ const ChatWindow: React.FC = () => {
     const {
         sidebarExpandida, setSidebarExpandida,
         showSettings, setShowSettings,
-        showAssistantsPanel, setShowAssistantsPanel,
-        showAssistantEditor, setShowAssistantEditor,
         showMCPPanel, setShowMCPPanel,
         showReasoningTrail, setShowReasoningTrail,
         input, setInput,
@@ -176,7 +170,6 @@ const ChatWindow: React.FC = () => {
         return []
     })
     const [activeProjectId, setActiveProjectId] = useState<string | null>(null)
-    const [editingAssistant, setEditingAssistant] = useState<AssistantConfig | null>(null)
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
     const shouldAutoScrollRef = useRef(true)
     const autoScrollTravadoManualmenteRef = useRef(false)
@@ -186,7 +179,6 @@ const ChatWindow: React.FC = () => {
     const selecionandoTextoRef = useRef(false)
     const [janelaMaximizada, setJanelaMaximizada] = useState(false)
     const [secaoConfiguracoesAtiva, setSecaoConfiguracoesAtiva] = useState<SecaoConfiguracoes>('configuracao')
-    const [origemEditorAssistente, setOrigemEditorAssistente] = useState<'assistentes' | 'configuracoes'>('assistentes')
     const [conversaPendenteRegeneracaoPosEdicao, setConversaPendenteRegeneracaoPosEdicao] = useState<string | null>(null)
     const currentProjectContextId = activeProjectId || activeConversation?.projectId || null
 
@@ -196,7 +188,6 @@ const ChatWindow: React.FC = () => {
         projects,
         activeConversationId,
         currentProjectContextId,
-        assistants,
         mcpServers,
         pendingScreenshots,
         webSearchEnabled,
@@ -240,7 +231,7 @@ const ChatWindow: React.FC = () => {
         setCurrentTrace,
         setMessageSources,
         setMessageSearchCards,
-        promptBase: assistants.effectiveSystemPrompt || systemPrompt,
+        promptBase: personalizacao.effectiveSystemPrompt || systemPrompt,
         getProfileContext,
         criarOuObterServico,
         provedorAtivo,
@@ -760,11 +751,7 @@ const ChatWindow: React.FC = () => {
         setActiveConversationId(null)
         setActiveProjectId(projectId)
         setShowSettings(false)
-        setShowAssistantsPanel(false)
-        setShowAssistantEditor(false)
-        setShowMCPPanel(false)
-        setEditingAssistant(null)
-    }, [setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+    }, [setShowSettings, shell])
 
     // ============================================
     // Message Actions
@@ -1123,12 +1110,8 @@ const ChatWindow: React.FC = () => {
     }, [reasoningAtivo, setReasoningAtivo])
 
     const activeProject = projects.find(p => p.id === activeProjectId)
-    const visualizacaoPrincipalAtiva = showAssistantEditor
-        ? 'editor-assistente'
-        : showSettings
+    const visualizacaoPrincipalAtiva = showSettings
         ? 'configuracoes'
-        : showAssistantsPanel
-        ? 'assistentes'
         : showMCPPanel
         ? 'mcp'
         : activeProject
@@ -1140,81 +1123,25 @@ const ChatWindow: React.FC = () => {
         setInputMenuOpen(false)
         setSecaoConfiguracoesAtiva(secao)
         setShowSettings(true)
-        setShowAssistantsPanel(false)
-        setShowAssistantEditor(false)
-        setShowMCPPanel(false)
-        setEditingAssistant(null)
-        setActiveProjectId(null)
-    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
-
-    const abrirConfiguracoes = useCallback(() => {
-        abrirConfiguracoesPorSecao('configuracao')
-    }, [abrirConfiguracoesPorSecao])
-
-    const abrirPainelAssistentes = useCallback(() => {
-        shell.fecharOverlays()
-        setInputMenuOpen(false)
-        setShowAssistantsPanel(true)
-        setShowSettings(false)
-        setShowAssistantEditor(false)
-        setShowMCPPanel(false)
-        setEditingAssistant(null)
-        setActiveProjectId(null)
-    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
-
-    const abrirEditorAssistente = useCallback((assistant: AssistantConfig | null, origem: 'assistentes' | 'configuracoes' = 'assistentes') => {
-        shell.fecharOverlays()
-        setInputMenuOpen(false)
-        setOrigemEditorAssistente(origem)
-        setEditingAssistant(assistant)
-        setShowAssistantEditor(true)
-        setShowAssistantsPanel(false)
-        setShowSettings(false)
         setShowMCPPanel(false)
         setActiveProjectId(null)
-    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+    }, [setInputMenuOpen, setShowMCPPanel, setShowSettings, shell])
 
     const abrirPainelMcp = useCallback(() => {
         shell.fecharOverlays()
         setInputMenuOpen(false)
         setShowMCPPanel(true)
         setShowSettings(false)
-        setShowAssistantsPanel(false)
-        setShowAssistantEditor(false)
-        setEditingAssistant(null)
         setActiveProjectId(null)
-    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
+    }, [setInputMenuOpen, setShowMCPPanel, setShowSettings, shell])
 
     const abrirChatPrincipal = useCallback(() => {
         shell.fecharOverlays()
         setInputMenuOpen(false)
         setActiveProjectId(null)
         setShowSettings(false)
-        setShowAssistantsPanel(false)
-        setShowAssistantEditor(false)
         setShowMCPPanel(false)
-        setEditingAssistant(null)
-    }, [setInputMenuOpen, setShowAssistantsPanel, setShowAssistantEditor, setShowMCPPanel, setShowSettings, shell])
-
-    const fecharEditorAssistente = useCallback(() => {
-        setShowAssistantEditor(false)
-        setEditingAssistant(null)
-        setShowAssistantsPanel(origemEditorAssistente === 'assistentes')
-        setShowSettings(origemEditorAssistente === 'configuracoes')
-    }, [origemEditorAssistente, setShowAssistantsPanel, setShowAssistantEditor, setShowSettings])
-
-    const salvarAssistenteEditado = useCallback((config: AssistantConfig) => {
-        if (editingAssistant) {
-            assistants.updateAssistant(editingAssistant.id, config)
-        } else {
-            assistants.addAssistant(config)
-        }
-
-        setShowAssistantEditor(false)
-        setEditingAssistant(null)
-        setShowAssistantsPanel(origemEditorAssistente === 'assistentes')
-        setShowSettings(origemEditorAssistente === 'configuracoes')
-    }, [assistants, editingAssistant, origemEditorAssistente, setShowAssistantsPanel, setShowAssistantEditor, setShowSettings])
+    }, [setInputMenuOpen, setShowMCPPanel, setShowSettings, shell])
 
     const alternarNavegacaoChat = useCallback(() => {
         setSidebarExpandida((atual) => !atual)
@@ -1251,27 +1178,6 @@ const ChatWindow: React.FC = () => {
         shell.fecharOverlays()
         setTimeout(() => textareaRef.current?.focus(), 0)
     }, [setConversations, setInput, shell, textareaRef])
-
-    const selecionarAssistenteContexto = useCallback((assistantId: string | null) => {
-        if (assistantId === null) {
-            assistants.selectAssistant(null)
-            if (assistants.useDefaultPrompt) {
-                assistants.toggleDefaultPrompt()
-            }
-            shell.fecharOverlays()
-            return
-        }
-
-        if (!assistants.useDefaultPrompt && assistants.activeAssistant?.id === assistantId) {
-            assistants.selectAssistant(null)
-            shell.fecharOverlays()
-            return
-        }
-
-        assistants.selectAssistant(assistantId)
-        assistants.incrementUsage(assistantId)
-        shell.fecharOverlays()
-    }, [assistants, shell])
 
     const selecionarProjetoContexto = useCallback((projectId: string) => {
         if (!projects.some((project) => project.id === projectId)) return
@@ -1312,30 +1218,19 @@ const ChatWindow: React.FC = () => {
         }
 
         setActiveProjectId(null)
-        setShowSettings(false)
-        setShowAssistantsPanel(false)
-        setShowAssistantEditor(false)
         setShowMCPPanel(false)
-        setEditingAssistant(null)
         shell.fecharOverlays()
         setTimeout(() => textareaRef.current?.focus(), 0)
     }, [
         activeConversationId,
         currentProjectContextId,
         projects,
-        setShowAssistantsPanel,
-        setShowAssistantEditor,
         setShowMCPPanel,
-        setShowSettings,
         shell,
         textareaRef,
     ])
 
     const aplicarAcaoHome = useCallback((acao: AcaoHomeChat) => {
-        if (acao.assistantId !== undefined) {
-            selecionarAssistenteContexto(acao.assistantId)
-        }
-
         if (acao.ativarWeb !== undefined) {
             setWebSearchEnabled(acao.ativarWeb)
         }
@@ -1356,7 +1251,7 @@ const ChatWindow: React.FC = () => {
         setInput(acao.prompt)
         shell.fecharOverlays()
         setTimeout(() => textareaRef.current?.focus(), 0)
-    }, [alternarToolCalling, prepararRascunhoProjeto, selecionarAssistenteContexto, setInput, setInvestigateMode, setWebSearchEnabled, shell, textareaRef])
+    }, [alternarToolCalling, prepararRascunhoProjeto, setInput, setInvestigateMode, setWebSearchEnabled, shell, textareaRef])
 
     const criarProjetoRapido = useCallback(() => {
         const novoId = addProject('Novo projeto')
@@ -1405,8 +1300,7 @@ const ChatWindow: React.FC = () => {
         setMemoryAutopilotEnabled: memoryAutopilot.setEnabled,
         voiceInput,
         secaoInicial: secaoConfiguracoesAtiva,
-        assistentes: assistants,
-        onAbrirEditorAssistente: (assistant: AssistantConfig | null) => abrirEditorAssistente(assistant, 'configuracoes'),
+        personalizacao,
     }
 
     const classeCanvasPrincipal = 'mt-3 relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-tl-[18px] border-t border-white/[0.05] bg-[#141416]'
@@ -1456,10 +1350,7 @@ const ChatWindow: React.FC = () => {
                                 setActiveConversationId(id)
                                 setActiveProjectId(null)
                                 setShowSettings(false)
-                                setShowAssistantsPanel(false)
-                                setShowAssistantEditor(false)
                                 setShowMCPPanel(false)
-                                setEditingAssistant(null)
                             }}
                             onDeleteConversation={deleteConversation}
                             onRenameConversation={renameConversation}
@@ -1467,7 +1358,6 @@ const ChatWindow: React.FC = () => {
                             onCreateNewConversation={iniciarNovaConversa}
                             busca={shell.buscaSidebar}
                             onBuscaChange={shell.setBuscaSidebar}
-                            onAbrirContexto={() => shell.alternarOverlay('hub-contexto')}
                             nomePerfil={profile.name}
                             fotoPerfil={profile.fotoPerfil}
                             perfilAberto={shell.perfilAberto}
@@ -1613,7 +1503,6 @@ const ChatWindow: React.FC = () => {
                                                     shell.alternarOverlay('resumo-contexto')
                                                 }}
                                                 onFecharResumoContexto={shell.fecharOverlays}
-                                                onSelecionarAssistenteContexto={selecionarAssistenteContexto}
                                                 onSelecionarProjetoContexto={selecionarProjetoContexto}
                                             />
                                         </motion.div>
@@ -1624,25 +1513,6 @@ const ChatWindow: React.FC = () => {
                                             key="painel-configuracoes"
                                             {...propsPainelConfiguracoes}
                                             onClose={abrirChatPrincipal}
-                                        />
-                                    )}
-
-                                    {visualizacaoPrincipalAtiva === 'assistentes' && (
-                                        <AssistantsPanel
-                                            key="painel-assistentes"
-                                            assistants={assistants}
-                                            onOpenEditor={abrirEditorAssistente}
-                                            onClose={abrirChatPrincipal}
-                                        />
-                                    )}
-
-                                    {visualizacaoPrincipalAtiva === 'editor-assistente' && (
-                                        <AssistantEditor
-                                            key={`editor-assistente-${editingAssistant?.id ?? 'novo'}`}
-                                            isOpen={showAssistantEditor}
-                                            assistant={editingAssistant}
-                                            onSave={salvarAssistenteEditado}
-                                            onClose={fecharEditorAssistente}
                                         />
                                     )}
 
@@ -1684,29 +1554,6 @@ const ChatWindow: React.FC = () => {
                                 </AnimatePresence>
                             </div>
                         </div>
-
-                        <HubContextoChat
-                            aberto={shell.hubContextoAberto}
-                            itens={shell.itensHubContexto}
-                            provedor={shell.resumoContextoAtivo.provedor}
-                            modelo={shell.resumoContextoAtivo.modelo}
-                            perfilLatencia={shell.resumoContextoAtivo.perfilLatencia}
-                            onClose={shell.fecharOverlays}
-                            onSelecionarAssistente={selecionarAssistenteContexto}
-                            onSelecionarProjeto={(projectId) => {
-                                shell.fecharOverlays()
-                                abrirProjeto(projectId)
-                            }}
-                            onAbrirAssistentes={() => {
-                                shell.fecharOverlays()
-                                abrirPainelAssistentes()
-                            }}
-                            onAbrirProjetos={() => shell.alternarOverlay('seletor-projetos')}
-                            onAbrirConfiguracoes={() => {
-                                shell.fecharOverlays()
-                                abrirConfiguracoes()
-                            }}
-                        />
 
                         <SeletorProjetosChat
                             aberto={shell.seletorProjetosAberto}

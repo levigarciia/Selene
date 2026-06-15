@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { UseAssistantsReturn } from '../../../../hooks/useAssistants'
 import type { PerfilLatencia } from '../../../../services/ai/types'
 import type { Project } from '../../../../types/project'
 import type { Conversation } from '../types'
@@ -7,7 +6,6 @@ import type { MCPServerInfo } from './useChatUI'
 import type {
     AbaShellChat,
     AcaoHomeChat,
-    ContextoSidebarChat,
     ItemHubContexto,
     ResumoContextoAtivo,
 } from '../tiposShellChat'
@@ -17,7 +15,6 @@ interface UseChatShellParams {
     projects: Project[]
     activeConversationId: string | null
     currentProjectContextId: string | null
-    assistants: UseAssistantsReturn
     mcpServers: MCPServerInfo[]
     pendingScreenshots: string[]
     webSearchEnabled: boolean
@@ -66,7 +63,6 @@ export function useChatShell({
     projects,
     activeConversationId,
     currentProjectContextId,
-    assistants,
     mcpServers,
     pendingScreenshots,
     webSearchEnabled,
@@ -121,30 +117,6 @@ export function useChatShell({
         mcpServers.filter((server) => server.status === 'connected')
     ), [mcpServers])
 
-    const assistentesRecentes = useMemo(() => {
-        const maisUsados = assistants.getMostUsed(4)
-        const lista = assistants.activeAssistant
-            ? [
-                assistants.activeAssistant,
-                ...maisUsados.filter((assistant) => assistant.id !== assistants.activeAssistant?.id),
-            ]
-            : maisUsados
-
-        if (assistants.useDefaultPrompt) {
-            return [
-                {
-                    id: 'default',
-                    nome: 'Selene padrão',
-                    descricao: 'Prompt nativo da Selene sem persona adicional.',
-                    origem: 'padrao',
-                },
-                ...lista,
-            ]
-        }
-
-        return lista
-    }, [assistants])
-
     const termoBuscaSidebar = buscaSidebar.trim().toLocaleLowerCase('pt-BR')
 
     const resultadosProjetosFiltrados = useMemo(() => {
@@ -172,19 +144,8 @@ export function useChatShell({
     }, [conversasSidebar, termoBuscaSidebar])
 
     const itensHubContexto = useMemo<ItemHubContexto[]>(() => {
-        const itensAssistentes = assistentesRecentes.slice(0, 3).map((assistant) => ({
-            id: `assistente-${assistant.id}`,
-            tipo: 'assistente' as const,
-            titulo: assistant.nome,
-            descricao: assistant.descricao || 'Assistente pronto para uso.',
-            badge: assistant.id === 'default' ? 'Padrão' : 'Assistente',
-            ativo: assistant.id === 'default'
-                ? assistants.useDefaultPrompt
-                : assistants.activeAssistant?.id === assistant.id,
-            assistantId: assistant.id === 'default' ? null : assistant.id,
-        }))
-
-        const itensProjetos = projetosRecentes.slice(0, 3).map((project) => ({
+        // Apenas projetos recentes no hub de contexto
+        const itensProjetos = projetosRecentes.slice(0, 5).map((project) => ({
             id: `projeto-${project.id}`,
             tipo: 'projeto' as const,
             titulo: project.name,
@@ -196,20 +157,11 @@ export function useChatShell({
             projectId: project.id,
         }))
 
-        return [...itensAssistentes, ...itensProjetos]
-    }, [assistentesRecentes, assistants.activeAssistant, assistants.useDefaultPrompt, projetosRecentes, projetoContextoAtual])
+        return itensProjetos
+    }, [projetosRecentes, projetoContextoAtual])
 
     const resumoContextoAtivo = useMemo<ResumoContextoAtivo>(() => {
         const itens = [
-            {
-                id: 'assistente',
-                titulo: 'Assistente',
-                descricao: assistants.useDefaultPrompt
-                    ? 'Selene padrão'
-                    : assistants.activeAssistant?.nome || 'Nenhum selecionado',
-                quantidade: assistants.useDefaultPrompt || assistants.activeAssistant ? 1 : 0,
-                ativo: Boolean(assistants.useDefaultPrompt || assistants.activeAssistant),
-            },
             {
                 id: 'projeto',
                 titulo: 'Projeto',
@@ -248,8 +200,6 @@ export function useChatShell({
             investigateMode,
         }
     }, [
-        assistants.activeAssistant,
-        assistants.useDefaultPrompt,
         investigateMode,
         modeloAtivo,
         pendingScreenshots.length,
@@ -261,54 +211,18 @@ export function useChatShell({
         webSearchEnabled,
     ])
 
-    const contextoSidebar = useMemo<ContextoSidebarChat>(() => {
-        const assistenteAtivo = assistants.useDefaultPrompt
-            ? 'Selene padrão'
-            : assistants.activeAssistant?.nome || 'Sem assistente'
-
-        const projetoAtivo = projetoContextoAtual?.name || 'Sem projeto'
-        const possuiAssistente = Boolean(assistants.useDefaultPrompt || assistants.activeAssistant)
-        const possuiProjeto = Boolean(projetoContextoAtual)
-
-        let resumo = 'Assistente e projeto inativos'
-        if (possuiAssistente && possuiProjeto) resumo = 'Assistente e projeto ativos'
-        else if (possuiAssistente) resumo = 'Somente assistente ativo'
-        else if (possuiProjeto) resumo = 'Somente projeto ativo'
-
-        return {
-            assistente: assistenteAtivo,
-            projeto: projetoAtivo,
-            possuiAssistente,
-            possuiProjeto,
-            resumo,
-        }
-    }, [assistants.activeAssistant, assistants.useDefaultPrompt, projetoContextoAtual])
-
     const acoesHome = useMemo<AcaoHomeChat[]>(() => {
-        const acaoAssistente: AcaoHomeChat = assistants.activeAssistant
-            ? {
-                id: 'acao-assistente',
-                titulo: assistants.activeAssistant.nome,
-                descricao: 'Testar o assistente ativo com uma tarefa curta.',
-                prompt: `Quero testar o assistente "${assistants.activeAssistant.nome}". Resolva uma tarefa curta em português, mostrando abordagem, resposta final e próximos passos.`,
-                tipo: 'assistente',
-                assistantId: assistants.activeAssistant.id,
-                selos: [
-                    { texto: 'IA', tom: 'roxo' },
-                    { texto: 'Ativo', tom: 'neutro' },
-                ],
-            }
-            : {
-                id: 'acao-assistente',
-                titulo: 'Assistente padrão',
-                descricao: 'Começar com um teste rápido da Selene nativa.',
-                prompt: 'Quero um teste rápido da Selene. Responda em português com uma tarefa curta, objetiva e útil.',
-                tipo: 'geral',
-                selos: [
-                    { texto: 'Selene', tom: 'roxo' },
-                    { texto: 'Start', tom: 'neutro' },
-                ],
-            }
+        const acaoInicio: AcaoHomeChat = {
+            id: 'acao-inicio',
+            titulo: 'Começar uma conversa',
+            descricao: 'Inicie com uma pergunta ou tarefa qualquer.',
+            prompt: 'Quero um teste rápido da Selene. Responda em português com uma tarefa curta, objetiva e útil.',
+            tipo: 'geral',
+            selos: [
+                { texto: 'Selene', tom: 'roxo' },
+                { texto: 'Start', tom: 'neutro' },
+            ],
+        }
 
         const projetoRecente = projetosRecentes[0]
         const acaoProjeto: AcaoHomeChat = projetoRecente
@@ -376,23 +290,11 @@ export function useChatShell({
             ],
         }
 
-        return [acaoAssistente, acaoProjeto, acaoMcp, acaoInvestigacao]
-    }, [assistants.activeAssistant, projetosRecentes, servidoresConectados])
+        return [acaoInicio, acaoProjeto, acaoMcp, acaoInvestigacao]
+    }, [projetosRecentes, servidoresConectados])
 
     const promptsRapidos = useMemo<AcaoHomeChat[]>(() => {
         const itens: AcaoHomeChat[] = []
-
-        if (assistants.activeAssistant) {
-            itens.push({
-                id: 'prompt-assistente',
-                titulo: `Rodar ${truncarTexto(assistants.activeAssistant.nome, 22)}`,
-                descricao: 'Executar um teste curto com o assistente ativo.',
-                prompt: `Use o assistente "${assistants.activeAssistant.nome}" para resolver uma tarefa curta e objetiva.`,
-                tipo: 'assistente',
-                assistantId: assistants.activeAssistant.id,
-                selos: [{ texto: 'IA', tom: 'roxo' }],
-            })
-        }
 
         if (projetosRecentes[0]) {
             itens.push({
@@ -451,11 +353,10 @@ export function useChatShell({
         )
 
         return itens.slice(0, 6)
-    }, [assistants.activeAssistant, conversasRecentes, projetosRecentes, servidoresConectados])
+    }, [conversasRecentes, projetosRecentes, servidoresConectados])
 
     return {
         overlayAtivo,
-        hubContextoAberto: overlayAtivo === 'hub-contexto',
         seletorProjetosAberto: overlayAtivo === 'seletor-projetos',
         perfilAberto: overlayAtivo === 'perfil',
         resumoContextoAberto: overlayAtivo === 'resumo-contexto',
@@ -470,7 +371,6 @@ export function useChatShell({
         servidoresConectados,
         resultadosProjetosFiltrados,
         resultadosConversasFiltradas,
-        contextoSidebar,
         itensHubContexto,
         resumoContextoAtivo,
         acoesHome,

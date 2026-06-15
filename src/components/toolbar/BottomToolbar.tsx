@@ -16,7 +16,6 @@ interface BottomToolbarProps {
     barrasAudio?: number[]
     pendingScreenshots?: string[]
     onDeleteScreenshot?: (index: number) => void
-    aoAbrirAssistentes: () => void
     aoAbrirAssistenteGramatical: () => void
     aoAbrirConfiguracoes: () => void
     aoAbrirChatWindow: () => void
@@ -55,7 +54,6 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
     barrasAudio,
     pendingScreenshots,
     onDeleteScreenshot,
-    aoAbrirAssistentes,
     aoAbrirAssistenteGramatical,
     aoAbrirChatWindow,
     aoExpandirToolbar,
@@ -317,17 +315,6 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                                                     </button>
 
                                                     <button
-                                                        onClick={() => acionarEAbrir(aoAbrirAssistentes)}
-                                                        className="w-full text-left px-4 py-3 hover:bg-white/5 text-white/90 flex items-start gap-2"
-                                                    >
-                                                        <Sparkles size={16} className="text-purple-300 mt-0.5" />
-                                                        <div>
-                                                            <p className="text-sm font-semibold">Assistentes</p>
-                                                            <p className="text-xs text-white/60">Configure e salve varios system prompts.</p>
-                                                        </div>
-                                                    </button>
-
-                                                    <button
                                                         onClick={() => acionarEAbrir(aoAbrirAssistenteGramatical)}
                                                         className="w-full text-left px-4 py-3 hover:bg-white/5 text-white/90 flex items-start gap-2"
                                                     >
@@ -408,8 +395,8 @@ const BottomToolbar = forwardRef<HTMLDivElement, BottomToolbarProps>(({
                                                     >
                                                         <Settings size={16} className="text-blue-300 mt-0.5" />
                                                         <div>
-                                                            <p className="text-sm font-semibold">Configuracoes</p>
-                                                            <p className="text-xs text-white/60">Chaves de API e preferencias.</p>
+                                                            <p className="text-sm font-semibold">Configurações</p>
+                                                            <p className="text-xs text-white/60">Chaves de API e preferências.</p>
                                                         </div>
                                                     </button>
 

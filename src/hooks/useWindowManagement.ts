@@ -6,7 +6,6 @@ export function useWindowManagement(dependencias: ReadonlyArray<unknown>) {
     const modalRef = useRef<HTMLDivElement | null>(null)
     const overlayProativoRef = useRef<HTMLDivElement | null>(null)
     const toolbarRef = useRef<HTMLDivElement | null>(null)
-    const assistentesRef = useRef<HTMLDivElement | null>(null)
     const configuracoesRef = useRef<HTMLDivElement | null>(null)
     const gramaticalRef = useRef<HTMLDivElement | null>(null)
     const menuDropdownRef = useRef<HTMLDivElement | null>(null)
@@ -34,7 +33,6 @@ export function useWindowManagement(dependencias: ReadonlyArray<unknown>) {
             adicionar(modalRef.current)
             adicionar(overlayProativoRef.current)
             adicionar(toolbarRef.current)
-            adicionar(assistentesRef.current)
             adicionar(configuracoesRef.current)
             adicionar(gramaticalRef.current)
             adicionar(menuDropdownRef.current)
@@ -64,7 +62,6 @@ export function useWindowManagement(dependencias: ReadonlyArray<unknown>) {
         registrarObservadores(modalRef.current)
         registrarObservadores(overlayProativoRef.current)
         registrarObservadores(toolbarRef.current)
-        registrarObservadores(assistentesRef.current)
         registrarObservadores(configuracoesRef.current)
         registrarObservadores(gramaticalRef.current)
         registrarObservadores(menuDropdownRef.current)
@@ -95,7 +92,6 @@ export function useWindowManagement(dependencias: ReadonlyArray<unknown>) {
         modalRef,
         overlayProativoRef,
         toolbarRef,
-        assistentesRef,
         configuracoesRef,
         gramaticalRef,
         menuDropdownRef

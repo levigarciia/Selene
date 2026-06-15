@@ -3,7 +3,7 @@
  * 
  * Full-screen panel for managing MCP server connections.
  * Includes marketplace to browse and install servers from Docker MCP Hub.
- * Follows the same pattern as AssistantsPanel.
+ * Segue o padrão de painel em tela cheia usado nas configurações.
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react'

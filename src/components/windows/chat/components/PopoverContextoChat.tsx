@@ -1,6 +1,6 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bot, Check, FolderClosed, Images, Plug } from 'lucide-react'
+import { Check, FolderClosed, Images, Plug } from 'lucide-react'
 import type { ItemHubContexto, ResumoContextoAtivo } from '../tiposShellChat'
 
 interface PopoverContextoChatProps {
@@ -8,7 +8,6 @@ interface PopoverContextoChatProps {
     resumo: ResumoContextoAtivo
     itensContexto: ItemHubContexto[]
     onClose: () => void
-    onSelecionarAssistente: (assistantId: string | null) => void
     onSelecionarProjeto: (projectId: string) => void
 }
 
@@ -17,10 +16,8 @@ export const PopoverContextoChat: React.FC<PopoverContextoChatProps> = ({
     resumo,
     itensContexto,
     onClose,
-    onSelecionarAssistente,
     onSelecionarProjeto,
 }) => {
-    const assistentes = itensContexto.filter((item) => item.tipo === 'assistente')
     const projetos = itensContexto.filter((item) => item.tipo === 'projeto')
     const imagens = resumo.itens.find((item) => item.id === 'imagens')
     const apps = resumo.itens.find((item) => item.id === 'apps')
@@ -49,38 +46,6 @@ export const PopoverContextoChat: React.FC<PopoverContextoChatProps> = ({
                     </div>
 
                     <div className="space-y-3">
-                        <section className="rounded-2xl border border-white/[0.05] bg-white/[0.025] p-3">
-                            <div className="mb-2 flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-[13px] font-medium text-white">
-                                    <Bot size={14} className="text-[#b8b6ff]" />
-                                    Assistente
-                                </div>
-                            </div>
-
-                            <div className="space-y-1.5">
-                                {assistentes.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        type="button"
-                                        onClick={() => onSelecionarAssistente(item.assistantId ?? null)}
-                                        className={`flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2 text-left transition-colors ${
-                                            item.ativo
-                                                ? 'border-[#5b57b0]/55 bg-[#201f38] text-white'
-                                                : 'border-white/[0.04] bg-white/[0.02] text-[#d6dbe5] hover:bg-white/[0.05]'
-                                        }`}
-                                    >
-                                        <span className="min-w-0">
-                                            <span className="block truncate text-[12px] font-medium">{item.titulo}</span>
-                                            <span className="mt-0.5 block truncate text-[11px] text-[#88909d]">
-                                                {item.descricao}
-                                            </span>
-                                        </span>
-                                        {item.ativo && <Check size={13} className="mt-0.5 shrink-0 text-[#b8b6ff]" />}
-                                    </button>
-                                ))}
-                            </div>
-                        </section>
-
                         <section className="rounded-2xl border border-white/[0.05] bg-white/[0.025] p-3">
                             <div className="mb-2 flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-[13px] font-medium text-white">

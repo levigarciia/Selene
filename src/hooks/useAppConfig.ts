@@ -14,7 +14,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { AIService } from '../services/AIService'
-import { ASSISTENTES_PADRAO } from '../utils/assistentesPadrao'
+import { SELENE_BASE_PROMPT } from '../utils/personalizacao'
 import { useVoiceInput } from './useVoiceInput'
 import { useUserProfile } from './useUserProfile'
 import type { PerfilLatencia } from '../services/ai/types'
@@ -186,7 +186,7 @@ export function useAppConfig(options: UseAppConfigOptions = {}) {
         loadString('selene_baseurl_lmstudio', '')
     )
     const [systemPrompt, setSystemPromptState] = useState(() => 
-        loadString('selene_system_prompt', ASSISTENTES_PADRAO[0].prompt)
+        loadString('selene_system_prompt', SELENE_BASE_PROMPT)
     )
     
     // ========================================

@@ -5,13 +5,10 @@ import {
   FloatingModal,
   OverlayProativoModal,
   BottomToolbar,
-  AssistentesModal,
   ModalConfiguracoes,
   Toast,
   ScreenshotOverlay
 } from './components'
-import { ASSISTENTES_PADRAO } from './utils/assistentesPadrao'
-import type { AssistenteConfig } from './utils/assistentesPadrao'
 import { useAppConfig } from './hooks/useAppConfig'
 import { useOverlayProativo } from './hooks/useOverlayProativo'
 import { useWindowManagement } from './hooks/useWindowManagement'
@@ -42,7 +39,6 @@ function obterMensagemErro(erro: unknown, fallback: string): string {
 function AppOverlay() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [showPreview, setShowPreview] = useState(true)
-  const [mostrarAssistentes, setMostrarAssistentes] = useState(false)
   const [mostrarConfiguracoes, setMostrarConfiguracoes] = useState(false)
   const [toast, setToast] = useState<{ mensagem: string; tipo?: 'info' | 'erro'; posicao?: 'padrao' | 'toolbar' } | null>(null)
   const [debugInteractive, setDebugInteractive] = useState(false)
@@ -53,21 +49,6 @@ function AppOverlay() {
   const toastTimeoutRef = useRef<number | null>(null)
   const ultimoErroWhisperRef = useRef<string | null>(null)
 
-  const [assistentes, setAssistentes] = useState<AssistenteConfig[]>(() => {
-    const salvo = localStorage.getItem('selene_assistentes')
-    if (salvo) {
-      try {
-        return JSON.parse(salvo) as AssistenteConfig[]
-      } catch {
-        return ASSISTENTES_PADRAO
-      }
-    }
-    return ASSISTENTES_PADRAO
-  })
-
-  const [assistenteSelecionadoId, setAssistenteSelecionadoId] = useState(
-    () => localStorage.getItem('selene_assistente_ativo') || ASSISTENTES_PADRAO[0].id
-  )
 
   const exibirToast = useCallback((mensagem: string, tipo: 'info' | 'erro' = 'info', posicao: 'padrao' | 'toolbar' = 'padrao') => {
     if (toastTimeoutRef.current) {
@@ -102,7 +83,7 @@ function AppOverlay() {
     baseUrlLmStudio, setBaseUrlLmStudio,
     provedorAtivo, setProvedorAtivo,
     perfilLatencia, setPerfilLatencia,
-    systemPrompt, setSystemPrompt,
+    systemPrompt,
     criarOuObterServico,
     
     // Shortcuts
@@ -211,7 +192,7 @@ function AppOverlay() {
   }, [criarOuObterServico])
 
   const contextoPerfilUsuario = getProfileContext()
-  const overlayProativoPausado = chatAberto || isAreaMode || mostrarAssistentes || mostrarConfiguracoes
+  const overlayProativoPausado = chatAberto || isAreaMode || mostrarConfiguracoes
   const {
     intervencao: intervencaoOverlay,
     dispensarIntervencao,
@@ -538,41 +519,6 @@ function AppOverlay() {
     }
   }
 
-  const salvarAssistente = (assistente: AssistenteConfig) => {
-    setAssistentes((lista) => lista.map((item) => (item.id === assistente.id ? assistente : item)))
-  }
-
-  const adicionarAssistente = (assistente: AssistenteConfig) => {
-    setAssistentes((lista) => [...lista, assistente])
-  }
-
-  const removerAssistente = (assistenteId: string) => {
-    setAssistentes((lista) => {
-      const filtrados = lista.filter((item) => item.id !== assistenteId)
-      if (!filtrados.length) {
-        setAssistenteSelecionadoId(ASSISTENTES_PADRAO[0].id)
-        setSystemPrompt(ASSISTENTES_PADRAO[0].prompt)
-        return ASSISTENTES_PADRAO
-      }
-      if (assistenteSelecionadoId === assistenteId) {
-        const novoSelecionado = filtrados[0]
-        setAssistenteSelecionadoId(novoSelecionado.id)
-        setSystemPrompt(novoSelecionado.prompt)
-      }
-      return filtrados
-    })
-  }
-
-  const aplicarAssistenteNaSessao = (assistente: AssistenteConfig) => {
-    setAssistenteSelecionadoId(assistente.id)
-    setSystemPrompt(assistente.prompt)
-  }
-
-  const restaurarPadroes = () => {
-    setAssistentes(ASSISTENTES_PADRAO)
-    setAssistenteSelecionadoId(ASSISTENTES_PADRAO[0].id)
-    setSystemPrompt(ASSISTENTES_PADRAO[0].prompt)
-  }
 
   const handleAnalyze = async () => {
     const servico = criarOuObterServico()
@@ -608,21 +554,18 @@ function AppOverlay() {
     intervencaoOverlay
     && !chatAberto
     && !isAreaMode
-    && !mostrarAssistentes
     && !mostrarConfiguracoes
     && (intervencaoOverlay.status === 'respondendo' || intervencaoOverlay.status === 'pronto')
   )
-  const algumaJanelaAberta = mostrarAssistentes || mostrarConfiguracoes
+  const algumaJanelaAberta = mostrarConfiguracoes
 
   const {
     modalRef,
     overlayProativoRef,
     toolbarRef,
-    assistentesRef,
     configuracoesRef,
     menuDropdownRef
   } = useWindowManagement([
-    mostrarAssistentes,
     mostrarConfiguracoes,
     deveExibirModalFlutuante,
     deveExibirOverlayProativo
@@ -747,7 +690,6 @@ function AppOverlay() {
           aoPerguntarScreenshot={() => perguntarComScreenshot()}
           pendingScreenshots={pendingScreenshots}
           onDeleteScreenshot={(idx) => setPendingScreenshots((lista) => lista.filter((_, i) => i !== idx))}
-          aoAbrirAssistentes={() => setMostrarAssistentes(true)}
           aoAbrirAssistenteGramatical={() => window.electronAPI?.abrirAssistenteGramatical?.()}
           aoAbrirConfiguracoes={() => setMostrarConfiguracoes(true)}
           aoAbrirChatWindow={() => {
@@ -765,19 +707,6 @@ function AppOverlay() {
         />
       )}
 
-      <AssistentesModal
-        ref={assistentesRef}
-        aberto={mostrarAssistentes}
-        aoFechar={() => setMostrarAssistentes(false)}
-        assistentes={assistentes}
-        assistenteSelecionadoId={assistenteSelecionadoId}
-        aoSelecionar={setAssistenteSelecionadoId}
-        aoSalvar={salvarAssistente}
-        aoAdicionar={adicionarAssistente}
-        aoRemover={removerAssistente}
-        aoAplicar={aplicarAssistenteNaSessao}
-        aoRestaurarPadrao={restaurarPadroes}
-      />
 
       <ModalConfiguracoes
         ref={configuracoesRef}

@@ -17,8 +17,6 @@ export function useChatUI() {
     // Sidebar state
     const [sidebarExpandida, setSidebarExpandida] = useState(true)
     const [showSettings, setShowSettings] = useState(false)
-    const [showAssistantsPanel, setShowAssistantsPanel] = useState(false)
-    const [showAssistantEditor, setShowAssistantEditor] = useState(false)
     const [showMCPPanel, setShowMCPPanel] = useState(false)
     const [showReasoningTrail, setShowReasoningTrail] = useState(false)
 
@@ -79,8 +77,6 @@ export function useChatUI() {
         // Sidebar
         sidebarExpandida, setSidebarExpandida,
         showSettings, setShowSettings,
-        showAssistantsPanel, setShowAssistantsPanel,
-        showAssistantEditor, setShowAssistantEditor,
         showMCPPanel, setShowMCPPanel,
         showReasoningTrail, setShowReasoningTrail,
 
