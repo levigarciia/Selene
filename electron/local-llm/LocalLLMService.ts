@@ -148,6 +148,53 @@ export async function setupLocalLLMIPC(mainWindow: BrowserWindow): Promise<void>
         }
     })
 
+    const enviarEventoStream = (event: Electron.IpcMainInvokeEvent, canal: string, dados: unknown) => {
+        if (!event.sender.isDestroyed()) {
+            event.sender.send(canal, dados)
+        }
+    }
+
+    const processarStreamChat = async (
+        event: Electron.IpcMainInvokeEvent,
+        reqId: string,
+        reader: ReadableStreamDefaultReader<Uint8Array>
+    ): Promise<void> => {
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+
+                buffer += decoder.decode(value, { stream: true })
+                const linhas = buffer.split(/\r?\n/)
+                buffer = linhas.pop() || ''
+
+                for (const { line } of parseSSELines(linhas)) {
+                    enviarEventoStream(event, 'local-llm:stream-chunk', { reqId, data: line })
+                }
+            }
+
+            buffer += decoder.decode()
+            if (buffer.trim()) {
+                for (const { line } of parseSSELines(buffer.split(/\r?\n/))) {
+                    enviarEventoStream(event, 'local-llm:stream-chunk', { reqId, data: line })
+                }
+            }
+
+            enviarEventoStream(event, 'local-llm:stream-end', { reqId, success: true })
+        } catch (erro: unknown) {
+            const errorMsg = erro instanceof Error && erro.name === 'AbortError'
+                ? 'Requisição cancelada pelo usuário.'
+                : obterMensagemErro(erro)
+            enviarEventoStream(event, 'local-llm:stream-end', { reqId, success: false, error: errorMsg })
+        } finally {
+            controllersMap.delete(reqId)
+            reader.releaseLock()
+        }
+    }
+
     ipcMain.handle('local-llm:stream-chat', async (event, reqId: string, modelId: string, mensagens: MensagemLocalLLM[], opcoes: OpcoesStreamLocalLLM) => {
         try {
             const servidor = await localLLMHostService.ensureServer(modelId)
@@ -178,6 +225,8 @@ export async function setupLocalLLMIPC(mainWindow: BrowserWindow): Promise<void>
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Accept-Encoding': 'identity',
                     'Authorization': 'Bearer selene-local'
                 },
                 body: JSON.stringify(bodyReq),
@@ -194,43 +243,14 @@ export async function setupLocalLLMIPC(mainWindow: BrowserWindow): Promise<void>
                 throw new Error("Corpo de resposta HTTP não é legível.")
             }
 
-            const decoder = new TextDecoder()
-            let buffer = ''
-
-            try {
-                while (true) {
-                    const { done, value } = await reader.read()
-                    if (done) break
-                    
-                    buffer += decoder.decode(value, { stream: true })
-                    const linhas = buffer.split('\n')
-                    buffer = linhas.pop() || ''
-
-                    for (const { line } of parseSSELines(linhas)) {
-                        event.sender.send('local-llm:stream-chunk', { reqId, data: line })
-                    }
-                }
-
-                if (buffer.trim()) {
-                    const linhasRestantes = [buffer.trim()]
-                    for (const { line } of parseSSELines(linhasRestantes)) {
-                        event.sender.send('local-llm:stream-chunk', { reqId, data: line })
-                    }
-                }
-
-                event.sender.send('local-llm:stream-end', { reqId, success: true })
-            } finally {
-                reader.releaseLock()
-            }
-
-            controllersMap.delete(reqId)
+            void processarStreamChat(event, reqId, reader)
             return { success: true }
         } catch (erro: unknown) {
             controllersMap.delete(reqId)
             const errorMsg = erro instanceof Error && erro.name === 'AbortError'
                 ? 'Requisição cancelada pelo usuário.'
                 : obterMensagemErro(erro)
-            event.sender.send('local-llm:stream-end', { reqId, success: false, error: errorMsg })
+            enviarEventoStream(event, 'local-llm:stream-end', { reqId, success: false, error: errorMsg })
             return { success: false, error: errorMsg }
         }
     })

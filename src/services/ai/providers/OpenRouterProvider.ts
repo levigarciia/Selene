@@ -48,9 +48,8 @@ export class OpenRouterProvider implements AIProvider {
                 model: this.model,
                 ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
-            if (opcoes.reasoningAtivo === false) {
-                payload.include_reasoning = false
-            }
+            this.aplicarConfiguracaoRaciocinio(payload, opcoes.reasoningAtivo)
+            this.aplicarPreferenciasRoteamento(payload, opcoes)
             if (typeof opcoes.maxTokens === 'number') {
                 payload.max_tokens = opcoes.maxTokens
             }
@@ -81,23 +80,34 @@ export class OpenRouterProvider implements AIProvider {
             }
             if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
             if (typeof opcoes.maxTokens === 'number') payload.max_tokens = opcoes.maxTokens
-            if (opcoes.reasoningAtivo === false) {
-                payload.include_reasoning = false
-            }
+            this.aplicarConfiguracaoRaciocinio(payload, opcoes.reasoningAtivo)
+            this.aplicarPreferenciasRoteamento(payload, opcoes)
 
             const stream = await this.client.chat.completions.create(
                 payload as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
                 { signal: opcoes.signal }
             )
             let finishReason: MetaFimStream['finishReason'] = null
+            let provedorExecucao: string | undefined
+            let tokensRaciocinio: number | undefined
+            let recebeuRaciocinio = false
 
             for await (const chunk of stream) {
+                const chunkRegistro = this.comoRegistro(chunk)
+                const usage = this.comoRegistro(chunkRegistro?.usage)
+                const detalhesConclusao = this.comoRegistro(usage?.completion_tokens_details)
+                const provider = this.extrairTextoVariado(chunkRegistro?.provider)
+                const reasoningTokens = detalhesConclusao?.reasoning_tokens
+                if (provider) provedorExecucao = provider
+                if (typeof reasoningTokens === 'number') tokensRaciocinio = reasoningTokens
+
                 finishReason = this.normalizarFinishReason(chunk.choices?.[0]?.finish_reason)
                 const choice = chunk.choices?.[0]
                 const delta = choice?.delta
                 const partes = this.extrairPartesStream(choice, delta)
                 const raciocinio = partes.raciocinio
                 if (raciocinio) {
+                    recebeuRaciocinio = true
                     opcoes.onEventoStream?.({
                         tipo: 'raciocinio',
                         texto: raciocinio,
@@ -111,7 +121,12 @@ export class OpenRouterProvider implements AIProvider {
                 }
             }
 
-            opcoes.onFimStream?.({ finishReason })
+            opcoes.onFimStream?.({
+                finishReason,
+                provedorExecucao,
+                tokensRaciocinio,
+                recebeuRaciocinio
+            })
         } catch (error: unknown) {
             console.error('Erro no streaming OpenRouter:', error)
             throw this.normalizarErroOpenRouter(error)
@@ -171,9 +186,8 @@ export class OpenRouterProvider implements AIProvider {
                 messages: mensagens,
                 ...(typeof opcoes.temperature === 'number' ? { temperature: opcoes.temperature } : {})
             }
-            if (opcoes.reasoningAtivo === false) {
-                payload.include_reasoning = false
-            }
+            this.aplicarConfiguracaoRaciocinio(payload, opcoes.reasoningAtivo)
+            this.aplicarPreferenciasRoteamento(payload, opcoes)
 
             const completion = await this.client.chat.completions.create(
                 payload as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
@@ -217,9 +231,8 @@ export class OpenRouterProvider implements AIProvider {
                 stream: true
             }
             if (typeof opcoes.temperature === 'number') payload.temperature = opcoes.temperature
-            if (opcoes.reasoningAtivo === false) {
-                payload.include_reasoning = false
-            }
+            this.aplicarConfiguracaoRaciocinio(payload, opcoes.reasoningAtivo)
+            this.aplicarPreferenciasRoteamento(payload, opcoes)
 
             const stream = await this.client.chat.completions.create(
                 payload as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming,
@@ -266,6 +279,38 @@ export class OpenRouterProvider implements AIProvider {
             ;(erroNormalizado as Error & { status?: number }).status = status
         }
         return erroNormalizado
+    }
+
+    private aplicarConfiguracaoRaciocinio(payload: Record<string, unknown>, reasoningAtivo?: boolean): void {
+        if (reasoningAtivo === false) {
+            payload.reasoning = {
+                effort: 'none',
+                exclude: true
+            }
+            return
+        }
+
+        if (reasoningAtivo === true) {
+            payload.reasoning = {
+                enabled: true,
+                exclude: false
+            }
+        }
+    }
+
+    private aplicarPreferenciasRoteamento(
+        payload: Record<string, unknown>,
+        opcoes: OpcoesRequisicaoIA
+    ): void {
+        const priorizarLatencia = opcoes.perfilLatencia !== 'completo'
+        const exigirParametros = opcoes.reasoningAtivo === false
+
+        if (!priorizarLatencia && !exigirParametros) return
+
+        payload.provider = {
+            ...(priorizarLatencia ? { sort: 'latency' } : {}),
+            ...(exigirParametros ? { require_parameters: true } : {})
+        }
     }
 
     private validarModeloConversacional(): void {

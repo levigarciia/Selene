@@ -2,6 +2,9 @@ import type { MensagemChat, MensagemHistoricoIA, PerfilLatencia } from './types'
 
 export interface MetaFimStream {
     finishReason?: 'stop' | 'length' | 'other' | null
+    provedorExecucao?: string
+    tokensRaciocinio?: number
+    recebeuRaciocinio?: boolean
 }
 
 export type TipoEventoStreamIA = 'conteudo' | 'raciocinio'

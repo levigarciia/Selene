@@ -159,6 +159,10 @@ export function useUserProfile() {
         const somenteIdentidadeBasica = filtro.somenteIdentidadeBasica ?? false
         const consulta = filtro.consulta?.trim() || ''
 
+        if (!permitirContextoPessoal && !somenteIdentidadeBasica) {
+            return ''
+        }
+
         if (somenteIdentidadeBasica) {
             let contextoBasico = ''
             if (profile.name || profile.occupation) {

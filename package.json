@@ -15,6 +15,7 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "postinstall": "npm run rebuild:nativos",
+    "predev": "bun run build:electron",
     "dev": "concurrently -k \"npm run dev:react\" \"npm run watch:tsc\" \"npm run watch:esbuild\" \"npm run dev:electron\"",
     "dev:react": "vite",
     "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",

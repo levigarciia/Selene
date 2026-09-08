@@ -76,9 +76,9 @@ export class LocalProvider implements AIProvider {
         const limparChunks = api.onStreamChunk((evento) => {
             if (evento.reqId !== reqId) return
             
-            const linha = evento.data
-            if (linha.startsWith('data: ')) {
-                const dados = linha.substring(6).trim()
+            const linha = evento.data.trimStart()
+            if (linha.startsWith('data:')) {
+                const dados = linha.substring(5).trim()
                 if (dados === '[DONE]') return
 
                 try {
@@ -126,11 +126,14 @@ export class LocalProvider implements AIProvider {
         }
 
         try {
-            await api.streamChat(reqId, this.model, mensagens, {
+            const inicioStream = await api.streamChat(reqId, this.model, mensagens, {
                 temperature: opcoes.temperature,
                 maxTokens: opcoes.maxTokens,
                 reasoningAtivo: opcoes.reasoningAtivo
             })
+            if (!inicioStream.success) {
+                throw new Error(inicioStream.error || 'Falha ao iniciar streaming local.')
+            }
             await promessa
         } catch (erro) {
             limparListeners()

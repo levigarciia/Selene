@@ -159,11 +159,14 @@ Responsabilidades atuais:
 - `ProjectContextService`: contexto de arquivos e instruções específicas por projeto
 - `crosschat/`: recuperação semântica entre conversas
 - `memory/`: extração e persistência de preferências
+- `builtin:memory_search`: recuperação sob demanda de perfil, memórias e conversas anteriores
 
 Regras:
 
 - Não misture memória permanente com contexto transitório de projeto
 - Instruções do projeto e contexto de arquivos não devem voltar a ser concatenados de forma monolítica
+- O chat comum não injeta perfil ou memórias no prompt; deixe a decisão de recuperação para `memory_search`
+- Contexto recuperado deve ser usado silenciosamente, sem recapitular o perfil do usuário quando isso não foi pedido
 - Ao alterar o formato de projeto, revise também indexação, hydration e tool calling
 
 ### 7. Overlay proativo é parte da experiência principal

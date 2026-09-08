@@ -50,6 +50,25 @@ describe('ToolCallingService - planejamento de query web', () => {
         expect(decisao.toolCalls).toHaveLength(0)
     })
 
+    test('deve responder a teste simples sem consultar a IA para decidir ferramentas', async () => {
+        let chamadasIA = 0
+        toolCallingService.setChatFunction(async () => {
+            chamadasIA += 1
+            return JSON.stringify({ action: 'respond', tool_calls: [] })
+        })
+
+        const ferramentas = toolRegistry.getEnabled()
+        const decisao = await toolCallingService.decideToolUsage(
+            'teste, diga olá!',
+            [],
+            ferramentas,
+            { estrategiaDecisao: 'ai_only' }
+        )
+
+        expect(decisao.shouldUseTool).toBe(false)
+        expect(chamadasIA).toBe(0)
+    })
+
     test('deve manter chamada web_search quando planejamento retorna query válida', async () => {
         toolCallingService.setChatFunction(async () => JSON.stringify({
             queryPrincipal: 'banco master crise últimos dias 2026',

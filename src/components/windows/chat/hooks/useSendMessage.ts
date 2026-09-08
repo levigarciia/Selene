@@ -15,7 +15,6 @@ import {
     ORCAMENTO_PROMPT_PADRAO,
     aplicarOrcamentoPrompt,
     composePromptEfetivo,
-    deveInjetarContextoPessoal,
     processUserMessageForMemory,
 } from '../../../../services/PromptPipeline'
 import {
@@ -48,12 +47,6 @@ import {
 } from '../../../../services/conversasPersistidas'
 import { normalizarMensagemErroApi, obterMensagemErroApi, obterStatusErroApi } from '../../../../utils/errosApi'
 
-interface FiltroContextoPerfil {
-    consulta?: string
-    permitirContextoPessoal?: boolean
-    somenteIdentidadeBasica?: boolean
-}
-
 interface PoliticaLatencia {
     prestreamBudgetMs: number
     maxCharsMensagemHistorico: number
@@ -77,6 +70,12 @@ interface MetricasLatencia {
     tempoTools: number
     tempoWeb: number
     ttft: number | null
+    ttftProvedor: number | null
+    ttftConteudo: number | null
+    primeiroEventoStream: 'conteudo' | 'raciocinio' | null
+    provedorExecucao?: string
+    tokensRaciocinio?: number
+    recebeuRaciocinio?: boolean
     tempoTotal: number
     timestamp: number
     conversationId: string
@@ -84,6 +83,8 @@ interface MetricasLatencia {
     provedor: string
     modelo: string
     perfilLatencia: PerfilLatencia
+    reasoningAtivo: boolean
+    toolCallingAtivo: boolean
 }
 
 interface EntradaToolCallMarcador {
@@ -197,7 +198,6 @@ interface UseSendMessageParams {
 
     // Config
     promptBase: string
-    getProfileContext: (filtro?: FiltroContextoPerfil) => string
     criarOuObterServico: () => AIService | null
     provedorAtivo: string
     modeloAtivo: string
@@ -666,7 +666,6 @@ export function useSendMessage({
     setMessageSources,
     setMessageSearchCards,
     promptBase,
-    getProfileContext,
     criarOuObterServico,
     provedorAtivo,
     modeloAtivo,
@@ -1032,7 +1031,25 @@ export function useSendMessage({
         let tempoTools = 0
         const tempoWeb = 0
         let ttft: number | null = null
+        let inicioRequisicaoPrincipal: number | null = null
+        let ttftProvedor: number | null = null
+        let ttftConteudo: number | null = null
+        let primeiroEventoStream: MetricasLatencia['primeiroEventoStream'] = null
+        let diagnosticoFimStream: MetaFimStream | null = null
         let modoMetricas: MetricasLatencia['modo'] = 'chat'
+
+        const registrarEventoStream = (tipo: 'conteudo' | 'raciocinio') => {
+            if (inicioRequisicaoPrincipal === null) return
+
+            const tempoDesdeRequisicao = performance.now() - inicioRequisicaoPrincipal
+            if (ttftProvedor === null) {
+                ttftProvedor = tempoDesdeRequisicao
+                primeiroEventoStream = tipo
+            }
+            if (tipo === 'conteudo' && ttftConteudo === null) {
+                ttftConteudo = tempoDesdeRequisicao
+            }
+        }
         const currentConv = conversations.find(c => c.id === convId)
         const currentProject = currentConv?.projectId
             ? projects.find(project => project.id === currentConv.projectId) || null
@@ -1666,23 +1683,18 @@ Pergunta: "${userMsg.content}" -> Resposta:`
                 }
 
                 const inicioPrompt = performance.now()
-                const permitirContextoPessoal = currentProject ? false : deveInjetarContextoPessoal(userMsg.content, true)
                 const { systemPrompt: composedPrompt, metadata: promptMetadata } = await composePromptEfetivo(
                     {
                         systemPrompt: promptBase,
-                        userProfileContext: currentProject ? '' : getProfileContext({
-                            consulta: userMsg.content,
-                            permitirContextoPessoal,
-                            somenteIdentidadeBasica: false,
-                        }),
+                        userProfileContext: '',
                         currentConversationId: convId,
                         currentProjectId: currentProject?.id,
                         currentProject,
                         currentUserMessage: userMsg.content,
-                        permitirContextoPessoal,
-                        permitirMemoriaPerfil: !currentProject,
-                        permitirMemoriasAuto: !currentProject,
-                        permitirCrossChat: !currentProject,
+                        permitirContextoPessoal: false,
+                        permitirMemoriaPerfil: false,
+                        permitirMemoriasAuto: false,
+                        permitirCrossChat: false,
                     },
                     {
                         orcamento: orcamentoPromptEfetivo,
@@ -1772,10 +1784,13 @@ Pergunta: "${userMsg.content}" -> Resposta:`
                 )
 
                 let metaFimPrincipal: MetaFimStream | null = null
+                inicioRequisicaoPrincipal = performance.now()
                 await servico.streamChat(
                     mensagemUsuarioParaModelo,
                     (chunk: string) => {
                         if (!isGenerationActive()) return
+
+                        registrarEventoStream('conteudo')
 
                         if (ttft === null) {
                             ttft = performance.now() - inicioTotal
@@ -1794,11 +1809,13 @@ Pergunta: "${userMsg.content}" -> Resposta:`
                         onEventoStream: (evento: EventoStreamIA) => {
                             if (!isGenerationActive()) return
                             if (evento.tipo !== 'raciocinio' || !evento.texto) return
+                            registrarEventoStream('raciocinio')
                             streamedRaciocinio += evento.texto
                             atualizarMensagemAssistente(streamedContent, streamedRaciocinio)
                         },
                         onFimStream: (meta: MetaFimStream) => {
                             metaFimPrincipal = meta
+                            diagnosticoFimStream = meta
                         },
                     }
                 )
@@ -1980,13 +1997,21 @@ Pergunta: "${userMsg.content}" -> Resposta:`
         } finally {
             agendadorMensagemAssistente.flush()
             const tempoTotal = performance.now() - inicioTotal
-            const tempoPreStream = performance.now() - inicioPreStream
+            const tempoPreStream = inicioRequisicaoPrincipal === null
+                ? Math.min(tempoTotal, ttft ?? tempoTotal)
+                : inicioRequisicaoPrincipal - inicioPreStream
             publicarMetricasLatencia({
                 tempoPreStream,
                 tempoPrompt,
                 tempoTools,
                 tempoWeb,
                 ttft,
+                ttftProvedor,
+                ttftConteudo,
+                primeiroEventoStream,
+                provedorExecucao: diagnosticoFimStream?.provedorExecucao,
+                tokensRaciocinio: diagnosticoFimStream?.tokensRaciocinio,
+                recebeuRaciocinio: diagnosticoFimStream?.recebeuRaciocinio,
                 tempoTotal,
                 timestamp: Date.now(),
                 conversationId: convId,
@@ -1994,6 +2019,8 @@ Pergunta: "${userMsg.content}" -> Resposta:`
                 provedor: provedorAtivo,
                 modelo: modeloAtivo,
                 perfilLatencia,
+                reasoningAtivo,
+                toolCallingAtivo,
             })
 
             if (isGenerationActive()) {
@@ -2006,7 +2033,7 @@ Pergunta: "${userMsg.content}" -> Resposta:`
     }, [
         input, pendingScreenshots, pendingFiles, isGenerating, activeConversationId, messages,
         conversations, projects, webSearchEnabled, toolCallingAtivo, investigateMode,
-        promptBase, getProfileContext, criarOuObterServico, updateConversationMessages,
+        promptBase, criarOuObterServico, updateConversationMessages,
         runInvestigation, setConversations, setActiveConversationId, setInput,
         setPendingScreenshots, setPendingFiles, setPendingMessage, setIsGenerating, setIsAnalyzingImage,
         setMessageSources, setMessageSearchCards, textareaRef, generationIdRef, abortControllerRef,
@@ -2108,24 +2135,18 @@ Pergunta: "${userMsg.content}" -> Resposta:`
                     signal
                 )
             }
-            const permitirContextoPessoal = currentProject ? false : deveInjetarContextoPessoal(userContent, true)
-
             const { systemPrompt: composedPrompt, metadata: promptMetadata } = await composePromptEfetivo(
                 {
                     systemPrompt: promptBase,
-                    userProfileContext: currentProject ? '' : getProfileContext({
-                        consulta: userContent,
-                        permitirContextoPessoal,
-                        somenteIdentidadeBasica: false,
-                    }),
+                    userProfileContext: '',
                     currentConversationId: activeConversationId,
                     currentProjectId: currentProject?.id,
                     currentProject,
                     currentUserMessage: userContent,
-                    permitirContextoPessoal,
-                    permitirMemoriaPerfil: !currentProject,
-                    permitirMemoriasAuto: !currentProject,
-                    permitirCrossChat: !currentProject,
+                    permitirContextoPessoal: false,
+                    permitirMemoriaPerfil: false,
+                    permitirMemoriasAuto: false,
+                    permitirCrossChat: false,
                 },
                 {
                     orcamento: orcamentoPromptEfetivo,
@@ -2298,7 +2319,7 @@ Pergunta: "${userMsg.content}" -> Resposta:`
             setIsGenerating(false)
         }
     }, [
-        activeConversationId, messages, isGenerating, investigateMode, promptBase, getProfileContext,
+        activeConversationId, messages, isGenerating, investigateMode, promptBase,
         criarOuObterServico, updateConversationMessages, setConversations, setIsGenerating, abortControllerRef,
         generationIdRef, politica.maxCharsMensagemHistorico,
         politica.timeoutCrossChatMs,

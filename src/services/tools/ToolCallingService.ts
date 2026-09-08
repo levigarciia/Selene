@@ -265,6 +265,10 @@ class ToolCallingService {
             return true
         }
 
+        const testeRespostaCurta =
+            /^(?:teste[,.:;!?\s-]+)?(?:diga|fale|responda|repita)\s+(?:olá|ola|oi|teste|ok|hello)[!.?\s]*$/i
+        if (testeRespostaCurta.test(msg)) return true
+
         return /^(resuma|traduza|reescreva|corrija|formate)/i.test(msg)
     }
 
@@ -658,7 +662,9 @@ class ToolCallingService {
             },
             // Memory
             {
-                keywords: ['lembr', 'memória', 'memory', 'salvar', 'guardar', 'preferência', 'você sabe', 'já te disse', 'perfil', 'gravar preferência'],
+                keywords: ['lembr', 'memória', 'memory', 'salvar', 'guardar', 'preferência', 'você sabe', 'já te disse',
+                          'perfil', 'gravar preferência', 'sobre mim', 'quem sou', 'meu jeito', 'como eu gosto',
+                          'meu trabalho', 'minha profissão', 'minha ocupação'],
                 toolPatterns: ['memory', 'remember', 'store', 'memory_user_edits']
             },
             // File operations & Commands

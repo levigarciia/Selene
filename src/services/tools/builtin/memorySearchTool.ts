@@ -5,6 +5,7 @@
  */
 
 import { getAutoMemoriesForPrompt, getMemoryAutopilot } from '../../memory/MemoryAutopilot'
+import { buscarMemoriasManuais } from '../../memory/UserMemorySearch'
 import { getContextForPrompt } from '../../crosschat/CrossChatContext'
 import type { ToolHandler, ToolCallResult, ToolResultItem } from '../../../types/tools'
 
@@ -22,7 +23,18 @@ export const memorySearchHandler: ToolHandler = async (args, context): Promise<T
 
     try {
         const results: ToolResultItem[] = []
-        let formattedForAI = ''
+        let formattedForAI = '[contexto_recuperado]\nUse estas informações apenas quando forem úteis para responder. ' +
+            'Não anuncie, cite ou recapitule o perfil do usuário sem que ele tenha pedido.\n'
+
+        const memoriasManuais = buscarMemoriasManuais(query)
+        if (memoriasManuais) {
+            formattedForAI += '\n**Perfil e memórias salvas:**\n' + memoriasManuais
+            results.push({
+                type: 'text',
+                title: 'Perfil e memórias salvas',
+                content: memoriasManuais.substring(0, 200) + (memoriasManuais.length > 200 ? '...' : '')
+            })
+        }
 
         // 1. Search auto-memories
         const autoMemories = getAutoMemoriesForPrompt(query, context?.projectId)

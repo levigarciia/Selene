@@ -489,7 +489,7 @@ function AppOverlay() {
         }
       }
 
-      const enhancedPrompt = systemPrompt + getProfileContext() + contextoFerramentas
+      const enhancedPrompt = systemPrompt + contextoFerramentas
       const configGeracaoChat = obterConfiguracaoPerfilGeracao(texto)
       
       await servico.streamChat(
