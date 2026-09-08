@@ -1,10 +1,10 @@
-# Selene - AI Assistant Overlay
+# Selene
 
 <div align="center">
-  <img src="public/icon.png" alt="Selene Logo" width="120" />
+  <img src="public/icon.png" alt="Logo da Selene" width="120" />
   <h1>Selene</h1>
-  <p><strong>Desperte a Inteligência no seu Desktop</strong></p>
-  
+  <p><strong>Assistente de IA para o seu desktop</strong></p>
+
   [![License](https://img.shields.io/badge/license-Source%20Available-orange.svg)](LICENSE.md)
   [![React](https://img.shields.io/badge/react-19.2-blue)](https://react.dev)
   [![Electron](https://img.shields.io/badge/electron-39.x-blue)](https://www.electronjs.org/)
@@ -14,177 +14,226 @@
 
 ---
 
-**Selene** é uma assistente de desktop futurista e onipresente projetada para ser seu segundo cérebro. O código-fonte é público e desenvolvido no **Brasil** 🇧🇷.
-Funciona como um overlay transparente e interativo que flutua sobre suas janelas, oferecendo inteligência artificial instantânea sem interromper seu fluxo de trabalho.
+**Selene** é uma assistente de desktop feita em `Electron + React + TypeScript`.
+Ela combina overlay transparente, chat dedicado, assistente gramatical global, voz, memória, busca web,
+ferramentas locais e integração MCP para ajudar sem tirar você do fluxo de trabalho.
 
-![Selene Overlay](public/normal.png)
+O código-fonte é público, source-available e desenvolvido no Brasil.
 
-## ✨ Funcionalidades Principais
+![Overlay da Selene](public/normal.png)
 
-### 🖱️ Overlay Transparente Inteligente
+## Funcionalidades
 
-A interface flutua sobre o Windows/Linux. Widgets ficam interativos automaticamente quando você passa o mouse, enquanto o resto da tela permanece "clicável" (click-through).
+### Overlay transparente
 
-### 🗣️ Comandos de Voz
+A Selene roda sobre a área de trabalho como um overlay de tela cheia com click-through. Os blocos interativos
+recebem foco quando necessário, enquanto o restante da tela continua clicável.
 
-Transcrição de áudio em tempo real usando:
+### Chat dedicado
 
-- **Whisper Local** (whisper.cpp - modelos offline)
-- **Whisper API** (OpenAI)
-- **Gemini Flash** (Google)
-- **Groq** (transcrição rápida)
+O chat tem janela própria, conversas persistidas, projetos, contexto por arquivos, anexos multimodais, citações,
+ações rápidas e trilha de raciocínio quando o provedor suporta esse fluxo.
 
-### 🧠 Multi-Modelo
+### Assistente gramatical global
 
-Suporte nativo para múltiplos provedores de IA:
+Selecione texto em qualquer aplicativo e use o atalho configurado para corrigir, resumir, detalhar, reescrever ou
+converter para Markdown.
 
-- **OpenAI** (GPT-5.2, GPT-4o)
-- **Google Gemini** (3 Pro, 2.5 Flash)
-- **LM Studio** (Modelos locais via API compatível)
-- **OpenRouter**
+<img src="public/corretorgramatical.png" alt="Assistente gramatical da Selene" />
 
-### ✍️ Assistente Gramatical Global
+### Voz e transcrição
 
-Selecione qualquer texto em qualquer aplicativo, pressione `Ctrl+Alt+X` e a Selene irá corrigir, resumir ou reescrever o texto instantaneamente em uma janela dedicada.
+A entrada por voz pode usar provedores em nuvem ou motores locais:
 
-<img src="public/corretorgramatical.png" alt="Assistente Gramatical" />
+- OpenAI Whisper
+- Google Gemini
+- Groq
+- Whisper local
+- Parakeet local
 
-### 🤖 Personas Personalizáveis
+### Provedores de IA
 
-Crie "Agentes" com prompts de sistema específicos (ex: "Programador Senior", "Tradutor", "Revisor") e alterne entre eles rapidamente.
+A Selene suporta diferentes provedores e perfis de latência:
 
-<img src="public/assistentes.png" alt="Assistentes" />
+- OpenAI
+- Google Gemini
+- OpenRouter
+- LM Studio ou outro endpoint local compatível
 
-### 🧠 Sistema de Memória Inteligente
+### Memória e contexto
 
-- **Memória Persistente**: Perfil do usuário e memórias manuais.
-- **Cross-Chat Context**: Recuperação automática de contexto relevante de conversas anteriores via busca semântica.
-- **Memory Autopilot**: Extração automática de preferências e contexto recorrente das conversas.
+- Perfil do usuário e memórias manuais.
+- `Cross-Chat Context` para recuperar contexto relevante de conversas anteriores.
+- `Memory Autopilot` para extrair preferências e fatos recorrentes.
+- Projetos com instruções e arquivos próprios.
 
-### 🎨 Design Premium
+### Ferramentas, MCP e investigação
 
-Interface moderna com:
+O chat possui tool calling com ferramentas nativas, busca web, leitura de arquivos do projeto, modo de investigação
+com checkpoints e integração com servidores MCP.
 
-- Glassmorphism
-- Animações suaves (Framer Motion)
-- Modo escuro nativo
-- Scrollbars customizadas
+### Overlay proativo
 
-### 🔄 Auto-Update
+O overlay inteligente pode observar contexto e voz para sugerir ajuda quando detectar travamento, dúvida clara ou
+oportunidade de ação. Ele pode ser pausado, dispensado ou expandido para o chat.
 
-Atualizações automáticas silenciosas quando disponíveis.
+### Atualizações automáticas
 
----
+O app usa `electron-updater` para verificar, baixar e instalar novas versões publicadas no GitHub Releases.
 
-## 📥 Download
+![Configurações da Selene](public/configs.png)
 
-Baixe a versão mais recente na [página de Releases](https://github.com/levigarciia/Selene/releases):
+## Download
 
-| Plataforma            | Download                          |
-| --------------------- | --------------------------------- |
-| Windows (64-bit)      | `Selene-x.x.x-win-x64.exe`        |
-| macOS (Intel)         | `Selene-x.x.x-mac-x64.dmg`        |
-| macOS (Apple Silicon) | `Selene-x.x.x-mac-arm64.dmg`      |
-| Linux (AppImage)      | `Selene-x.x.x-linux-x64.AppImage` |
-| Linux (Deb)           | `Selene-x.x.x-linux-x64.deb`      |
+Baixe a versão mais recente em [GitHub Releases](https://github.com/levigarciia/Selene/releases).
 
-> **Nota macOS**: A versão para Mac pode não estar notarizada. Clique com botão direito > "Abrir" na primeira execução, ou vá em Preferências do Sistema > Segurança e Privacidade para permitir.
+| Plataforma | Artefato |
+| --- | --- |
+| Windows x64 | `Selene-x.x.x-win-x64.exe` |
+| macOS Intel | `Selene-x.x.x-mac-x64.dmg` ou `.zip` |
+| macOS Apple Silicon | `Selene-x.x.x-mac-arm64.dmg` ou `.zip` |
+| Linux x64 | `Selene-x.x.x-linux-x64.AppImage` |
+| Linux x64 Deb | `Selene-x.x.x-linux-x64.deb` |
 
-> **Nota Linux**: Para o AppImage, você pode precisar dar permissão de execução: `chmod +x Selene-*.AppImage`
+No macOS, a versão distribuída pode exigir liberação manual na primeira execução.
+No Linux, o AppImage pode precisar de permissão de execução:
 
----
+```bash
+chmod +x Selene-*.AppImage
+```
 
-## ⚙️ Configuração
+## Configuração
 
-Ao abrir a Selene, clique no ícone de **Engrenagem** na barra de ferramentas ou no ChatWindow para acessar as configurações:
+As configurações ficam salvas localmente no computador. A janela de configurações organiza o app nestas seções:
 
-### Abas de Configuração
+| Seção | O que configura |
+| --- | --- |
+| Perfil | Nome, ocupação e dados usados para personalização |
+| IA | Chaves, provedor ativo, modelos e perfil de latência |
+| Personalização | Memórias manuais, memórias automáticas e contexto entre conversas |
+| Voz | Provedor de transcrição, motor local, modelo e microfone |
+| Avançado | Overlay proativo, atalhos globais, versão e auto-update |
 
-| Aba             | Descrição                                                                      |
-| --------------- | ------------------------------------------------------------------------------ |
-| **Perfil**      | Nome, ocupação e informações sobre você                                        |
-| **Memórias**    | Adicione memórias manuais e visualize memórias automáticas                     |
-| **Chaves API**  | Insira suas chaves da OpenAI, Google Gemini ou OpenRouter                      |
-| **Modelos**     | Configure modelos para OpenRouter e LM Studio                                  |
-| **Atalhos**     | Configure atalhos globais (Gramatical: `Ctrl+Alt+X`, Screenshot: `Ctrl+Alt+S`) |
-| **Transcrição** | Configure o provedor de transcrição de voz (Nuvem ou Local)                    |
-| **Avançado**    | Cross-Chat Context, Memory Autopilot e Auto-Update                             |
+## Desenvolvimento
+
+### Requisitos
+
+- Node.js 20 ou superior
+- Bun instalado globalmente
+- Git
+
+### Instalação
+
+```bash
+git clone https://github.com/levigarciia/Selene.git
+cd Selene
+bun install
+```
+
+### Rodar em desenvolvimento
+
+```bash
+bun run dev
+```
 
-> **Nota**: As configurações são salvas localmente no seu computador.
+O Vite roda em `http://localhost:5173` e o Electron abre a aplicação em modo de desenvolvimento.
 
-![Configurações](public/configs.png)
+### Verificações úteis
 
----
+```bash
+bun run lint
+bun run build
+```
 
-## 🎙️ Transcrição de Voz
+### Gerar instaladores
 
-Selene oferece múltiplas opções de transcrição:
+```bash
+bun run dist
+bun run dist:win
+bun run dist:mac
+bun run dist:linux
+```
 
-### Nuvem (API)
+Os artefatos são gerados em `release/`.
 
-- **OpenAI Whisper**: Alta qualidade, requer API key
-- **Google Gemini**: Integrado com sua chave Gemini
-- **Groq**: Transcrição rápida e gratuita
+> Observação: alguns scripts internos do `package.json` ainda chamam ferramentas via comandos legados. Para uso direto
+> no projeto, prefira sempre `bun run ...`.
 
-### Local (Offline)
+## Estrutura do projeto
 
-- **Whisper Local**: Usa whisper.cpp para transcrição offline
-- **Modelos disponíveis**: tiny, base, small, medium, large
-- **Streaming em tempo real**: Transcreva enquanto fala
+```text
+electron/
+├── main.ts                 # Janelas, tray, atalhos globais e click-through
+├── preload.ts              # Ponte segura para window.electronAPI
+├── updater.ts              # Auto-update
+├── web-search.ts           # Busca web no processo principal
+├── mcp/                    # IPC e integração MCP
+├── local-whisper/          # Transcrição local com Whisper
+└── local-parakeet/         # Transcrição local com Parakeet
 
-Para usar o Whisper Local, configure o caminho do binário em Configurações > Transcrição.
+src/
+├── App.tsx                 # Overlay raiz
+├── components/
+│   ├── config/             # Configurações
+│   ├── toolbar/            # Barra flutuante
+│   └── windows/            # Chat e assistente gramatical
+├── hooks/                  # Estado de app, voz, atalhos, memória e overlay
+├── services/
+│   ├── ai/                 # Providers de IA
+│   ├── tools/              # Tool calling e ferramentas nativas
+│   │   └── MCPToolBridge.ts # Ponte de ferramentas MCP via Electron
+│   ├── investigate/        # Modo de investigação
+│   ├── crosschat/          # Busca semântica entre conversas
+│   ├── memory/             # Memória persistente
+│   └── whisper/            # Camada de transcrição
+└── types/                  # Tipos compartilhados
 
----
+docs/
+├── AGENTS.md               # Guia operacional para agentes de IA
+├── CLAUDE.md               # Guia específico para Claude
+└── PHILOSOPHY.md           # Linguagem visual da Selene
+```
 
-## 🔄 Atualizações Automáticas
+## Tecnologias
 
-Selene suporta atualizações automáticas silenciosas:
+| Tecnologia | Uso |
+| --- | --- |
+| Electron | Integração com o sistema operacional e janelas nativas |
+| React + Vite | Interface do renderer |
+| TypeScript | Tipagem e contratos entre camadas |
+| Tailwind CSS | Estilização utilitária |
+| Framer Motion | Transições e microinterações |
+| electron-builder | Empacotamento |
+| electron-updater | Atualizações automáticas |
+| Vitest | Testes unitários |
 
-1. **Habilitar**: Vá em Configurações > Avançado > ative "Atualizações automáticas"
-2. **Comportamento**:
-   - O app verifica por atualizações no boot e periodicamente
-   - Downloads são feitos em segundo plano
-   - Quando pronto, você será notificado para reiniciar
-3. **Desabilitar**: Desative o toggle para controle manual
+## Contribuição
 
----
+Antes de contribuir, leia:
 
-## 🤝 Contribuição
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [docs/AGENTS.md](docs/AGENTS.md)
+- [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md)
 
-Quer contribuir com o projeto? Seja bem-vindo! Consulte:
+Use TypeScript, preserve os contratos entre `electron/main.ts`, `electron/preload.ts` e o renderer, e tenha cuidado
+especial com o fluxo de click-through do overlay.
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) - Guia completo para desenvolvedores
-- [CHANGELOG.md](CHANGELOG.md) - Histórico de mudanças
+## Licença
 
----
+> Selene é **source-available**: o código-fonte está disponível, mas o projeto não é open source segundo a definição
+> da [Open Source Initiative](https://opensource.org/osd).
 
-## 📜 Licença
+Você pode usar, estudar e contribuir com o projeto para fins pessoais, educacionais e de pesquisa não comercial.
 
-> **⚠️ Importante**: Selene é **source-available** (código-fonte disponível), mas **não é open source** segundo a definição da [Open Source Initiative (OSI)](https://opensource.org/osd).
+Você não pode vender, sublicenciar, oferecer como SaaS, usar comercialmente ou registrar patentes baseadas no código
+ou nos conceitos da Selene.
 
-### ✅ O que você PODE fazer:
+Para uso comercial, entre em contato: **contato@kitelabs.com**.
 
-- **Uso pessoal**: Executar Selene em seu computador para uso próprio
-- **Uso educacional**: Estudar o código, usar em projetos acadêmicos, ensinar
-- **Pesquisa**: Usar para pesquisa não-comercial e publicações acadêmicas
-- **Contribuir**: Enviar melhorias e correções para o projeto oficial
+Veja os termos completos em [LICENSE.md](LICENSE.md).
 
-### ❌ O que você NÃO pode fazer:
-
-- **Uso comercial**: Usar Selene em atividades que gerem receita ou lucro
-- **SaaS**: Oferecer Selene como serviço hospedado para terceiros
-- **Distribuição comercial**: Vender, licenciar ou sublicenciar Selene
-- **Patentes**: Registrar patentes baseadas no código ou conceitos do Selene
-
-Se você deseja usar Selene comercialmente, entre em contato: **contato@kitelabs.com**
-
-> Versões comerciais com funcionalidades adicionais podem ser disponibilizadas no futuro.
-
-Veja o arquivo [LICENSE.md](LICENSE.md) para os termos completos.
-
----
-
-## 👨‍💻 Autor
+## Autor
 
 **Levi Garcia**
 

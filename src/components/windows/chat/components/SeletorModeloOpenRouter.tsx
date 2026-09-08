@@ -24,6 +24,19 @@ interface CapacidadesModelo {
     imagemGeracao?: boolean
 }
 
+interface ModeloCatalogoOpenRouter {
+    id: string
+    architecture?: {
+        input_modalities?: string[]
+        output_modalities?: string[]
+    }
+    supported_parameters?: string[]
+}
+
+interface RespostaCatalogoOpenRouter {
+    data?: ModeloCatalogoOpenRouter[]
+}
+
 interface ModeloFixoOpenRouter {
     rotulo: string
     slug: string
@@ -62,11 +75,15 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
         inverterLogo: true,
         modelos: [
             modelo('GPT-5.5', 'openai/gpt-5.5', 'OpenAI general-purpose model', '$$$', {
+                imagem: true,
+                documento: true,
                 reasoning: true,
                 ferramentas: true,
                 estruturado: true,
             }, true),
             modelo('GPT-5.4', 'openai/gpt-5.4', 'Fast OpenAI model for everyday chat and tools', '$$$', {
+                imagem: true,
+                documento: true,
                 reasoning: true,
                 ferramentas: true,
                 estruturado: true,
@@ -74,6 +91,7 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
             modelo('GPT OSS 20B', 'openai/gpt-oss-20b', 'OpenAI open-weight model', '$', {
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }),
         ],
     },
@@ -87,17 +105,21 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
                 documento: true,
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }, true),
             modelo('Claude Opus 4.8', 'anthropic/claude-opus-4.8', 'Anthropic Opus model for demanding reasoning', '$$$', {
                 imagem: true,
                 documento: true,
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }, true),
             modelo('Claude Haiku 4.5', 'anthropic/claude-haiku-4.5', 'Fast Anthropic model for concise work', '$$', {
                 imagem: true,
                 documento: true,
+                reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }),
         ],
     },
@@ -111,12 +133,14 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
                 documento: true,
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }, true),
             modelo('3.5 Flash', 'google/gemini-3.5-flash', 'Next-gen Flash speed with stronger quality', '$$', {
                 imagem: true,
                 documento: true,
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }, true),
         ],
     },
@@ -144,11 +168,16 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
         dessaturarLogo: true,
         modelos: [
             modelo('Qwen 3.5 9B', 'qwen/qwen3.5-9b', 'Compact Qwen model for fast chat', '$', {
-                ferramentas: true,
-            }),
-            modelo('Qwen 3.6 Plus', 'qwen/qwen3.6-plus', 'Balanced Qwen model for general use', '$$', {
+                imagem: true,
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
+            }),
+            modelo('Qwen 3.6 Plus', 'qwen/qwen3.6-plus', 'Balanced Qwen model for general use', '$$', {
+                imagem: true,
+                reasoning: true,
+                ferramentas: true,
+                estruturado: true,
             }),
             modelo('Qwen 3.7 Max', 'qwen/qwen3.7-max', 'Large Qwen model for higher quality', '$$$', {
                 reasoning: true,
@@ -166,10 +195,13 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
                 ferramentas: true,
             }),
             modelo('Kimi K2.5', 'moonshotai/kimi-k2.5', 'Updated Kimi model for stronger chat', '$$', {
+                imagem: true,
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }),
             modelo('Kimi K2.6', 'moonshotai/kimi-k2.6', 'Latest Kimi model for agentic work', '$$', {
+                imagem: true,
                 reasoning: true,
                 ferramentas: true,
                 estruturado: true,
@@ -186,11 +218,14 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
             modelo('GLM 5.1', 'z-ai/glm-5.1', 'Z.ai GLM model for reasoning and tools', '$$', {
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }, true),
-            modelo('GLM 5V Turbo', 'z-ai/glm-5v-turbo', 'Ainda não listado no OpenRouter', '$$', {
+            modelo('GLM 5V Turbo', 'z-ai/glm-5v-turbo', 'Modelo multimodal rápido da Z.AI', '$$', {
                 imagem: true,
                 reasoning: true,
-            }, false, true),
+                ferramentas: true,
+                estruturado: true,
+            }),
         ],
     },
     {
@@ -199,8 +234,10 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
         logoUrl: `${LOGO_SIMPLE}/xiaomi/FFFFFF`,
         modelos: [
             modelo('Mimo 2.5', 'xiaomi/mimo-v2.5', 'Xiaomi MiMo model for general chat', '$$', {
+                imagem: true,
                 reasoning: true,
                 ferramentas: true,
+                estruturado: true,
             }, true),
             modelo('Mimo 2.5 Pro', 'xiaomi/mimo-v2.5-pro', 'Higher-quality Xiaomi MiMo model', '$$', {
                 reasoning: true,
@@ -222,11 +259,18 @@ const PROVEDORES: ProvedorFixoOpenRouter[] = [
                 ferramentas: true,
             }, true),
             modelo('Free', 'openrouter/free', 'Roteia para modelos gratuitos compatíveis', '$', {
-                ferramentas: true,
-            }, true),
-            modelo('Auto', 'openrouter/auto', 'Escolhe automaticamente o melhor endpoint disponível', '$$', {
+                imagem: true,
+                reasoning: true,
                 ferramentas: true,
                 estruturado: true,
+            }, true),
+            modelo('Auto', 'openrouter/auto', 'Escolhe automaticamente o melhor endpoint disponível', '$$', {
+                imagem: true,
+                documento: true,
+                reasoning: true,
+                ferramentas: true,
+                estruturado: true,
+                imagemGeracao: true,
             }, true),
         ],
     },
@@ -249,6 +293,21 @@ function modelo(
         capacidades,
         favorito,
         indisponivel,
+    }
+}
+
+function obterCapacidadesDoCatalogo(modeloCatalogo: ModeloCatalogoOpenRouter): CapacidadesModelo {
+    const entradas = new Set(modeloCatalogo.architecture?.input_modalities || [])
+    const saidas = new Set(modeloCatalogo.architecture?.output_modalities || [])
+    const parametros = new Set(modeloCatalogo.supported_parameters || [])
+
+    return {
+        imagem: entradas.has('image'),
+        documento: entradas.has('file'),
+        reasoning: parametros.has('reasoning') || parametros.has('include_reasoning'),
+        ferramentas: parametros.has('tools'),
+        estruturado: parametros.has('structured_outputs'),
+        imagemGeracao: saidas.has('image'),
     }
 }
 
@@ -386,6 +445,7 @@ export const SeletorModeloOpenRouter: React.FC<SeletorModeloOpenRouterProps> = (
     const [busca, setBusca] = useState('')
     const [provedorSelecionado, setProvedorSelecionado] = useState(PROVEDORES[0].id)
     const [favoritos, setFavoritos] = useState<string[]>(carregarFavoritos)
+    const [capacidadesCatalogo, setCapacidadesCatalogo] = useState<Record<string, CapacidadesModelo>>({})
     const containerRef = useRef<HTMLDivElement | null>(null)
     const inputBuscaRef = useRef<HTMLInputElement | null>(null)
 
@@ -394,6 +454,36 @@ export const SeletorModeloOpenRouter: React.FC<SeletorModeloOpenRouterProps> = (
     const provedorModeloResolvido = obterProvedorCompletoDoModelo(modeloResolvido)
     const provedorAtivo = PROVEDORES.find((provedor) => provedor.id === provedorSelecionado) || PROVEDORES[0]
     const favoritosSet = useMemo(() => new Set(favoritos), [favoritos])
+
+    useEffect(() => {
+        const controlador = new AbortController()
+
+        fetch('https://openrouter.ai/api/v1/models?output_modalities=all', {
+            signal: controlador.signal,
+        })
+            .then(async (resposta) => {
+                if (!resposta.ok) {
+                    throw new Error(`OpenRouter respondeu com status ${resposta.status}`)
+                }
+
+                return resposta.json() as Promise<RespostaCatalogoOpenRouter>
+            })
+            .then((catalogo) => {
+                const capacidadesAtualizadas = Object.fromEntries(
+                    (catalogo.data || []).map((modeloCatalogo) => [
+                        modeloCatalogo.id,
+                        obterCapacidadesDoCatalogo(modeloCatalogo),
+                    ])
+                )
+                setCapacidadesCatalogo(capacidadesAtualizadas)
+            })
+            .catch((erro: unknown) => {
+                if (controlador.signal.aborted) return
+                console.warn('[SeletorModeloOpenRouter] Falha ao atualizar capacidades dos modelos:', erro)
+            })
+
+        return () => controlador.abort()
+    }, [])
 
     useEffect(() => {
         if (!aberto) return
@@ -551,6 +641,7 @@ export const SeletorModeloOpenRouter: React.FC<SeletorModeloOpenRouterProps> = (
                                 ) : modelosFiltrados.map((modeloItem) => {
                                     const selecionado = modeloItem.slug === modeloResolvido
                                     const favoritoSalvo = favoritosSet.has(modeloItem.slug)
+                                    const capacidades = capacidadesCatalogo[modeloItem.slug] || modeloItem.capacidades
 
                                     return (
                                         <div
@@ -600,24 +691,24 @@ export const SeletorModeloOpenRouter: React.FC<SeletorModeloOpenRouterProps> = (
                                                     />
                                                 </button>
                                                 <span className="flex items-center gap-1 rounded-full bg-white/[0.03] px-1.5 py-1">
-                                                    <BotaoCapacidade ativo={modeloItem.capacidades.imagem} titulo="Aceita imagem">
+                                                    <BotaoCapacidade ativo={capacidades.imagem} titulo="Aceita imagem">
                                                         <Eye size={13} />
                                                     </BotaoCapacidade>
-                                                    <BotaoCapacidade ativo={modeloItem.capacidades.documento} titulo="Aceita documento" destaque="azul">
+                                                    <BotaoCapacidade ativo={capacidades.documento} titulo="Aceita documento" destaque="azul">
                                                         <FileText size={13} />
                                                     </BotaoCapacidade>
-                                                    <BotaoCapacidade ativo={modeloItem.capacidades.reasoning} titulo="Reasoning" destaque="roxo">
+                                                    <BotaoCapacidade ativo={capacidades.reasoning} titulo="Reasoning" destaque="roxo">
                                                         <Brain size={13} />
                                                     </BotaoCapacidade>
-                                                    <BotaoCapacidade ativo={modeloItem.capacidades.ferramentas} titulo="Tool calling" destaque="azul">
+                                                    <BotaoCapacidade ativo={capacidades.ferramentas} titulo="Tool calling" destaque="azul">
                                                         <Wrench size={13} />
                                                     </BotaoCapacidade>
-                                                    {modeloItem.capacidades.imagemGeracao && (
+                                                    {capacidades.imagemGeracao && (
                                                         <BotaoCapacidade ativo titulo="Gera imagem" destaque="laranja">
                                                             <ImageIcon size={13} />
                                                         </BotaoCapacidade>
                                                     )}
-                                                    {modeloItem.capacidades.estruturado && (
+                                                    {capacidades.estruturado && (
                                                         <BotaoCapacidade ativo titulo="Saída estruturada" destaque="roxo">
                                                             <Code2 size={13} />
                                                         </BotaoCapacidade>
