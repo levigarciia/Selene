@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-electron
+release
+artifacts
+.teste-dados
+bun.lock
+docs/*.md
+README.md

@@ -1,38 +1,28 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+node_modules/
+dist/
+dist-electron/
+release/
 
-node_modules
-dist
-dist-ssr
-dist-electron
-release
-*.local
 .env
-bun.lock
-yarn.lock
-package-lock.json
+.env.*
+!.env.example
+!.env.sample
+!.env.template
 
-# Editor directories and files
-.vscode/*
-.claude/*
-.codex/*
-!.vscode/extensions.json
-.idea
+*.log
+artifacts/
+.teste-dados/
+coverage/
+.cache/
+.vite/
+*.tsbuildinfo
+
+*.gguf
+*.gguf.part
+
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.agent/*
-.gemini/*
-
-# Build resources (certificates)
-build-resources/*.p12
-build-resources/*.pfx
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

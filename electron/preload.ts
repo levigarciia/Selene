@@ -1,339 +1,40 @@
-import { ipcRenderer, contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron';
+import type { Evento, PonteSelene } from '../shared/contratos';
 
-console.log('[preload] inicializado', { contextIsolation: process.contextIsolated })
-
-type MensagemChatIPC = {
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    timestamp: number
-    images?: string[]
-    imagensContexto?: Array<{
-        src: string
-        resumo?: string
-        statusResumo?: 'pendente' | 'gerando' | 'concluido' | 'falhou'
-    }>
-    raciocinio?: string
-}
-
-type MensagemLocalLLMIPC = { role: 'system' | 'user' | 'assistant'; content: unknown }
-type ConfigServidorLocalLLMIPC = Record<string, string | number | boolean | null | undefined>
-interface OpcoesStreamLocalLLMIPC {
-    temperature?: number
-    maxTokens?: number
-    reasoningAtivo?: boolean
-}
-
-type StatusAtualizacaoIPC = {
-    status: string
-    version?: string
-    progress?: { percent: number; bytesPerSecond: number; transferred: number; total: number }
-    error?: string
-    currentVersion?: string
-    releaseNotes?: string
-    releaseDate?: string
-}
-
-type ConfigWhisperLegado = Record<string, unknown>
-
-// --------- Expose some API to the Renderer process ---------
-contextBridge.exposeInMainWorld('electronAPI', {
-    setIgnoreMouseEvents: (ignore: boolean, options?: { forward: boolean }) => {
-        ipcRenderer.send('set-ignore-mouse-events', ignore, options)
+const ponte: PonteSelene = {
+    adicionarProjeto: (entrada) => ipcRenderer.invoke('selene:adicionarProjeto', entrada),
+    alterarProjeto: (id, nome) => ipcRenderer.invoke('selene:alterarProjeto', id, nome),
+    removerProjeto: (id) => ipcRenderer.invoke('selene:removerProjeto', id),
+    promoverRascunho: (entrada) => ipcRenderer.invoke('selene:promoverRascunho', entrada),
+    verificarAtualizacao: () => ipcRenderer.invoke('selene:verificarAtualizacao'),
+    estado: () => ipcRenderer.invoke('selene:estado'),
+    novaConversa: (modo, origemId) => ipcRenderer.invoke('selene:nova', modo, origemId),
+    alterarConversa: (id, alteracao) => ipcRenderer.invoke('selene:alterar', id, alteracao),
+    excluirConversa: (id) => ipcRenderer.invoke('selene:excluir', id),
+    excluirConcluidas: () => ipcRenderer.invoke('selene:excluirConcluidas'),
+    escolherProjeto: (id, caminho) => ipcRenderer.invoke('selene:projeto', id, caminho),
+    importarModelo: () => ipcRenderer.invoke('selene:importar'),
+    importarProjetor: (id) => ipcRenderer.invoke('selene:importarProjetor', id),
+    anexarImagens: (imagens) => ipcRenderer.invoke('selene:anexarImagens', imagens),
+    lerImagem: (id) => ipcRenderer.invoke('selene:lerImagem', id),
+    descartarImagens: (ids) => ipcRenderer.invoke('selene:descartarImagens', ids),
+    baixarModelo: (id) => ipcRenderer.invoke('selene:baixarModelo', id),
+    cancelarDownload: (id) => ipcRenderer.invoke('selene:cancelarDownload', id),
+    favoritarModelo: (id, favorito) => ipcRenderer.invoke('selene:favoritarModelo', id, favorito),
+    removerModelo: (id) => ipcRenderer.invoke('selene:removerModelo', id),
+    instalarMotor: (backend) => ipcRenderer.invoke('selene:instalar', backend),
+    carregarModelo: (id) => ipcRenderer.invoke('selene:carregar', id),
+    pararMotor: () => ipcRenderer.invoke('selene:pararMotor'),
+    configurar: (configuracao) => ipcRenderer.invoke('selene:configurar', configuracao),
+    enviar: (id, texto, imagens = []) => ipcRenderer.invoke('selene:enviar', id, texto, imagens),
+    cancelar: () => ipcRenderer.invoke('selene:cancelar'),
+    aprovar: (id, aprovada) => ipcRenderer.invoke('selene:aprovar', id, aprovada),
+    exportarConversa: (id) => ipcRenderer.invoke('selene:exportar', id),
+    janela: (acao) => ipcRenderer.send('selene:janela', acao),
+    aoEvento: (callback) => {
+        const receber = (_evento: Electron.IpcRendererEvent, evento: Evento) => callback(evento);
+        ipcRenderer.on('selene:evento', receber);
+        return () => ipcRenderer.removeListener('selene:evento', receber);
     },
-    getWindowBounds: () => ipcRenderer.invoke('get-window-bounds'),
-    updateModalRegions: (regions: Array<{ x: number; y: number; width: number; height: number }>) => {
-        ipcRenderer.send('update-modal-regions', regions)
-    },
-    fecharAplicacao: () => {
-        ipcRenderer.send('fechar-aplicacao')
-    },
-    registrarAtalhoGramatical: (atalho: string) => {
-        ipcRenderer.send('registrar-atalho-gramatical', atalho)
-    },
-    abrirAssistenteGramatical: () => {
-        ipcRenderer.send('abrir-assistente-gramatical')
-    },
-    onAtalhoGramatical: (callback: (textoSelecionado?: string) => void) => {
-        const listener = (_event: unknown, textoSelecionado?: string) => callback(textoSelecionado)
-        ipcRenderer.on('atalho-gramatical', listener)
-        return () => ipcRenderer.removeListener('atalho-gramatical', listener)
-    },
-    onDebugToggle: (callback: (enabled: boolean) => void) => {
-        ipcRenderer.on('debug-mode-toggle', (_event, enabled) => callback(enabled))
-    },
-    onCheckHover: (callback: (x: number, y: number) => void) => {
-        ipcRenderer.on('check-hover', (_event, x, y) => callback(x, y))
-    },
-    setAreaSelectionMode: (enabled: boolean) => {
-        ipcRenderer.send('set-area-selection-mode', enabled)
-    },
-    colarClipboardGlobal: () => {
-        ipcRenderer.send('colar-clipboard-global')
-    },
-    aplicarTextoGramatical: () => {
-        ipcRenderer.send('aplicar-texto-gramatical')
-    },
-    requestWindowFocus: () => {
-        ipcRenderer.send('request-window-focus')
-    },
-    registrarAtalhoScreenshot: (atalho: string) => {
-        ipcRenderer.send('registrar-atalho-screenshot', atalho)
-    },
-    capturarScreenshot: async () => {
-        return ipcRenderer.invoke('capturar-screenshot')
-    },
-    onAtalhoScreenshot: (callback: () => void) => {
-        const listener = () => callback()
-        ipcRenderer.on('atalho-screenshot', listener)
-        return () => ipcRenderer.removeListener('atalho-screenshot', listener)
-    },
-    registrarAtalhoScreenshotArea: (atalho: string) => {
-        ipcRenderer.send('registrar-atalho-screenshot-area', atalho)
-    },
-    onAtalhoScreenshotArea: (callback: () => void) => {
-        const listener = () => callback()
-        ipcRenderer.on('atalho-screenshot-area', listener)
-        return () => ipcRenderer.removeListener('atalho-screenshot-area', listener)
-    },
-    enviarScreenshotParaChat: (dataUrl: string) => ipcRenderer.invoke('enviar-screenshot-chat', dataUrl),
-    onScreenshotChat: (callback: (dataUrl: string) => void) => {
-        const listener = (_event: unknown, dataUrl: string) => callback(dataUrl)
-        ipcRenderer.on('chat-receber-screenshot', listener)
-        return () => ipcRenderer.removeListener('chat-receber-screenshot', listener)
-    },
-    openExpandedChat: (messages: MensagemChatIPC[]) => {
-        ipcRenderer.send('open-expanded-chat', messages)
-    },
-    onHydrateChat: (callback: (messages: MensagemChatIPC[]) => void) => {
-        const listener = (_event: unknown, messages: MensagemChatIPC[]) => callback(messages)
-        ipcRenderer.on('hydrate-chat', listener)
-        return () => ipcRenderer.removeListener('hydrate-chat', listener)
-    },
-    isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
-    minimizeWindow: () => ipcRenderer.send('window-minimize'),
-    toggleMaximizeWindow: () => ipcRenderer.send('window-maximize'),
-    closeWindow: () => ipcRenderer.send('window-close'),
-    startWindowDrag: () => ipcRenderer.send('window-start-drag'),
-    stopWindowDrag: () => ipcRenderer.send('window-stop-drag'),
-    onWindowMaximizedChange: (callback: (maximizada: boolean) => void) => {
-        const listener = (_event: unknown, maximizada: boolean) => callback(maximizada)
-        ipcRenderer.on('window-maximized-change', listener)
-        return () => ipcRenderer.removeListener('window-maximized-change', listener)
-    },
-    onCollapseToolbar: (callback: () => void) => {
-        const listener = () => callback()
-        ipcRenderer.on('collapse-toolbar', listener)
-        return () => ipcRenderer.removeListener('collapse-toolbar', listener)
-    },
-    // Auto-update API
-    setAutoUpdate: (enabled: boolean) => {
-        ipcRenderer.send('set-auto-update', enabled)
-    },
-    getAutoUpdateStatus: () => ipcRenderer.invoke('get-auto-update-status'),
-    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-    installUpdate: () => {
-        ipcRenderer.send('install-update')
-    },
-    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-    onUpdateStatus: (callback: (status: StatusAtualizacaoIPC) => void) => {
-        const listener = (_event: unknown, status: StatusAtualizacaoIPC) => callback(status)
-        ipcRenderer.on('update-status', listener)
-        return () => ipcRenderer.removeListener('update-status', listener)
-    },
-    // User data path for Whisper models
-    getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
-    // Whisper local transcription (legacy)
-    whisperBinaryExists: (binaryPath?: string) => ipcRenderer.invoke('whisper-binary-exists', binaryPath),
-    whisperModelExists: (modelSize: string) => ipcRenderer.invoke('whisper-model-exists', modelSize),
-    whisperDownloadModel: (modelSize: string) => ipcRenderer.invoke('whisper-download-model', modelSize),
-    whisperInitialize: (config: ConfigWhisperLegado) => ipcRenderer.invoke('whisper-initialize', config),
-    whisperTranscribe: (audioBuffer: Buffer, config: ConfigWhisperLegado) => ipcRenderer.invoke('whisper-transcribe', audioBuffer, config),
-    onWhisperDownloadProgress: (callback: (progress: { percent: number; downloaded: number; total: number }) => void) => {
-        const listener = (_event: unknown, progress: { percent: number; downloaded: number; total: number }) => callback(progress)
-        ipcRenderer.on('whisper-download-progress', listener)
-        return () => ipcRenderer.removeListener('whisper-download-progress', listener)
-    },
-    // Web search
-    webSearch: (query: string, maxResults?: number) => ipcRenderer.invoke('web-search', query, maxResults),
-    // Conteudo de pagina via main
-    webFetchPage: (url: string) => ipcRenderer.invoke('web-fetch-page', url),
-    // Open URL in external browser
-    openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
-    
-    // ==========================================
-    // Local Whisper Streaming API (new)
-    // ==========================================
-    localWhisper: {
-        // Model management
-        listModels: () => ipcRenderer.invoke('whisper-local:list-models'),
-        getModelStatus: (modelName: string) => ipcRenderer.invoke('whisper-local:get-model-status', modelName),
-        downloadModel: (modelName: string) => ipcRenderer.invoke('whisper-local:download-model', modelName),
-        cancelDownload: (modelName: string) => ipcRenderer.invoke('whisper-local:cancel-download', modelName),
-        deleteModel: (modelName: string) => ipcRenderer.invoke('whisper-local:delete-model', modelName),
-        getStorageInfo: () => ipcRenderer.invoke('whisper-local:get-storage-info'),
-
-        // Transcription session management
-        startSession: (config: { model?: string; language?: string; speakerLabel?: string; noGpu?: boolean }) => 
-            ipcRenderer.invoke('whisper-local:start-session', config),
-        sendAudio: (sessionId: string, audioData: ArrayBuffer) => 
-            ipcRenderer.invoke('whisper-local:send-audio', sessionId, audioData),
-        stopSession: (sessionId: string) => ipcRenderer.invoke('whisper-local:stop-session', sessionId),
-        checkAvailability: () => ipcRenderer.invoke('whisper-local:check-availability'),
-
-        // Event listeners for download progress
-        onDownloadProgress: (callback: (data: { modelName: string; downloaded: number; total: number; percent: number }) => void) => {
-            const handler = (_event: unknown, data: { modelName: string; downloaded: number; total: number; percent: number }) => callback(data)
-            ipcRenderer.on('whisper-local:download-progress', handler)
-            return () => ipcRenderer.removeListener('whisper-local:download-progress', handler)
-        },
-        onDownloadComplete: (callback: (data: { modelName: string; success: boolean; path: string }) => void) => {
-            const handler = (_event: unknown, data: { modelName: string; success: boolean; path: string }) => callback(data)
-            ipcRenderer.on('whisper-local:download-complete', handler)
-            return () => ipcRenderer.removeListener('whisper-local:download-complete', handler)
-        },
-        onDownloadError: (callback: (data: { modelName: string; error: string }) => void) => {
-            const handler = (_event: unknown, data: { modelName: string; error: string }) => callback(data)
-            ipcRenderer.on('whisper-local:download-error', handler)
-            return () => ipcRenderer.removeListener('whisper-local:download-error', handler)
-        },
-        
-        // Event listeners for transcription results
-        onTranscriptionDelta: (callback: (data: { sessionId: string; delta: string; text: string; speakerLabel?: string }) => void) => {
-            const handler = (_event: unknown, data: { sessionId: string; delta: string; text: string; speakerLabel?: string }) => {
-                console.log('[preload] whisper-local:transcription-delta', data.sessionId, data.text)
-                callback(data)
-            }
-            ipcRenderer.on('whisper-local:transcription-delta', handler)
-            return () => ipcRenderer.removeListener('whisper-local:transcription-delta', handler)
-        },
-        onTranscriptionComplete: (callback: (data: { sessionId: string; text: string; speakerLabel?: string }) => void) => {
-            const handler = (_event: unknown, data: { sessionId: string; text: string; speakerLabel?: string }) => {
-                console.log('[preload] whisper-local:transcription-complete', data.sessionId, data.text)
-                callback(data)
-            }
-            ipcRenderer.on('whisper-local:transcription-complete', handler)
-            return () => ipcRenderer.removeListener('whisper-local:transcription-complete', handler)
-        },
-        onTranscriptionError: (callback: (data: { sessionId: string; error: string }) => void) => {
-            const handler = (_event: unknown, data: { sessionId: string; error: string }) => {
-                console.log('[preload] whisper-local:transcription-error', data.sessionId, data.error)
-                callback(data)
-            }
-            ipcRenderer.on('whisper-local:transcription-error', handler)
-            return () => ipcRenderer.removeListener('whisper-local:transcription-error', handler)
-        }
-    },
-    localParakeet: {
-        listModels: () => ipcRenderer.invoke('parakeet-local:list-models'),
-        getModelStatus: (modelName: string) => ipcRenderer.invoke('parakeet-local:get-model-status', modelName),
-        downloadModel: (modelName: string) => ipcRenderer.invoke('parakeet-local:download-model', modelName),
-        cancelDownload: (modelName: string) => ipcRenderer.invoke('parakeet-local:cancel-download', modelName),
-        deleteModel: (modelName: string) => ipcRenderer.invoke('parakeet-local:delete-model', modelName),
-        startSession: (config: { model?: string; language?: string; speakerLabel?: string }) =>
-            ipcRenderer.invoke('parakeet-local:start-session', config),
-        sendAudioChunk: (sessionId: string, audioData: ArrayBuffer) =>
-            ipcRenderer.invoke('parakeet-local:send-audio-chunk', sessionId, audioData),
-        stopSession: (sessionId: string) => ipcRenderer.invoke('parakeet-local:stop-session', sessionId),
-        checkAvailability: () => ipcRenderer.invoke('parakeet-local:check-availability'),
-        onDownloadProgress: (callback: (data: { modelName: string; downloaded: number; total: number; percent: number }) => void) => {
-            const handler = (_event: unknown, data: { modelName: string; downloaded: number; total: number; percent: number }) => callback(data)
-            ipcRenderer.on('parakeet-local:download-progress', handler)
-            return () => ipcRenderer.removeListener('parakeet-local:download-progress', handler)
-        },
-        onDownloadComplete: (callback: (data: { modelName: string; success: boolean; path: string }) => void) => {
-            const handler = (_event: unknown, data: { modelName: string; success: boolean; path: string }) => callback(data)
-            ipcRenderer.on('parakeet-local:download-complete', handler)
-            return () => ipcRenderer.removeListener('parakeet-local:download-complete', handler)
-        },
-        onDownloadError: (callback: (data: { modelName: string; error: string }) => void) => {
-            const handler = (_event: unknown, data: { modelName: string; error: string }) => callback(data)
-            ipcRenderer.on('parakeet-local:download-error', handler)
-            return () => ipcRenderer.removeListener('parakeet-local:download-error', handler)
-        },
-        onTranscriptionComplete: (callback: (data: { sessionId: string; text: string; chunkIndex?: number; speakerLabel?: string }) => void) => {
-            const handler = (_event: unknown, data: { sessionId: string; text: string; chunkIndex?: number; speakerLabel?: string }) => callback(data)
-            ipcRenderer.on('parakeet-local:transcription-complete', handler)
-            return () => ipcRenderer.removeListener('parakeet-local:transcription-complete', handler)
-        },
-        onTranscriptionError: (callback: (data: { sessionId: string; error: string; chunkIndex?: number; speakerLabel?: string }) => void) => {
-            const handler = (_event: unknown, data: { sessionId: string; error: string; chunkIndex?: number; speakerLabel?: string }) => callback(data)
-            ipcRenderer.on('parakeet-local:transcription-error', handler)
-            return () => ipcRenderer.removeListener('parakeet-local:transcription-error', handler)
-        }
-    },
-    localLLM: {
-        checkAvailability: () => ipcRenderer.invoke('local-llm:check-availability'),
-        listModels: () => ipcRenderer.invoke('local-llm:list-models'),
-        downloadRuntime: (runtimeType: 'cpu' | 'vulkan') => ipcRenderer.invoke('local-llm:download-runtime', runtimeType),
-        downloadModel: (modelId: string) => ipcRenderer.invoke('local-llm:download-model', modelId),
-        cancelDownload: (modelId: string) => ipcRenderer.invoke('local-llm:cancel-download', modelId),
-        deleteModel: (modelId: string) => ipcRenderer.invoke('local-llm:delete-model', modelId),
-        ensureServer: (modelId: string) => ipcRenderer.invoke('local-llm:ensure-server', modelId),
-        getHttpConfig: () => ipcRenderer.invoke('local-llm:get-http-config'),
-        rotateHttpKey: () => ipcRenderer.invoke('local-llm:rotate-http-key'),
-        getServerSettings: () => ipcRenderer.invoke('local-llm:get-server-settings'),
-        setServerSettings: (settings: ConfigServidorLocalLLMIPC) => ipcRenderer.invoke('local-llm:set-server-settings', settings),
-        getHardwareInfo: () => ipcRenderer.invoke('local-llm:get-hardware-info'),
-        onRuntimeProgress: (callback: (data: { downloaded: number; total: number; percent: number }) => void) => {
-            const handler = (_event: unknown, data: { downloaded: number; total: number; percent: number }) => callback(data)
-            ipcRenderer.on('local-llm:runtime-progress', handler)
-            return () => ipcRenderer.removeListener('local-llm:runtime-progress', handler)
-        },
-        onModelProgress: (callback: (data: { modelId: string; downloaded: number; total: number; percent: number }) => void) => {
-            const handler = (_event: unknown, data: { modelId: string; downloaded: number; total: number; percent: number }) => callback(data)
-            ipcRenderer.on('local-llm:model-progress', handler)
-            return () => ipcRenderer.removeListener('local-llm:model-progress', handler)
-        },
-        onDownloadError: (callback: (data: { tipo: 'runtime' | 'model'; modelId?: string; error: string }) => void) => {
-            const handler = (_event: unknown, data: { tipo: 'runtime' | 'model'; modelId?: string; error: string }) => callback(data)
-            ipcRenderer.on('local-llm:download-error', handler)
-            return () => ipcRenderer.removeListener('local-llm:download-error', handler)
-        },
-        streamChat: (reqId: string, modelId: string, mensagens: MensagemLocalLLMIPC[], opcoes: OpcoesStreamLocalLLMIPC) => 
-            ipcRenderer.invoke('local-llm:stream-chat', reqId, modelId, mensagens, opcoes),
-        cancelStreamChat: (reqId: string) => 
-            ipcRenderer.invoke('local-llm:cancel-stream-chat', reqId),
-        onStreamChunk: (callback: (data: { reqId: string; data: string }) => void) => {
-            const handler = (_event: unknown, data: { reqId: string; data: string }) => callback(data)
-            ipcRenderer.on('local-llm:stream-chunk', handler)
-            return () => ipcRenderer.removeListener('local-llm:stream-chunk', handler)
-        },
-        onStreamEnd: (callback: (data: { reqId: string; success: boolean; error?: string }) => void) => {
-            const handler = (_event: unknown, data: { reqId: string; success: boolean; error?: string }) => callback(data)
-            ipcRenderer.on('local-llm:stream-end', handler)
-            return () => ipcRenderer.removeListener('local-llm:stream-end', handler)
-        }
-    },
-
-    // ==========================================
-    // MCP (Model Context Protocol) API
-    // ==========================================
-    mcp: {
-        // Server management
-        getServers: () => ipcRenderer.invoke('mcp:get-servers'),
-        getConfig: () => ipcRenderer.invoke('mcp:get-config'),
-        addServer: (config: { id: string; name: string; command: string; args: string[]; env?: Record<string, string>; enabled: boolean; autoConnect?: boolean }) => 
-            ipcRenderer.invoke('mcp:add-server', config),
-        removeServer: (serverId: string) => ipcRenderer.invoke('mcp:remove-server', serverId),
-        
-        // Connection management
-        connect: (serverId: string) => ipcRenderer.invoke('mcp:connect', serverId),
-        disconnect: (serverId: string) => ipcRenderer.invoke('mcp:disconnect', serverId),
-        getStatus: (serverId: string) => ipcRenderer.invoke('mcp:get-status', serverId),
-        
-        // Tools
-        getTools: (serverId: string) => ipcRenderer.invoke('mcp:get-tools', serverId),
-        getAllTools: () => ipcRenderer.invoke('mcp:get-all-tools'),
-        callTool: (serverId: string, toolName: string, args: unknown) => 
-            ipcRenderer.invoke('mcp:call-tool', serverId, toolName, args)
-    },
-    filesystem: {
-        execCommand: (comando: string) => ipcRenderer.invoke('filesystem:exec-command', comando),
-        writeFile: (caminhoAbsoluto: string, conteudo: string) => ipcRenderer.invoke('filesystem:write-file', caminhoAbsoluto, conteudo),
-        readFile: (caminhoAbsoluto: string, linhaInicio?: number, linhaFim?: number) => ipcRenderer.invoke('filesystem:read-file', caminhoAbsoluto, linhaInicio, linhaFim),
-        replaceText: (caminhoAbsoluto: string, textoAntigo: string, textoNovo: string) => ipcRenderer.invoke('filesystem:replace-text', caminhoAbsoluto, textoAntigo, textoNovo),
-        presentFile: (caminhoAbsoluto: string) => ipcRenderer.invoke('filesystem:present-file', caminhoAbsoluto),
-        deleteFile: (caminhoAbsoluto: string) => ipcRenderer.invoke('filesystem:delete-file', caminhoAbsoluto)
-    }
-})
+};
+contextBridge.exposeInMainWorld('selene', ponte);

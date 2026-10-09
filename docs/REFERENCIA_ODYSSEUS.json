@@ -1,0 +1,2203 @@
+{
+    "referencia": "D:/Saas/odysseus-dev",
+    "inspecionadoEm": "2026-10-09",
+    "observacao": "Declarações estáticas nos arquivos canônicos, incluindo subpastas. Consulte prefixos e fábricas de roteadores; a contagem não representa todas as rotas em execução.",
+    "modulos": [
+        {
+            "modulo": "routes/admin_wipe/admin_wipe_routes.py",
+            "sha256": "b78047e84499d698ec3009d7ec7eae17baf37153b061ce0690c3dea378658dba",
+            "operacoes": [
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/wipe/{kind}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/api_token_routes.py",
+            "sha256": "cf87d6619cbfee766de32ed7e27a543a3b0132dcb10231ea84ac9f9e4bd346c4",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/tokens"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/tokens/profiles"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/tokens"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/tokens/{token_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/tokens/{token_id}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/assistant_routes.py",
+            "sha256": "35ece163db0b3c4d4a507190dd7a02ee8df49c21614a3b48cc3ec2acfd63eb78",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/session"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/settings"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/settings"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/run/{task_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/run-status/{task_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/available-timezones"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/auth_routes.py",
+            "sha256": "1b172243c03d05d6948d75a1aa52f564fa60343e84560daf636be9a7610b51dc",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/setup"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/signup"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/login"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/logout"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/status"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/policy"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/change-password"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/2fa/setup"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/2fa/confirm"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/2fa/disable"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/2fa/status"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/users"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/users"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/users/{username}/password"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/users/{username}/privileges"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/users/{username}/rename"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/users/{username}/admin"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/signup-toggle"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/open-signup"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/users"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/features"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/features"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/settings"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/settings"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/settings/document-style/extract"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/integrations"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/integrations/presets"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/integrations"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/integrations/{integration_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/integrations/{integration_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/integrations/{integration_id}/test"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/backup_routes.py",
+            "sha256": "1a50b8bb4c9c5dd93a1f0bc7e3b934f91467c2f6d6f6103c0195ed277feb3278",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/export"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/import"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/calendar_routes.py",
+            "sha256": "fe595cad2d8a58421326ea9673be4ddbf13f552cd87d8f4c193d2e254df6f63f",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/config/accounts"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/config/accounts"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/config/accounts/{account_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/config/accounts/{account_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/test"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/sync"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/calendars/{cal_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/calendars"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/events"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/events"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/events/{uid}"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/events/{uid}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/events/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/calendars"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/calendars/{cal_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/import"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/export/{cal_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/quick-parse"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/chat_routes.py",
+            "sha256": "80cc2af225a178b0376ef63e896cc7e725fee20d651b7a44828d172b5cd05ae8",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/chat"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/chat_stream"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/chat/resume/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/chat/stop/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/chat/finish/{session_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/chat/stream_status/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/inject_context/{session_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/search"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/rewrite"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/chatgpt_subscription_routes.py",
+            "sha256": "d096c32e5cd005d8f2c78177ae9df45a0f218ea70f6d2465c9dd3e16ea7638b6",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/accounts"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/accounts/{auth_id}/usage"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/cleanup/cleanup_routes.py",
+            "sha256": "43a69d8c81eda210089bc80e2384288c19b3606e96c114c7c883797c444bcf1d",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/preview"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/codex_routes.py",
+            "sha256": "709b9d9b0bb4fe09874e494fe619af85abd603ec6265f5112c3370a00017b898",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/capabilities"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/plugin.zip"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/todos"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/todos"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/emails"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/emails/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/emails/draft-document"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/emails/draft"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/emails/send"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/memory"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/memory"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/calendar/events"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/calendar/events"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/documents"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/documents/{doc_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/memory/{memory_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/calendar/events/{uid}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/documents/{doc_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/documents"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/cookbook/tasks"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/cookbook/servers"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/cookbook/output/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/cookbook/serve"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/cookbook/stop/{session_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/cookbook/cached"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/cookbook/presets"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/cookbook/preset/{name}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/cookbook/adopt"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/plugin.zip"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/compare/compare_routes.py",
+            "sha256": "9278c5c64c4421f1e5559975c2ed01fcd101460f07f9a8b6e748227465f3831b",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/start"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{comp_id}/vote"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/record"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/history"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/{comp_id}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/contacts/contacts_routes.py",
+            "sha256": "6b1e812313081b48413d5588c47f6171528de376dc4edb3f63949de1f25c62f4",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/list"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/search"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/add"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/import"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/export"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/clear"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/{uid}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/{uid}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/cookbook_routes.py",
+            "sha256": "bf0a8e7a48e98c96df35c29a9c08e35af82531e89926e975d93f358d002f5c92",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/ssh-key"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/ssh-key"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/test-ssh"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/model/download"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/model/cached"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/model/serve"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/setup"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/gpus"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/kill-pid"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/state"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/state"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/hf-latest"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/hf-gguf-files"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/ollama/library"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/vllm-recipe-manifest"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/vllm-recipe"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/tasks/status"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/device_flow.py",
+            "sha256": "6eb1e5441ef660b15b3c3a0f8cc7f31cd42bddeed8877e1ad4007b81941b6cf3",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/device/start"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/device/poll"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/device/cancel"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/diagnostics_routes.py",
+            "sha256": "db0610d16b58aa55dbf7eebea48aef9138db9923c22bff5d48c30b52fa32b3fa",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/diagnostics/services"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/diagnostics/logs"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/db/stats"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/rag/stats"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/test/youtube"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/test-research"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/document/document_routes.py",
+            "sha256": "038ab2d3a31d858d22f6a2dfe884da47bdd2e6636c7082efefd1d059831076ea",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/document"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/documents/import-pdf"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/documents/import-docx"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/render-docx"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/convert-original/{target}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/documents/library"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/documents/{session_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/visual-report"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/document/{doc_id}/archive"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/document/{doc_id}/extract-pdf-text"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/documents/export-zip"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/api/document/{doc_id}"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/api/document/{doc_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/api/document/{doc_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/versions"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/version/{num}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/document/{doc_id}/restore/{num}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/documents/tidy"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/documents/ai-tidy"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/document/{doc_id}/export-pdf/preview"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/render-pages"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/page/{page_no}.png"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/document/{doc_id}/ai-fill-annotations"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/render-pdf"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/document/{doc_id}/export-pdf"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/document/{doc_id}/prepare-signed-reply"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/editor_draft_routes.py",
+            "sha256": "54e3a2a10bb0165a81bba286bcc27a71d620eb4ac240c57ee3ba0e8ee9db99a2",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/editor-drafts"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/editor-drafts/{draft_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/editor-drafts"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/api/editor-drafts/{draft_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/api/editor-drafts/{draft_id}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/email/email_routes.py",
+            "sha256": "2f18b3bd5c69e3a83082322ede055d66aa8e9d2d6b413ae148626d58c594e01c",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/list"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/unread-state"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{uid}/unflag-spam"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/unsubscribe/scan"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/unsubscribe/execute"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/unsubscribe/cleanup"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/contacts"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/search"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/read/{uid}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/attachments/{uid}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/attachment/{uid}/{index}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/attachments-download/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/attachments-download-bulk"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/inline-image/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/attachment-as-doc/{uid}/{index}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/attachment-path/{uid}/{index}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/mark-unread/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/flag/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/mark-read/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/archive/{uid}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/delete/{uid}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/delete-permanent/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/delete-bulk"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/odysseus/reminders"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/move/{uid}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/folders"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/mark-answered/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/clear-answered/{uid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/compose-upload"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/compose-from-odysseus"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/compose-from-odysseus-zip"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/compose-from-attachment/{uid}/{index}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/compose-upload/{token}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/schedule"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/scheduled"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/scheduled/{sid}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/pending"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/pending/{sid}/approve"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/pending/{sid}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/resolve-contact"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/send"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/draft"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/extract-style"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/summarize"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/translate"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/ai-reply"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/style"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/style"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/urgency-state"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/accounts"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/accounts"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/accounts/{account_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/accounts/{account_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/accounts/test"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/accounts/{account_id}/set-default"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/oauth/google/authorize"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/oauth/google/callback"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/embedding_routes.py",
+            "sha256": "4bda91d859553c00aeb8dbcfe6fea1170415e5e265419589f0879aa1d6919c02",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/models"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/models/{model_name:path}/download"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/models/{model_name:path}/status"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/models/{model_name:path}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/endpoint"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/endpoint"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/endpoint"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/emoji_routes.py",
+            "sha256": "4feff5e01353468379e07856ab242616f461e4dc8c948595e2a79bc9827825c1",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/{code}.svg"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/font_routes.py",
+            "sha256": "6d619e18ac9aef88632dbed5c57a7755be4c7bd00f98733457131b7b8ccebe00",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/custom"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/gallery/gallery_routes.py",
+            "sha256": "0cbff1a3b12ad6acee7a30a83feed0479c2ecf456fa27bce9aa6241017e8b8f7",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/upload"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/{image_id}/replace"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/{image_id}/rename"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/{image_id}/rotate"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/ai-upscale"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/style-transfer"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/gallery/tags"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/gallery/library"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/gallery/albums"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/albums"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/gallery/stats"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/ai-tag-batch"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/gallery/{image_id}"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/api/gallery/{image_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/download-zip"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/clear-user-tags"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/clear-ai-tags"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/dedupe-tags"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/api/gallery/{image_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/inpaint"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/harmonize"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/sharpen"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/denoise"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/upscale-local"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/mask"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/remove-bg"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/image/enhance-face"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/api/gallery/albums/{album_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/api/gallery/albums/{album_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/albums/{album_id}/add"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/albums/{album_id}/remove"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/{image_id}/favorite"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/gallery/{image_id}/ai-tag"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/history/history_routes.py",
+            "sha256": "fce25f580bfea311a6e90cecda3f382d4c2c7cbae994dc4b337b7566e7ccce31",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/history/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/truncate"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/message"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/delete-messages"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/edit-message"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/mark-stopped"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/update-last-meta"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/merge-last-assistant"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/fork"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/conversations/topics"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/session/{session_id}/context"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/memory-extraction"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/skill-injection"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/memory-injection"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/generation-settings"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/session/{session_id}/compact"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/hwfit_routes.py",
+            "sha256": "77bf87e12cc2bdc7ea3d7494bd0e5a08e49290ad8ac1758e1a372e31e5e1ddab",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/system"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/models"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/profiles"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/image-models"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/mcp/mcp_routes.py",
+            "sha256": "2695963e8fd6af84c493dcfc7bc1148915d105f7cd9bc5a707fa6d98ffcfbd24",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/servers"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/servers"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/servers/{server_id}/reconnect"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/servers/{server_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/servers/{server_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/tools"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/servers/{server_id}/tools"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/servers/{server_id}/tools"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/oauth/authorize/{server_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/oauth/callback"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/oauth/exchange/{server_id}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/memory/memory_routes.py",
+            "sha256": "22abf20b9df11796b65481c34192439b82ba36bf77210ffadfc3df52fe514e85",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/debug"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/add"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/search"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/timeline"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/by-session/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/extract"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/audit"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/import"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{memory_id}/pin"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{memory_id}"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/{memory_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/{memory_id}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/model_routes.py",
+            "sha256": "0a93ca93a3cf98515cc21a0e30486f0aa5595e35695351e143a57a7f85971d79",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/models"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/model-endpoints/probe-local"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/ping"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/probe-selected"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/probe"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/providers"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/discover"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/model-endpoints"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/model-endpoints"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/model-endpoints/test"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/model-endpoints/{ep_id}/probe"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/model-endpoints/{ep_id}/models"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/model-endpoints/{ep_id}/models"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/model-endpoints/{ep_id}/catalog-search"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/default-chat"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/model-endpoints/{ep_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/model-endpoints/{ep_id}/dependents"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/model-endpoints/{ep_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/tools"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/tools"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/note/note_routes.py",
+            "sha256": "42c5fba75e7ea07d560f9809e2f1c5f0247948a004e73ef779b00cce66794d44",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/{note_id}"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/{note_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/{note_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{note_id}/pin"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{note_id}/archive"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{note_id}/items/{index}/toggle"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/fire-reminder"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/reorder"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/personal_routes.py",
+            "sha256": "c6431bcd2949c075dd0c893e9dbcde0c6e5f5efca372f289d1de777e0312a000",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/reload"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/add_directory"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/remove_directory"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/upload"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/file"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/prefs_routes.py",
+            "sha256": "37faad760c5bd9850f6522b57e9523d7cd679b99d7b04ebdb4b28ac47b1d059d",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/{key}"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/{key}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/preset_routes.py",
+            "sha256": "fde6dc50724bd9b00dbe3435b0ed6f63c49bce4b2cafc3d23df596386b01c49c",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/presets"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/presets/custom"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/presets/templates"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/presets/templates"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/api/presets/templates/{template_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/presets/expand"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/presets/groups"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/presets/groups"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/research/research_routes.py",
+            "sha256": "cbed5bb0e1af813b09de4c30829b81138060acbe8f14d5780698e60cda8913fc",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/research/active"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/research/status/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/cancel/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/result/{session_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/research/report/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/{session_id}/hide-image"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/{session_id}/unhide-images"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/research/library"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/research/detail/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/{session_id}/archive"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/api/research/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/start"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/research/chat-jobs/{chat_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/research/stream/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/result-peek/{session_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/research/spinoff/{session_id}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/search/search_routes.py",
+            "sha256": "23cc10cabb55b1ce36b3e30a7182b822d229f433cda3dd36a96b5913e90dfcb1",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/search/web"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/search/config"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/search"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/search/providers"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/search/query"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/session_routes.py",
+            "sha256": "773c06eb2330dd908422f0a751bacef04f6005b03c625a2fe07f2acced9f181e",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/sessions"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/session/{sid}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session/{sid}/inject_messages"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session/{sid}/delete"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/sessions/bulk-delete"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/session/{sid}/deletion-info"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/session/{sid}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/sessions/all"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session/{sid}/archive"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session/{sid}/unarchive"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/sessions/archived"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/session/{sid}/export"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/sessions/save"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session/openai"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session/{session_id}/important"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/session/{session_id}/compact"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/sessions/auto-sort"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/session/{session_id}/context_info"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/shell_routes.py",
+            "sha256": "311ed2b3f26f1c138c24cff4f88edf587f345cb0427f8eacb94b5169246e842d",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/shell/exec"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/shell/stream"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/cookbook/packages"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/packages/install"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/install-system-deps"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/cookbook/rebuild-engine"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/signature_routes.py",
+            "sha256": "6ad0eeb6e67b71db0af41e24f6b2aa7e4c2eb39d9c69474c5bbc21fa03425740",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/api/signatures"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/api/signatures"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/api/signatures/{sig_id}"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/skills_routes.py",
+            "sha256": "4d2358d39027f202afdc9816ba014b3cb11ff8322571c4d3e2aad116fadc4d86",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/index"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/slash-catalog"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/builtin"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/builtin/{name}"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/builtin/{name}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/builtin/{name}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/import-from-url"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/add"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{skill_id}/invoke"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{skill_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{skill_id}/markdown"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{skill_id}/test"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{skill_id}/test-approval"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{skill_id}/test-status"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/audit-all"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/audit-all/status"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/audit-all/cancel"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{skill_id}/markdown"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/{skill_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/{skill_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/search"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/stt_routes.py",
+            "sha256": "9bc047c0e3dc44187b4f62c37fdd73c3a769acfad5fc349e6808a265161889ae",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/stats"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/transcribe"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/task/task_routes.py",
+            "sha256": "8301ea00f6557fb51f3097e36bc35e34a979730ebf53c5012203c041237f1867",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/onboarding"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/onboarding"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/notifications"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/notification-logs"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/notification-logs"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/clear-cache"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{task_id}"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/{task_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/{task_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/pause"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/resume"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/revert"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/run"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/stop"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/runs/recent"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{task_id}/runs"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/meta/output-targets"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/meta/actions"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/meta/events"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/webhook/{token}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/{task_id}/webhook-regenerate"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/parse"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/tts_routes.py",
+            "sha256": "8524446f454808be65a082271d20c76957378d1b3d3f3a38d69d66006e6e63a6",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/stats"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/synthesize"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/clear-cache"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/upload_routes.py",
+            "sha256": "e78d50e9df2b8611378392649619b7ce96510bdd100363ebc6d7e0249b250416",
+            "operacoes": [
+                {
+                    "metodo": "POST",
+                    "caminho": "/cleanup"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/stats"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{file_id}"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/{file_id}/vision"
+                },
+                {
+                    "metodo": "PUT",
+                    "caminho": "/{file_id}/vision"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/vault/vault_routes.py",
+            "sha256": "6cf9d8027fa3a74de9e625eb03f25493563de600cc1387e071900b513822a4ac",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/config"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/login"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/unlock"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/lock"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/logout"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/webhook/webhook_routes.py",
+            "sha256": "7a1382d58ee341b50a2ad1ad3ecd11fd4bbe6f95c87debd15879bc3b778dcd56",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/webhooks"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/webhooks"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/webhooks/{webhook_id}/test"
+                },
+                {
+                    "metodo": "PATCH",
+                    "caminho": "/webhooks/{webhook_id}"
+                },
+                {
+                    "metodo": "DELETE",
+                    "caminho": "/webhooks/{webhook_id}"
+                },
+                {
+                    "metodo": "POST",
+                    "caminho": "/v1/chat"
+                }
+            ]
+        },
+        {
+            "modulo": "routes/workspace_routes.py",
+            "sha256": "7ceef00b48d168eec19e0ae3333a8bd75d3c81e99f7a6f83cdb4e2d0e421c384",
+            "operacoes": [
+                {
+                    "metodo": "GET",
+                    "caminho": "/browse"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/vet"
+                },
+                {
+                    "metodo": "GET",
+                    "caminho": "/default"
+                }
+            ]
+        }
+    ]
+}
