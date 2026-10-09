@@ -18,7 +18,7 @@ test('criar projetos reserva pastas próprias mesmo com nomes iguais ou caracter
     expect(primeiro.caminho).not.toBe(segundo.caminho);
     // Verifica que o caminho está dentro do contêiner 'projects'
     const caminhoRelativo = relative(pasta, primeiro.caminho);
-    expect(caminhoRelativo.startsWith('projects')).toBe(true);
+    expect(caminhoRelativo).toContain('projects');
     expect(primeiro.caminho.startsWith(join(pasta, 'projects'))).toBe(true);
     expect(await readFile(join(primeiro.caminho, 'README.md'), 'utf8')).toContain('../Projeto');
     expect(dados.conversas).toHaveLength(0);
