@@ -21,7 +21,7 @@ export function ConfiguracaoMotor({
                 data-ui="estado-motor-config"
                 className={[
                     'flex flex-col gap-[14px] pb-[26px] border-b border-solid',
-                    'border-b-[#272a30] text-[12px] wrap-anywhere',
+                    'border-b-hover text-[12px] wrap-anywhere',
                 ].join(' ')}
             >
                 <p role="status">{estado.motor.detalhe}</p>
@@ -29,11 +29,11 @@ export function ConfiguracaoMotor({
                     <p
                         data-ui="texto-secundario"
                         className={[
-                            'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            'text-secundario text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -45,11 +45,11 @@ export function ConfiguracaoMotor({
                     <p
                         data-ui="texto-secundario"
                         className={[
-                            'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            'text-secundario text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -63,9 +63,9 @@ export function ConfiguracaoMotor({
                             type="button"
                             data-ui="botao"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                     '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -81,9 +81,9 @@ export function ConfiguracaoMotor({
                             type="button"
                             data-ui="botao"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                     '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -102,9 +102,9 @@ export function ConfiguracaoMotor({
                                 type="button"
                                 data-ui="botao"
                                 className={[
-                                    'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                    '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                     [
                                         '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                         '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -120,9 +120,9 @@ export function ConfiguracaoMotor({
                                 type="button"
                                 data-ui="botao"
                                 className={[
-                                    'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                    '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                     [
                                         '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                         '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -149,11 +149,11 @@ export function ConfiguracaoMotor({
             <p
                 data-ui="texto-secundario"
                 className={[
-                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                    'text-secundario text-[12px] leading-[1.7]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                    '[[data-ui~=usuario-direita]_&]:text-secundario',
                     '[[data-ui~=usuario-direita]_&]:text-[12px]',
                     '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                 ].join(' ')}

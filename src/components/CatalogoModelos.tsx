@@ -114,7 +114,7 @@ export function CatalogoModelos({
                     type="button"
                     data-ui="gatilho-catalogo"
                     className={[
-                        'flex items-center gap-[7px] max-w-[260px] rounded-[6px] bg-transparent text-[#a1a5ad]',
+                        'flex items-center gap-[7px] max-w-[260px] rounded-[6px] bg-transparent text-secundario',
                         'text-[12px] px-[2px] py-[7px] border-0 border-solid border-current',
                         '[&_>_span:not([data-ui~=icone-modelo]):not([data-ui~=indicador-download])]:overflow-hidden',
                         '[&_>_span:not([data-ui~=icone-modelo]):not([data-ui~=indicador-download])]:text-ellipsis',
@@ -151,7 +151,7 @@ export function CatalogoModelos({
                         '[[data-ui~=catalogo-embutido]_&]:shadow-[none]',
                         '[[data-ui~=catalogo-embutido]_&]:rounded-[10px] absolute bottom-[calc(100%_+_16px)]',
                         'left-0 w-[min(480px,_calc(100vw_-_48px))] h-[min(480px,_calc(100dvh_-_190px))]',
-                        'min-h-[270px] grid grid-cols-[55px_minmax(0,_1fr)] z-[20] bg-[#111316] rounded-[15px]',
+                        'min-h-[270px] grid grid-cols-[55px_minmax(0,_1fr)] z-[20] bg-superficie rounded-[15px]',
                         'shadow-[0_18px_60px_#0007] overflow-hidden border border-solid border-[#2d3036]',
                     ].join(' ')}
                     id={idCatalogo}
@@ -162,7 +162,7 @@ export function CatalogoModelos({
                         data-ui="familias-catalogo"
                         className={[
                             'flex items-center flex-col gap-[6px] border-r border-solid',
-                            'border-r-[#262930] bg-[#101114] px-[7px] py-[14px] [&_button]:grid',
+                            'border-r-borda bg-[#101114] px-[7px] py-[14px] [&_button]:grid',
                             '[&_button]:place-items-center [&_button]:w-[36px] [&_button]:h-[36px]',
                             '[&_button]:rounded-[9px] [&_button]:bg-transparent [&_button]:text-[#9298a3]',
                             '[&_button]:border-0 [&_button]:border-solid [&_button]:border-current',
@@ -210,10 +210,10 @@ export function CatalogoModelos({
                         <div
                             data-ui="busca-catalogo"
                             className={[
-                                'flex items-center gap-[9px] border-b border-solid border-b-[#262930]',
+                                'flex items-center gap-[9px] border-b border-solid border-b-borda',
                                 'text-[#9aa2af] px-[12px] py-[11px] [&_input]:w-full [&_input]:min-w-0',
                                 [
-                                    '[&_input]:bg-transparent [&_input]:text-[#e6e7e9]',
+                                    '[&_input]:bg-transparent [&_input]:text-principal',
                                     '[&_input]:text-[12px] [&_input]:px-0',
                                 ].join(' '),
                                 '[&_input]:py-[5px] [&_input]:border-0 [&_input]:border-solid',
@@ -239,10 +239,10 @@ export function CatalogoModelos({
                                     ].join(' '),
                                     [
                                         'inline-flex items-center justify-center bg-transparent',
-                                        'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                        'text-secundario rounded-[6px] p-[8px]',
                                     ].join(' '),
-                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                    '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                     "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                     '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                 ].join(' ')}
@@ -310,7 +310,7 @@ export function CatalogoModelos({
                                                 '[&_strong]:text-ellipsis [&_strong]:whitespace-nowrap',
                                                 '[&_strong]:font-medium [&_small]:block',
                                             ].join(' '),
-                                            '[&_small]:mt-[5px] [&_small]:text-[#a1a5ad]',
+                                            '[&_small]:mt-[5px] [&_small]:text-secundario',
                                         ].join(' ')}
                                         key={modelo.id}
                                         disabled={ocupado}
@@ -326,7 +326,7 @@ export function CatalogoModelos({
                                     </button>
                                 ))}
                             {!itens.length && !(filtro === 'todos' && importados.length) && (
-                                <p data-ui="catalogo-vazio" className="text-[12px] text-[#a1a5ad] px-[14px] py-[25px]">
+                                <p data-ui="catalogo-vazio" className="text-[12px] text-secundario px-[14px] py-[25px]">
                                     Nenhum modelo encontrado
                                 </p>
                             )}
@@ -334,7 +334,7 @@ export function CatalogoModelos({
                         <footer
                             data-ui="rodape-catalogo"
                             className={[
-                                'flex items-center justify-between border-t border-solid border-t-[#262930]',
+                                'flex items-center justify-between border-t border-solid border-t-borda',
                                 [
                                     'text-[10px] text-[#929aa6] px-[14px] py-[12px] [&_button]:flex',
                                     '[&_button]:items-center',

@@ -23,7 +23,7 @@ const simbolos = {
 };
 
 /** Usa a identidade persistida do projeto em todas as superfícies, com pasta como padrão. */
-export function IconeProjeto({ projeto, tamanho = 16 }: { projeto?: Projeto; tamanho?: number }) {
+export function IconeProjeto({ projeto, tamanho = 16 }: { projeto?: Pick<Projeto, 'icone'>; tamanho?: number }) {
     const icone = projeto?.icone;
     if (icone?.tipo === 'imagem') {
         return (

@@ -52,7 +52,7 @@ export function Configuracoes({
                 data-ui="navegacao-configuracoes"
                 className={[
                     'flex flex-col gap-[6px] [&_button]:flex [&_button]:items-center [&_button]:gap-[11px]',
-                    '[&_button]:rounded-[7px] [&_button]:bg-transparent [&_button]:text-[#a1a5ad]',
+                    '[&_button]:rounded-[7px] [&_button]:bg-transparent [&_button]:text-secundario',
                     '[&_button]:text-left [&_button]:text-[13px] [&_button]:px-[14px] [&_button]:py-[12px]',
                     '[&_button]:border-0 [&_button]:border-solid [&_button]:border-current',
                     '[&_button:hover]:bg-[#202328] [&_button:hover]:text-[#e9e5ef]',
@@ -92,12 +92,12 @@ export function Configuracoes({
                             '[[data-ui~=conteudo-configuracoes]_&]:gap-[28px]',
                             '[[data-ui~=conteudo-configuracoes]_&_h2]:mb-0 flex flex-col gap-[17px] mt-[25px]',
                             '[&_label]:flex [&_label]:flex-col [&_label]:gap-[7px] [&_label]:text-[12px]',
-                            '[&_label]:text-[#b9bec6] [&_input]:bg-[#0d0f12] [&_input]:text-[#e6e7e9]',
+                            '[&_label]:text-[#b9bec6] [&_input]:bg-[#0d0f12] [&_input]:text-principal',
                             '[&_input]:rounded-[7px] [&_input]:w-full [&_input]:p-[9px] [&_input]:border',
                             '[&_input]:border-solid [&_input]:border-[#363a42] [&_select]:bg-[#0d0f12]',
-                            '[&_select]:text-[#e6e7e9] [&_select]:rounded-[7px] [&_select]:w-full [&_select]:p-[9px]',
+                            '[&_select]:text-principal [&_select]:rounded-[7px] [&_select]:w-full [&_select]:p-[9px]',
                             '[&_select]:border [&_select]:border-solid [&_select]:border-[#363a42]',
-                            '[&_textarea]:bg-[#0d0f12] [&_textarea]:text-[#e6e7e9] [&_textarea]:rounded-[7px]',
+                            '[&_textarea]:bg-[#0d0f12] [&_textarea]:text-principal [&_textarea]:rounded-[7px]',
                             '[&_textarea]:w-full [&_textarea]:p-[9px] [&_textarea]:border [&_textarea]:border-solid',
                             '[&_textarea]:border-[#363a42]',
                         ].join(' ')}
@@ -127,17 +127,17 @@ export function Configuracoes({
                             data-ui="rodape-configuracoes"
                             className={[
                                 'flex justify-between items-center gap-[16px] border-t border-solid',
-                                'border-t-[#272a30] pt-[24px] text-[12px]',
+                                'border-t-hover pt-[24px] text-[12px]',
                             ].join(' ')}
                         >
                             <span
                                 data-ui="texto-secundario"
                                 className={[
-                                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                    'text-secundario text-[12px] leading-[1.7]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                    '[[data-ui~=usuario-direita]_&]:text-secundario',
                                     '[[data-ui~=usuario-direita]_&]:text-[12px]',
                                     '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                                 ].join(' ')}

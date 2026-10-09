@@ -8,10 +8,10 @@ import { Configuracoes } from './components/Configuracoes';
 import { TelaConversa } from './components/TelaConversa';
 import { Modal } from './components/Modal';
 import { Estatisticas } from './components/Estatisticas';
-import { AdicionarProjeto } from './components/AdicionarProjeto';
 import type { Projeto } from '../shared/contratos';
 import { TelaProjetos } from './components/TelaProjetos';
 import { IconeProjeto } from './components/IconeProjeto';
+import { TelaProjetoChat } from './components/TelaProjetoChat';
 
 function lerSidebarRecolhida(): boolean {
     try {
@@ -34,9 +34,10 @@ export function Aplicativo() {
     const [excluindoConcluidas, definirExcluindoConcluidas] = useState(false);
     const [estatisticasAbertas, definirEstatisticasAbertas] = useState(false);
     const [apagando, definirApagando] = useState(false);
-    const [projetosAbertos, definirProjetosAbertos] = useState(false);
+    const [adicionandoProjeto, definirAdicionandoProjeto] = useState(false);
     const [gerenciandoProjetos, definirGerenciandoProjetos] = useState(false);
     const [projetoGerenciadoId, definirProjetoGerenciadoId] = useState<string | null>(null);
+    const [projetoChatAbertoId, definirProjetoChatAbertoId] = useState<string | null>(null);
     const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === 'code' && item.concluida).length;
     const ativa = ativas[modoInicial];
     const conversa = estado.conversas.find((item) => item.id === ativa);
@@ -44,17 +45,22 @@ export function Aplicativo() {
         (item) => item.id === conversa?.projetoId || item.caminho === conversa?.projeto,
     );
     const ocupado = !!estado.conversaEmExecucao;
+    const projetoChatAtual = estado.projetosChat.find((item) => item.id === conversa?.projetoChatId);
     useEffect(() => {
         if (carregando || ativas[modoInicial]) return;
         const novo = dados.criarRascunho(modoInicial);
         definirAtivas((anteriores) => ({ ...anteriores, [modoInicial]: novo.id }));
     }, [carregando, modoInicial, ativas]);
     function configurar() {
+        definirProjetoChatAbertoId(null);
+        definirAdicionandoProjeto(false);
         definirGerenciandoProjetos(false);
         definirConfiguracoesMontadas(true);
         definirConfigurando(true);
     }
     function selecionar(id: string) {
+        definirProjetoChatAbertoId(null);
+        definirAdicionandoProjeto(false);
         definirGerenciandoProjetos(false);
         const escolhida = estado.conversas.find((item) => item.id === id);
         const modo = escolhida?.modo ?? modoInicial;
@@ -63,6 +69,8 @@ export function Aplicativo() {
         definirConfigurando(false);
     }
     function criar(projeto?: Projeto | null, modo: 'chat' | 'code' = modoInicial) {
+        definirProjetoChatAbertoId(null);
+        definirAdicionandoProjeto(false);
         definirGerenciandoProjetos(false);
         const novo = dados.criarRascunho(modo, projeto);
         definirModoInicial(modo);
@@ -70,9 +78,44 @@ export function Aplicativo() {
         definirConfigurando(false);
     }
     function abrirProjetos(id: string | null = projetoAtual?.id ?? null) {
+        definirProjetoChatAbertoId(null);
+        definirAdicionandoProjeto(false);
         definirProjetoGerenciadoId(id);
         definirConfigurando(false);
         definirGerenciandoProjetos(true);
+    }
+    function adicionarProjeto() {
+        abrirProjetos();
+        definirAdicionandoProjeto(true);
+    }
+    function cancelarAdicaoProjeto() {
+        definirAdicionandoProjeto(false);
+        if (!estado.projetos.length) definirGerenciandoProjetos(false);
+    }
+    function abrirProjetoChat(id: string) {
+        definirConfigurando(false);
+        definirGerenciandoProjetos(false);
+        definirModoInicial('chat');
+        definirProjetoChatAbertoId(id);
+    }
+    function criarChatProjeto(id: string) {
+        const nova = dados.criarRascunho('chat', null, id);
+        definirModoInicial('chat');
+        definirAtivas((anteriores) => ({ ...anteriores, chat: nova.id }));
+        definirConfigurando(false);
+        definirGerenciandoProjetos(false);
+        definirProjetoChatAbertoId(null);
+    }
+    async function moverChatProjeto(conversa: Conversa, id: string | null) {
+        if (conversa.modo !== 'chat') return;
+        if (dados.estadoPersistido.conversas.some((item) => item.id === conversa.id)) {
+            const resultado = await ponte!.moverConversaProjetoChat(conversa.id, id);
+            if (!resultado.ok) {
+                definirErro(resultado.erro);
+                return;
+            }
+        }
+        dados.alterarRascunho(conversa, { projetoChatId: id, contextoCompactado: undefined });
     }
     if (carregando)
         return (
@@ -103,6 +146,8 @@ export function Aplicativo() {
                 estado={estado}
                 modo={modoInicial}
                 alterarModo={(modo) => {
+                    definirProjetoChatAbertoId(null);
+                    definirAdicionandoProjeto(false);
                     definirGerenciandoProjetos(false);
                     definirModoInicial(modo);
                     definirConfigurando(false);
@@ -114,12 +159,18 @@ export function Aplicativo() {
                 selecionar={selecionar}
                 configurar={configurar}
                 gerenciarProjetos={() => abrirProjetos()}
+                abrirProjetoChat={abrirProjetoChat}
+                criarProjetoChat={() => abrirProjetoChat('novo')}
+                criarChatProjeto={criarChatProjeto}
+                moverChatProjeto={(conversa, id) =>
+                    void moverChatProjeto(conversa, id).catch((erro: Error) => definirErro(erro.message))
+                }
                 estatisticas={() => definirEstatisticasAbertas(true)}
                 atualizar={() => void executar(() => ponte!.verificarAtualizacao())}
                 reiniciarAtualizacao={() => void executar(() => ponte!.reiniciarAtualizacao())}
                 abrirRelease={(versao) => void executar(() => ponte!.abrirRelease(versao))}
                 excluirConcluidas={() => definirExcluindoConcluidas(true)}
-                configurando={configurando || gerenciandoProjetos}
+                configurando={configurando || gerenciandoProjetos || projetoChatAbertoId !== null}
                 recolhida={recolhida}
                 alternar={() => {
                     definirRecolhida((anterior) => {
@@ -141,9 +192,9 @@ export function Aplicativo() {
                 }}
                 excluir={definirExcluindo}
             />
-            <main data-ui="area-principal" className="flex flex-col min-h-0 min-w-0">
+            <main data-ui="area-principal" className="flex flex-col min-h-0 min-w-0 bg-fundo">
                 <BarraJanela ponte={ponte}>
-                    {gerenciandoProjetos ? (
+                    {gerenciandoProjetos || projetoChatAbertoId !== null ? (
                         <>
                             <button
                                 data-ui="botao-icone"
@@ -154,15 +205,18 @@ export function Aplicativo() {
                                     ].join(' '),
                                     [
                                         'inline-flex items-center justify-center bg-transparent',
-                                        'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                        'text-secundario rounded-[6px] p-[8px]',
                                     ].join(' '),
-                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                    '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                     "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                     '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                 ].join(' ')}
                                 aria-label="Voltar à conversa"
-                                onClick={() => definirGerenciandoProjetos(false)}
+                                onClick={() => {
+                                    definirGerenciandoProjetos(false);
+                                    definirProjetoChatAbertoId(null);
+                                }}
                             >
                                 <ArrowLeftIcon size={18} />
                             </button>
@@ -170,7 +224,7 @@ export function Aplicativo() {
                                 data-ui="titulo-tela"
                                 className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] mt-0 mb-[13px] mx-0"
                             >
-                                Projetos
+                                {projetoChatAbertoId !== null ? 'Projeto de Chat' : 'Projetos'}
                             </h1>
                         </>
                     ) : configurando ? (
@@ -184,10 +238,10 @@ export function Aplicativo() {
                                     ].join(' '),
                                     [
                                         'inline-flex items-center justify-center bg-transparent',
-                                        'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                        'text-secundario rounded-[6px] p-[8px]',
                                     ].join(' '),
-                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                    '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                     "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                     '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                 ].join(' ')}
@@ -206,7 +260,7 @@ export function Aplicativo() {
                     ) : conversa ? (
                         <nav
                             data-ui="breadcrumbs-conversa"
-                            className="flex items-center gap-[10px] min-w-0 text-[#85858c] [&_svg]:shrink-0"
+                            className="flex items-center gap-[10px] min-w-0 text-discreto [&_svg]:shrink-0"
                             aria-label="Localização da conversa"
                         >
                             {modoInicial === 'code' ? (
@@ -223,7 +277,7 @@ export function Aplicativo() {
                                             '[&:is(button)]:border-0 [&:is(button)]:border-solid',
                                             '[&:is(button)]:border-current',
                                         ].join(' '),
-                                        '[&:is(button):hover]:text-[#e6e7e9]',
+                                        '[&:is(button):hover]:text-principal',
                                     ].join(' ')}
                                     title={conversa.projeto ?? undefined}
                                     aria-label={
@@ -235,6 +289,17 @@ export function Aplicativo() {
                                     <span className="truncate">
                                         {projetoAtual?.nome ?? conversa.projeto?.split(/[\\/]/).at(-1) ?? 'Sem projeto'}
                                     </span>
+                                </button>
+                            ) : projetoChatAtual ? (
+                                <button
+                                    data-ui="breadcrumb-projeto-chat"
+                                    className="flex min-w-0 items-center gap-2
+                                    bg-transparent text-secundario hover:text-principal"
+                                    aria-label={`Abrir projeto ${projetoChatAtual.nome}`}
+                                    onClick={() => abrirProjetoChat(projetoChatAtual.id)}
+                                >
+                                    <IconeProjeto projeto={projetoChatAtual} tamanho={15} />
+                                    <span className="truncate">{projetoChatAtual.nome}</span>
                                 </button>
                             ) : (
                                 <span
@@ -250,7 +315,7 @@ export function Aplicativo() {
                                             '[&:is(button)]:border-0 [&:is(button)]:border-solid',
                                             '[&:is(button)]:border-current',
                                         ].join(' '),
-                                        '[&:is(button):hover]:text-[#e6e7e9]',
+                                        '[&:is(button):hover]:text-principal',
                                     ].join(' ')}
                                 >
                                     Chat
@@ -290,11 +355,11 @@ export function Aplicativo() {
                         <span
                             data-ui="texto-secundario"
                             className={[
-                                'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                'text-secundario text-[12px] leading-[1.7]',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                '[[data-ui~=usuario-direita]_&]:text-secundario',
                                 '[[data-ui~=usuario-direita]_&]:text-[12px]',
                                 '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                             ].join(' ')}
@@ -322,11 +387,11 @@ export function Aplicativo() {
                             className={[
                                 '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                                 [
-                                    'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                    'inline-flex items-center justify-center bg-transparent text-secundario',
                                     'rounded-[6px] p-[8px]',
                                 ].join(' '),
-                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                 "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}
@@ -340,7 +405,7 @@ export function Aplicativo() {
                 <div
                     data-ui="area-tela"
                     className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
-                    hidden={configurando || gerenciandoProjetos}
+                    hidden={configurando || gerenciandoProjetos || projetoChatAbertoId !== null}
                 >
                     {(['chat', 'code'] as const).map((modo) => (
                         <div
@@ -355,18 +420,36 @@ export function Aplicativo() {
                                 ativa={ativas[modo]}
                                 selecionar={selecionar}
                                 configurar={configurar}
-                                visivel={!configurando && !gerenciandoProjetos && modo === modoInicial}
-                                adicionarProjeto={() => definirProjetosAbertos(true)}
+                                visivel={
+                                    !configurando &&
+                                    !gerenciandoProjetos &&
+                                    projetoChatAbertoId === null &&
+                                    modo === modoInicial
+                                }
+                                adicionarProjeto={adicionarProjeto}
                             />
                         </div>
                     ))}
                 </div>
+                {projetoChatAbertoId !== null && (
+                    <TelaProjetoChat
+                        key={projetoChatAbertoId}
+                        dados={dados}
+                        projeto={estado.projetosChat.find((item) => item.id === projetoChatAbertoId)}
+                        abrir={abrirProjetoChat}
+                        criarConversa={criarChatProjeto}
+                        selecionar={selecionar}
+                        fechar={() => definirProjetoChatAbertoId(null)}
+                    />
+                )}
                 {gerenciandoProjetos && (
                     <TelaProjetos
                         dados={dados}
                         projetoId={projetoGerenciadoId}
                         selecionarProjeto={definirProjetoGerenciadoId}
-                        adicionar={() => definirProjetosAbertos(true)}
+                        adicionando={adicionandoProjeto}
+                        adicionar={adicionarProjeto}
+                        cancelarAdicao={cancelarAdicaoProjeto}
                         criar={(projeto) => criar(projeto, 'code')}
                         selecionarConversa={selecionar}
                     />
@@ -381,13 +464,6 @@ export function Aplicativo() {
                     </div>
                 )}
             </main>
-            {projetosAbertos && (
-                <AdicionarProjeto
-                    dados={dados}
-                    fechar={() => definirProjetosAbertos(false)}
-                    selecionar={(projeto) => criar(projeto, 'code')}
-                />
-            )}
             {estatisticasAbertas && <Estatisticas estado={estado} fechar={() => definirEstatisticasAbertas(false)} />}
             {excluindoConcluidas && (
                 <Modal
@@ -399,11 +475,11 @@ export function Aplicativo() {
                     <p
                         data-ui="texto-secundario mb-6"
                         className={[
-                            'mb-6 text-[#a1a5ad] text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            'mb-6 text-secundario text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -414,9 +490,9 @@ export function Aplicativo() {
                         <button
                             data-ui="botao"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                     '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -470,11 +546,11 @@ export function Aplicativo() {
                     <p
                         data-ui="texto-secundario mb-6"
                         className={[
-                            'mb-6 text-[#a1a5ad] text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            'mb-6 text-secundario text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -485,9 +561,9 @@ export function Aplicativo() {
                         <button
                             data-ui="botao"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                     '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',

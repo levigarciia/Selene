@@ -9,7 +9,7 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
             data-ui="barra-superior"
             className={[
                 'flex items-center justify-between min-h-[56px] pr-[16px] pl-[30px] border-b',
-                'border-solid border-b-[#222429] text-[12px] [-webkit-app-region:drag] py-0',
+                'border-solid border-b-borda text-[12px] [-webkit-app-region:drag] py-0',
             ].join(' ')}
         >
             <div className="flex items-center gap-3 min-w-0">{children}</div>
@@ -18,9 +18,9 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
                     data-ui="botao-icone"
                     className={[
                         '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                        'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
-                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        'inline-flex items-center justify-center bg-transparent text-secundario rounded-[6px] p-[8px]',
+                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
@@ -33,9 +33,9 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
                     data-ui="botao-icone"
                     className={[
                         '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                        'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
-                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        'inline-flex items-center justify-center bg-transparent text-secundario rounded-[6px] p-[8px]',
+                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
@@ -48,9 +48,9 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
                     data-ui="botao-icone"
                     className={[
                         '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                        'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
-                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        'inline-flex items-center justify-center bg-transparent text-secundario rounded-[6px] p-[8px]',
+                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}

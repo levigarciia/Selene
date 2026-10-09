@@ -57,7 +57,7 @@ export function MenuContexto({
                     '[&_button]:items-center [&_button]:gap-[10px] [&_button]:rounded-[5px]',
                     '[&_button]:bg-transparent [&_button]:text-left [&_button]:text-[12px] [&_button]:px-[12px]',
                     '[&_button]:py-[11px] [&_button]:border-0 [&_button]:border-solid',
-                    '[&_button]:border-current [&_button:hover:not(:disabled)]:bg-[#2b2e34]',
+                    '[&_button]:border-current [&_button:hover:not(:disabled)]:bg-borda',
                 ].join(' '),
                 classe === 'menu-projetos'
                     ? [
@@ -74,9 +74,9 @@ export function MenuContexto({
                               '[&_button]:px-[8px] [&_button]:py-[6px] [&_button_svg]:shrink-0',
                               '[&_button_svg]:text-[#a4a4a8]',
                           ].join(' '),
-                          "[&_button[aria-checked='true']]:bg-[#262626] [&_button[aria-checked='true']]:outline-none",
-                          '[&_button:focus-visible]:bg-[#262626] [&_button:focus-visible]:outline-none',
-                          '[&_button:hover:not(:disabled)]:bg-[#262626] [&_button:hover:not(:disabled)]:outline-none',
+                          "[&_button[aria-checked='true']]:bg-hover [&_button[aria-checked='true']]:outline-none",
+                          '[&_button:focus-visible]:bg-hover [&_button:focus-visible]:outline-none',
+                          '[&_button:hover:not(:disabled)]:bg-hover [&_button:hover:not(:disabled)]:outline-none',
                       ].join(' ')
                     : '',
             ].join(' ')}

@@ -16,8 +16,8 @@ export function TarefasConversa({ mensagem, abrirHistorico }: { mensagem?: Mensa
         <details
             data-ui="tarefas-conversa"
             className={[
-                '[&_summary::-webkit-details-marker]:hidden bg-[#15171b] rounded-[12px] mb-[8px] text-[12px]',
-                'border border-solid border-[#272a30] [&_>_summary]:flex [&_>_summary]:items-center',
+                '[&_summary::-webkit-details-marker]:hidden bg-superficie rounded-[12px] mb-[8px] text-[12px]',
+                'border border-solid border-hover [&_>_summary]:flex [&_>_summary]:items-center',
                 '[&_>_summary]:gap-[9px] [&_>_summary]:cursor-pointer [&_>_summary]:px-[14px]',
                 '[&_>_summary]:py-[12px] [&_progress]:w-[65px] [&_progress]:h-[3px]',
                 '[&_progress]:[appearance:none] [&_progress]:rounded-[3px] [&_progress]:overflow-hidden',
@@ -25,7 +25,7 @@ export function TarefasConversa({ mensagem, abrirHistorico }: { mensagem?: Mensa
                 '[&_progress::-webkit-progress-bar]:bg-[#30333a]',
                 '[&_progress::-webkit-progress-value]:bg-[#a48cc8] [&_ol]:list-none',
                 '[&_ol]:max-h-[180px] [&_ol]:overflow-auto [&_ol]:px-[14px] [&_ol]:py-0 [&_ol]:m-0',
-                '[&_li]:flex [&_li]:items-center [&_li]:gap-[10px] [&_li]:text-[#a1a5ad] [&_li]:px-0',
+                '[&_li]:flex [&_li]:items-center [&_li]:gap-[10px] [&_li]:text-secundario [&_li]:px-0',
                 '[&_li]:py-[7px] [&_li_svg]:shrink-0 [&_li_>_span:first-of-type]:flex-1',
                 '[&_li_>_span:first-of-type]:wrap-anywhere [@media(width<=560px)]:[&_progress]:hidden',
                 '[@media(width<=560px)]:[&_>_summary]:gap-[6px]',
@@ -37,11 +37,11 @@ export function TarefasConversa({ mensagem, abrirHistorico }: { mensagem?: Mensa
                 <span
                     data-ui="texto-secundario"
                     className={[
-                        'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                        'text-secundario text-[12px] leading-[1.7]',
+                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                         '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                         '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                        '[[data-ui~=usuario-direita]_&]:text-secundario',
                         '[[data-ui~=usuario-direita]_&]:text-[12px]',
                         '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                     ].join(' ')}
@@ -54,11 +54,11 @@ export function TarefasConversa({ mensagem, abrirHistorico }: { mensagem?: Mensa
                 <span
                     data-ui="texto-secundario"
                     className={[
-                        'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                        'text-secundario text-[12px] leading-[1.7]',
+                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                         '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                         '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                        '[[data-ui~=usuario-direita]_&]:text-secundario',
                         '[[data-ui~=usuario-direita]_&]:text-[12px]',
                         '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                     ].join(' ')}
@@ -95,7 +95,7 @@ export function TarefasConversa({ mensagem, abrirHistorico }: { mensagem?: Mensa
             <button
                 type="button"
                 data-ui="abrir-historico"
-                className="text-[#a1a5ad] cursor-pointer px-[14px] py-[12px] [&:hover]:text-[#e4e7eb]"
+                className="text-secundario cursor-pointer px-[14px] py-[12px] [&:hover]:text-[#e4e7eb]"
                 onClick={abrirHistorico}
             >
                 Ver histórico completo

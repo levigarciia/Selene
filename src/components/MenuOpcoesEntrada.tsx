@@ -85,8 +85,8 @@ export function MenuOpcoesEntrada({
                 type="button"
                 data-ui="gatilho-opcoes-entrada"
                 className={[
-                    'flex items-center gap-[7px] shrink-0 bg-transparent text-[#a1a5ad] text-[12px] px-0',
-                    'py-[7px] border-0 border-solid border-current [&:hover]:text-[#e6e7e9]',
+                    'flex items-center gap-[7px] shrink-0 bg-transparent text-secundario text-[12px] px-0',
+                    'py-[7px] border-0 border-solid border-current [&:hover]:text-principal',
                 ].join(' ')}
                 ref={gatilho}
                 aria-label={rotulo}
@@ -104,14 +104,14 @@ export function MenuOpcoesEntrada({
                 <div
                     data-ui="menu-opcoes-entrada"
                     className={[
-                        'fixed z-[30] w-[min(290px,_calc(100vw_-_16px))] bg-[#17191d] rounded-[12px]',
+                        'fixed z-[30] w-[min(290px,_calc(100vw_-_16px))] bg-superficie rounded-[12px]',
                         'shadow-[0_12px_36px_#0006] p-[5px] border border-solid border-[#30333a] [&_button]:flex',
                         '[&_button]:items-center [&_button]:justify-between [&_button]:gap-[12px] [&_button]:w-full',
                         '[&_button]:rounded-[7px] [&_button]:bg-transparent [&_button]:text-[#d1d5dd]',
                         '[&_button]:text-left [&_button]:text-[12px] [&_button]:p-[10px] [&_button]:border-0',
-                        '[&_button]:border-solid [&_button]:border-current [&_button:hover]:bg-[#262930]',
-                        '[&_button:focus-visible]:bg-[#262930] [&_button_>_svg]:shrink-0',
-                        '[&_button_>_svg]:text-[#b5a2dc] [&_small]:block [&_small]:mt-[5px] [&_small]:text-[#a1a5ad]',
+                        '[&_button]:border-solid [&_button]:border-current [&_button:hover]:bg-borda',
+                        '[&_button:focus-visible]:bg-borda [&_button_>_svg]:shrink-0',
+                        '[&_button_>_svg]:text-[#b5a2dc] [&_small]:block [&_small]:mt-[5px] [&_small]:text-secundario',
                         '[&_small]:text-[11px] [&_small]:leading-[1.5]',
                     ].join(' ')}
                     ref={menu}

@@ -5,6 +5,8 @@ import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { esquemaIconeProjeto } from '../shared/iconesProjetos';
+import { esquemaProjetoChat, esquemaEdicaoProjetoChat } from '../shared/projetosChat';
+import { ProjetosChat, contextoProjetoChat } from './services/projetosChat';
 import {
     esquemaNovoProjeto,
     esquemaProjeto,
@@ -165,6 +167,27 @@ async function carregarModelo(id: string): Promise<void> {
 }
 
 function registrarOperacoes(): void {
+    const projetosChat = new ProjetosChat(persistencia.dados, salvar, () => agente.conversaId);
+    registrar('criarProjetoChat', z.tuple([esquemaProjetoChat.shape.nome]), ([nome]) => projetosChat.criar(nome));
+    registrar('editarProjetoChat', z.tuple([uuid, esquemaEdicaoProjetoChat]), ([id, edicao]) =>
+        projetosChat.editar(id, edicao),
+    );
+    registrar('removerProjetoChat', z.tuple([uuid]), ([id]) => projetosChat.remover(id));
+    registrar('removerArquivoProjetoChat', z.tuple([uuid, uuid]), ([id, arquivoId]) =>
+        projetosChat.removerArquivo(id, arquivoId),
+    );
+    registrar('moverConversaProjetoChat', z.tuple([uuid, uuid.nullable()]), ([id, projetoId]) =>
+        projetosChat.mover(conversaPorId(id), projetoId),
+    );
+    registrar('importarArquivosProjetoChat', z.tuple([uuid]), async ([id]) => {
+        projetosChat.obter(id);
+        const escolha = await dialog.showOpenDialog(janela!, {
+            title: 'Adicionar referências ao projeto de Chat',
+            properties: ['openFile', 'multiSelections'],
+            filters: [{ name: 'Texto', extensions: ['txt', 'md', 'csv', 'json'] }],
+        });
+        if (!escolha.canceled) await projetosChat.importar(id, escolha.filePaths);
+    });
     const vazio = z.tuple([]);
     registrar('estado', vazio, estado);
     registrar('verificarAtualizacao', vazio, () => atualizacoes.verificar());
@@ -277,6 +300,10 @@ function registrarOperacoes(): void {
             ? persistencia.dados.projetos.find((item) => item.id === entrada.projetoId)
             : persistencia.dados.projetos.find((item) => item.caminho === entrada.projeto);
         if ((entrada.projetoId || entrada.projeto) && !projeto) throw new Error('Projeto não encontrado.');
+        if (entrada.projetoChatId) {
+            if (entrada.modo !== 'chat') throw new Error('Projetos de Chat exigem conversas Chat.');
+            projetosChat.obter(entrada.projetoChatId);
+        }
         const { rascunho, ...opcoes } = entrada;
         const caminhoProjeto = entrada.modo === 'code' && projeto ? await realpath(projeto.caminho) : null;
         const promovida = persistencia.dados.conversas.find((item) => item.id === entrada.id);
@@ -303,6 +330,7 @@ function registrarOperacoes(): void {
             modo,
             projeto,
             projetoId: origem?.projetoId ?? null,
+            projetoChatId: modo === 'chat' && origem?.modo === 'chat' ? origem.projetoChatId : null,
             acessoCompleto: false,
             modeloId: motor.estado.modeloId ?? null,
             mensagens: [],
@@ -552,7 +580,7 @@ async function criarJanela(): Promise<void> {
         minWidth: 840,
         minHeight: 620,
         frame: false,
-        backgroundColor: '#101113',
+        backgroundColor: '#0a0a0a',
         title: 'Selene',
         show: false,
         icon: app.isPackaged ? join(process.resourcesPath, 'selene.ico') : join(__dirname, '../public/selene.ico'),
@@ -597,6 +625,7 @@ app.whenReady()
         downloads = new DownloadsModelos(join(app.getPath('userData'), 'models'), publicarEstado, registrarDownload);
         await downloads.preparar(catalogoModelos);
         agente = new Agente({
+            contextoProjetoChat: (conversa) => contextoProjetoChat(persistencia.dados, conversa),
             completar: (corpo, sinal) => motor.completar(corpo, sinal),
             lerImagem: (id) => anexos.ler(id),
             salvar,

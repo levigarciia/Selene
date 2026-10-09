@@ -21,20 +21,20 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
             <div
                 data-ui="filtros-estatisticas"
                 className={[
-                    'flex items-center justify-between gap-[12px] [&_select]:text-[#a1a5ad]',
+                    'flex items-center justify-between gap-[12px] [&_select]:text-secundario',
                     '[&_select]:rounded-[6px] [&_select]:bg-transparent [&_select]:text-[12px] [&_select]:p-[8px]',
-                    '[&_select]:border [&_select]:border-solid [&_select]:border-[#2b2e34]',
+                    '[&_select]:border [&_select]:border-solid [&_select]:border-borda',
                     '[@media(width<=480px)]:flex-wrap',
                 ].join(' ')}
             >
                 <div
                     data-ui="seletor-modo"
                     className={[
-                        'flex rounded-[8px] p-[3px] border border-solid border-[#2b2e34] [&_button]:flex',
-                        '[&_button]:items-center [&_button]:gap-[7px] [&_button]:text-[12px] [&_button]:text-[#a1a5ad]',
+                        'flex rounded-[8px] p-[3px] border border-solid border-borda [&_button]:flex',
+                        '[&_button]:items-center [&_button]:gap-[7px] [&_button]:text-[12px] [&_button]:text-secundario',
                         '[&_button]:bg-transparent [&_button]:rounded-[5px] [&_button]:px-[13px] [&_button]:py-[7px]',
                         '[&_button]:border-0 [&_button]:border-solid [&_button]:border-current',
-                        "[&_button[aria-pressed='true']]:bg-[#292c32] [&_button[aria-pressed='true']]:text-[#eff0f2]",
+                        "[&_button[aria-pressed='true']]:bg-selecionado [&_button[aria-pressed='true']]:text-[#eff0f2]",
                     ].join(' ')}
                     aria-label="Período das estatísticas"
                 >
@@ -62,7 +62,7 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
                 data-ui="total-estatisticas"
                 className={[
                     'flex items-baseline gap-[10px] mx-0 my-[30px] [&_strong]:text-[38px] [&_strong]:font-medium',
-                    '[&_strong]:tracking-[-1px] [&_strong]:tabular-nums [&_span]:text-[#a1a5ad]',
+                    '[&_strong]:tracking-[-1px] [&_strong]:tabular-nums [&_span]:text-secundario',
                     '[&_span]:text-[12px] [@media(width<=480px)]:flex-wrap',
                 ].join(' ')}
             >
@@ -72,7 +72,7 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
             <dl
                 data-ui="metricas-estatisticas"
                 className={[
-                    '[&_dt]:text-[#a1a5ad] [&_dt]:text-[12px] grid grid-cols-[repeat(2,_minmax(0,_1fr))]',
+                    '[&_dt]:text-secundario [&_dt]:text-[12px] grid grid-cols-[repeat(2,_minmax(0,_1fr))]',
                     'gap-[24px] m-0 [&_dd]:mt-[8px] [&_dd]:mb-0 [&_dd]:text-[18px] [&_dd]:tabular-nums',
                     '[&_dd]:mx-[0]',
                 ].join(' ')}
@@ -106,7 +106,7 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
                     <dd>{numero.format(dados.respostas)}</dd>
                 </div>
             </dl>
-            <p data-ui="nota-estatisticas" className="mt-[28px] mb-0 text-[#a1a5ad] text-[11px] leading-[1.6] mx-0">
+            <p data-ui="nota-estatisticas" className="mt-[28px] mb-0 text-secundario text-[11px] leading-[1.6] mx-0">
                 Somente métricas registradas pelo motor. O uso permanece salvo ao apagar chats.
             </p>
         </Modal>

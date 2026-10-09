@@ -15,7 +15,7 @@ function Texto({ texto }: { texto: string }) {
         <div
             data-ui="markdown"
             className={[
-                '[[data-ui~=mensagem-usuario]_&]:bg-[#1d2025]',
+                '[[data-ui~=mensagem-usuario]_&]:bg-selecionado',
                 '[[data-ui~=mensagem-usuario]_&]:rounded-[12px] [[data-ui~=mensagem-usuario]_&]:px-[18px]',
                 '[[data-ui~=mensagem-usuario]_&]:py-[14px] wrap-anywhere [&_p]:mt-0 [&_p]:mb-[14px]',
                 '[&_p]:mx-0 [&_p:last-child]:mb-0 [&_ul]:pl-[24px] [&_ul]:list-disc [&_ul]:mx-0',
@@ -35,9 +35,9 @@ function Texto({ texto }: { texto: string }) {
                 '[&_th]:border-solid [&_th]:border-[#35383f] [&_td]:text-left [&_td]:p-[7px]',
                 '[&_td]:border [&_td]:border-solid [&_td]:border-[#35383f]',
                 '[[data-ui~=atividade-tarefa]_>_&]:mx-0 [[data-ui~=atividade-tarefa]_>_&]:my-[14px]',
-                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:bg-[#1d2025]',
+                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:bg-selecionado',
                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:rounded-[12px]',
-                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#e6e7e9]',
+                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-principal',
                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:px-[18px]',
                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:py-[14px]',
                 '[[data-ui~=raciocinio-mensagem]_&]:max-h-[240px]',
@@ -106,7 +106,7 @@ export const MensagemConversa = memo(function MensagemConversa({
             <div
                 data-ui="autor"
                 className={[
-                    'text-[#a1a5ad] text-[11px] mb-[9px]',
+                    'text-secundario text-[11px] mb-[9px]',
                     '[[data-ui~=usuario-direita]_&]:text-right',
                     '[[data-ui~=usuario-direita]_&]:text-[#b5a2dc]',
                     '[[data-ui~=usuario-direita]_&]:mb-[4px]',
@@ -133,7 +133,7 @@ export const MensagemConversa = memo(function MensagemConversa({
                 {!!mensagem.compactacoes?.length && (
                     <details
                         data-ui="compactacao-contexto"
-                        className="mb-[12px] text-[#a1a5ad] text-[12px] [&_summary]:cursor-pointer"
+                        className="mb-[12px] text-secundario text-[12px] [&_summary]:cursor-pointer"
                     >
                         <summary>Contexto compactado automaticamente</summary>
                         {mensagem.compactacoes.map((item, indice) => (
@@ -172,7 +172,7 @@ export const MensagemConversa = memo(function MensagemConversa({
                             className={[
                                 '[&_summary::-webkit-details-marker]:hidden [&[open]_>_summary_svg]:rotate-90',
                                 'mb-[16px] [&_>_summary]:flex [&_>_summary]:items-center [&_>_summary]:gap-[8px]',
-                                '[&_>_summary]:text-[#a1a5ad] [&_>_summary]:text-[12px] [&_>_summary]:cursor-pointer',
+                                '[&_>_summary]:text-secundario [&_>_summary]:text-[12px] [&_>_summary]:cursor-pointer',
                                 '[&_>_summary]:pt-[4px] [&_>_summary]:pb-[12px] [&_>_summary]:border-b',
                                 '[&_>_summary]:border-solid [&_>_summary]:border-b-[#22252a]',
                                 '[&_>_summary]:px-0 [&_>_summary_span]:text-[11px]',
@@ -198,15 +198,15 @@ export const MensagemConversa = memo(function MensagemConversa({
                     <span
                         data-ui="texto-secundario indicador-geracao"
                         className={[
-                            'text-[#a1a5ad] text-[12px] leading-[1.7] block pt-[8px]',
+                            'text-secundario text-[12px] leading-[1.7] block pt-[8px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:block',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:pt-[8px]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
                             '[[data-ui~=usuario-direita]_&]:block',
                             '[[data-ui~=usuario-direita]_&]:pt-[8px]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -219,15 +219,15 @@ export const MensagemConversa = memo(function MensagemConversa({
                     <span
                         data-ui="texto-secundario indicador-geracao"
                         className={[
-                            'text-[#a1a5ad] text-[12px] leading-[1.7] block pt-[8px]',
+                            'text-secundario text-[12px] leading-[1.7] block pt-[8px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:block',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:pt-[8px]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
                             '[[data-ui~=usuario-direita]_&]:block',
                             '[[data-ui~=usuario-direita]_&]:pt-[8px]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -244,15 +244,15 @@ export const MensagemConversa = memo(function MensagemConversa({
                         <span
                             data-ui="texto-secundario indicador-geracao"
                             className={[
-                                'text-[#a1a5ad] text-[12px] leading-[1.7] block pt-[8px]',
+                                'text-secundario text-[12px] leading-[1.7] block pt-[8px]',
                                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:block',
                                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:pt-[8px]',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
                                 '[[data-ui~=usuario-direita]_&]:block',
                                 '[[data-ui~=usuario-direita]_&]:pt-[8px]',
-                                '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                '[[data-ui~=usuario-direita]_&]:text-secundario',
                                 '[[data-ui~=usuario-direita]_&]:text-[12px]',
                                 '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                             ].join(' ')}
@@ -266,11 +266,11 @@ export const MensagemConversa = memo(function MensagemConversa({
                     <span
                         data-ui="texto-secundario"
                         className={[
-                            'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            'text-secundario text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -299,19 +299,19 @@ export const MensagemConversa = memo(function MensagemConversa({
                             className={[
                                 '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                                 [
-                                    'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                    'inline-flex items-center justify-center bg-transparent text-secundario',
                                     'rounded-[6px] p-[8px]',
                                 ].join(' '),
-                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                 '[[data-ui~=velocidade-mensagem]_&]:inline-flex',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:border-[#2b2e34]',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&:hover:not(:disabled)]:bg-[#24262c]',
-                                '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
-                                '[[data-ui~=usuario-direita]_&]:border-[#2b2e34]',
-                                '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:bg-[#24262c]',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:border-borda',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&:hover:not(:disabled)]:bg-hover',
+                                '[[data-ui~=usuario-direita]_&]:text-secundario',
+                                '[[data-ui~=usuario-direita]_&]:border-borda',
+                                '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:text-principal',
+                                '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:bg-hover',
                                 "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}

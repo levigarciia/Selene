@@ -47,7 +47,7 @@ export function AcaoConversa({
             data-ui={`acao ${acao.estado === 'aguardando' ? 'acao-pendente' : ''}`}
             className={[
                 [
-                    'text-[#a1a5ad] mx-0 my-[10px] [&_summary]:flex [&_summary]:gap-[10px]',
+                    'text-secundario mx-0 my-[10px] [&_summary]:flex [&_summary]:gap-[10px]',
                     '[&_summary]:items-center [&_summary]:cursor-pointer [&_summary]:text-[12px]',
                     '[&_summary]:px-0 [&_summary]:py-[4px] [&_summary_>_span:first-of-type]:overflow-hidden',
                     '[&_summary_>_span:first-of-type]:text-ellipsis',
@@ -57,7 +57,7 @@ export function AcaoConversa({
                     '[&_pre]:font-mono [&_pre]:mt-0 [&_pre]:mb-[12px]',
                     '[&_pre]:p-[14px] [&_pre]:mx-[12px]',
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:inline-block',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:bg-[#15171b]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:bg-superficie',
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:rounded-[9px]',
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:mx-[8px]',
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:my-[4px]',
@@ -83,7 +83,7 @@ export function AcaoConversa({
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&_pre]:p-[14px]',
                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&_pre]:mx-[12px]',
                     '[[data-ui~=usuario-direita]_&]:inline-block',
-                    '[[data-ui~=usuario-direita]_&]:bg-[#15171b]',
+                    '[[data-ui~=usuario-direita]_&]:bg-superficie',
                     '[[data-ui~=usuario-direita]_&]:rounded-[9px]',
                     '[[data-ui~=usuario-direita]_&]:mx-[8px]',
                     '[[data-ui~=usuario-direita]_&]:my-[4px]',
@@ -179,9 +179,9 @@ export function AcaoConversa({
                     <button
                         data-ui="botao"
                         className={[
-                            'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                            'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                            '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                            'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                            'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                            '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                             '[[data-ui~=lista-projetos]_>_&]:justify-start [[data-ui~=lista-projetos]_>_&]:gap-[8px]',
                             '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
                         ].join(' ')}

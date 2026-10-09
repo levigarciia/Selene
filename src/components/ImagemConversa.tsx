@@ -39,8 +39,8 @@ export function ImagemConversa({
                 data-ui="previa-imagem"
                 className={[
                     'w-[116px] h-[88px] overflow-hidden rounded-[8px] bg-[#191b20] cursor-zoom-in p-0',
-                    'border border-solid border-[#2b2e34] [&_img]:w-full [&_img]:h-full [&_img]:object-cover',
-                    '[&_span]:text-[11px] [&_span]:text-[#a1a5ad]',
+                    'border border-solid border-borda [&_img]:w-full [&_img]:h-full [&_img]:object-cover',
+                    '[&_span]:text-[11px] [&_span]:text-secundario',
                 ].join(' ')}
                 disabled={!url}
                 onClick={() => definirAmpliada(true)}

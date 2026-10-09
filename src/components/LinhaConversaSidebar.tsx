@@ -1,5 +1,4 @@
 import {
-    ChatCircleIcon,
     CircleNotchIcon,
     TerminalIcon,
     ClockIcon,
@@ -15,6 +14,7 @@ import type { Conversa, Estado } from '../../shared/contratos';
 import { IconeProjeto } from './IconeProjeto';
 import { obterAtividadeConversa, tempoConversa } from '../../shared/historico';
 import type { PosicaoMenuConversa } from './MenuConversa';
+import { LinhaChatSidebar } from './LinhaChatSidebar';
 
 /** Use para mostrar a atividade da conversa e permitir encerramento sem abrir o menu. */
 export function LinhaConversaSidebar({
@@ -36,12 +36,24 @@ export function LinhaConversaSidebar({
     concluir: (conversa: Conversa) => void;
     abrirMenu: (posicao: PosicaoMenuConversa) => void;
 }) {
+    if (conversa.modo === 'chat') {
+        return (
+            <LinhaChatSidebar
+                conversa={conversa}
+                estado={estado}
+                selecionada={selecionada}
+                recolhida={recolhida}
+                selecionar={selecionar}
+                abrirMenu={abrirMenu}
+            />
+        );
+    }
     const atividade = obterAtividadeConversa(conversa, estado.conversaEmExecucao);
     const mensagem = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
     const modelo = estado.modelos.find((item) => item.id === conversa.modeloId);
     const projeto = estado.projetos.find((item) => item.id === conversa.projetoId || item.caminho === conversa.projeto);
     const encerrada = conversa.concluida && !atividade.ocupada;
-    const pronta = conversa.modo === 'code' && !encerrada && atividade.fase === 'concluida';
+    const pronta = !encerrada && atividade.fase === 'concluida';
     const destacar = atividade.ocupada || pronta || ['erro', 'interrompida', 'rascunho'].includes(atividade.fase);
     const comando =
         atividade.ocupada &&
@@ -62,12 +74,9 @@ export function LinhaConversaSidebar({
                       : atividade.fase === 'nova'
                         ? PlusIcon
                         : CheckCircleIcon;
-    const permiteAcao = conversa.modo === 'code' && !!conversa.mensagens.length && !atividade.ocupada && !recolhida;
+    const permiteAcao = !!conversa.mensagens.length && !atividade.ocupada && !recolhida;
     return (
-        <div
-            data-ui={`linha-sidebar ${permiteAcao ? 'linha-sidebar-acoes' : ''}`}
-            className={['relative', permiteAcao ? '' : ''].join(' ')}
-        >
+        <div data-ui={`linha-sidebar ${permiteAcao ? 'linha-sidebar-acoes' : ''}`} className="relative">
             <button
                 data-ui={[
                     'item-conversa',
@@ -81,15 +90,15 @@ export function LinhaConversaSidebar({
                         '[[data-ui~=sidebar-recolhida]_&]:py-[11px] [&&]:flex',
                         '[&&]:items-stretch [&&]:gap-[7px]',
                         '[&&]:w-full [&&]:bg-transparent',
-                        '[&&]:rounded-[7px] [&&]:text-[#b1b5bc]',
+                        '[&&]:rounded-[7px] [&&]:text-principal',
                         '[&&]:text-[12px] [&&]:text-left',
                         '[&&]:flex-col [&&]:mb-[3px]',
                         '[&&]:px-[10px] [&&]:py-[11px]',
                         '[&&]:border-0 [&&]:border-solid',
-                        '[&&]:border-current [&:hover]:bg-[#1a1c21]',
-                        '[&:hover]:text-[#e6e7e9] [&_svg]:shrink-0',
+                        '[&&]:border-current [&:hover]:bg-selecionado',
+                        '[&:hover]:text-principal [&_svg]:shrink-0',
                     ].join(' '),
-                    selecionada ? '[&&]:bg-[#1a1c21] [&&]:text-[#e6e7e9]' : '',
+                    selecionada ? '[&&]:bg-selecionado [&&]:text-principal' : '',
                     encerrada
                         ? [
                               '[&&]:flex-row [&&]:items-center',
@@ -163,17 +172,9 @@ export function LinhaConversaSidebar({
                                 '[&_>_svg]:text-[#b5a2dc]',
                             ].join(' ')}
                         >
-                            {conversa.modo === 'code' ? (
-                                <IconeProjeto projeto={projeto} tamanho={14} />
-                            ) : (
-                                <ChatCircleIcon size={14} />
-                            )}
+                            <IconeProjeto projeto={projeto} tamanho={14} />
                             <span className="truncate">
-                                {estado.projetos.find(
-                                    (item) => item.id === conversa.projetoId || item.caminho === conversa.projeto,
-                                )?.nome ??
-                                    conversa.projeto?.split(/[\\/]/).at(-1) ??
-                                    'Sem projeto'}
+                                {projeto?.nome ?? conversa.projeto?.split(/[\\/]/).at(-1) ?? 'Sem projeto'}
                             </span>
                             <span
                                 data-ui={`estado-conversa estado-${atividade.fase}`}
@@ -195,7 +196,7 @@ export function LinhaConversaSidebar({
                                             : atividade.fase === 'comando'
                                               ? '[&&]:text-[#bca3e5]'
                                               : atividade.fase === 'concluida'
-                                                ? '[&&]:text-[#b48cf2]'
+                                                ? '[&&]:text-sucesso'
                                                 : atividade.fase === 'aprovacao'
                                                   ? '[&&]:text-[#deb76c]'
                                                   : atividade.fase === 'erro'
@@ -276,15 +277,15 @@ export function LinhaConversaSidebar({
                     </>
                 )}
             </button>
-            {conversa.modo === 'code' && !!conversa.mensagens.length && !recolhida && (
+            {!!conversa.mensagens.length && !recolhida && (
                 <button
                     data-ui="botao-icone acao-hover-conversa"
                     className={[
                         '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                         'inline-flex items-center justify-center bg-transparent text-[#b4a6c9] rounded-[6px] absolute',
                         'right-[4px] top-[5px] opacity-[0] pointer-events-none p-[8px] border-0 border-solid',
-                        'border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        'border-current [&:hover:not(:disabled)]:text-principal',
+                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         '[[data-ui~=linha-sidebar-acoes]:hover_&]:opacity-[1]',
                         '[[data-ui~=linha-sidebar-acoes]:hover_&]:pointer-events-auto',
                         '[[data-ui~=linha-sidebar-acoes]:focus-within_&]:opacity-[1]',

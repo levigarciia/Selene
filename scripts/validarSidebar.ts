@@ -64,6 +64,13 @@ try {
     assert.equal(await pagina.getByRole('button', { name: 'Conversa Code 1', exact: true }).count(), 0);
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.getByRole('button', { name: 'Conversa Code 1', exact: true }).click();
+    assert.equal(
+        await pagina
+            .getByRole('button', { name: 'Conversa Code 1', exact: true })
+            .getByText('Pronto', { exact: true })
+            .evaluate((elemento) => getComputedStyle(elemento).color),
+        'rgb(52, 211, 153)',
+    );
     assert.equal(await pagina.getByRole('button', { name: 'Chat pessoal', exact: true }).count(), 0);
     assert.equal(await pagina.locator('[data-ui~="cabecalho-grupo"]').count(), 0);
     assert.equal(await pagina.locator('[data-ui~="ceu-sidebar"] i').count(), 38);
@@ -131,7 +138,8 @@ try {
     await pagina.getByRole('button', { name: 'Projeto da conversa', exact: true }).click();
     await pagina.getByRole('menuitem', { name: 'Adicionar projeto', exact: true }).click();
     await pagina.getByRole('button', { name: 'Abrir pasta existente', exact: true }).click();
-    await pagina.getByRole('button', { name: 'Fechar diálogo', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Voltar à conversa', exact: true }).click();
     await pagina.waitForFunction(
         (quantidade) =>
             window

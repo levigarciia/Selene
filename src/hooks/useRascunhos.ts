@@ -40,13 +40,19 @@ export function useRascunhos(informarErro: (erro: string) => void) {
         }
     }
 
-    function criar(modo: 'chat' | 'code', projeto?: Projeto | null, existentes: string[] = []): Conversa {
+    function criar(
+        modo: 'chat' | 'code',
+        projeto?: Projeto | null,
+        existentes: string[] = [],
+        projetoChatId: string | null = null,
+    ): Conversa {
         const vazio = atuais.current.find(
             (item) =>
                 item.modo === modo &&
                 !existentes.includes(item.id) &&
                 !possuiRascunho(item) &&
-                item.projeto === (projeto?.caminho ?? null),
+                item.projeto === (projeto?.caminho ?? null) &&
+                (item.projetoChatId ?? null) === projetoChatId,
         );
         if (vazio) return vazio;
         const novo = esquemaConversa.parse({
@@ -55,6 +61,7 @@ export function useRascunhos(informarErro: (erro: string) => void) {
             modo,
             projeto: projeto?.caminho ?? null,
             projetoId: projeto?.id ?? null,
+            projetoChatId,
             rascunho: '',
             atualizadoEm: new Date().toISOString(),
         });
@@ -88,6 +95,16 @@ export function useRascunhos(informarErro: (erro: string) => void) {
         const atual = atuais.current.find((item) => item.id === id);
         if (atual?.rascunho === textoEnviado || !atual?.rascunho) remover(id);
     }
+    function limparProjetosChat(ids: string[]) {
+        if (!atuais.current.some((item) => item.projetoChatId && !ids.includes(item.projetoChatId))) return;
+        atualizar(
+            atuais.current.map((item) =>
+                item.projetoChatId && !ids.includes(item.projetoChatId)
+                    ? { ...item, projetoChatId: null, contextoCompactado: undefined }
+                    : item,
+            ),
+        );
+    }
 
     return {
         rascunhos,
@@ -95,5 +112,6 @@ export function useRascunhos(informarErro: (erro: string) => void) {
         alterarRascunho: alterar,
         removerRascunho: remover,
         confirmarEnvioRascunho: confirmarEnvio,
+        limparProjetosChat,
     };
 }

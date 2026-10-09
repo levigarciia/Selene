@@ -21,6 +21,9 @@ export function useSelene() {
     const rascunhos = useRascunhos(definirErro);
     const [carregando, definirCarregando] = useState(!!window.selene);
     useEffect(() => {
+        if (!carregando) rascunhos.limparProjetosChat(estado.projetosChat.map((item) => item.id));
+    }, [carregando, estado.projetosChat]);
+    useEffect(() => {
         const ponte = window.selene;
         if (!ponte) return;
         let ativo = true;
@@ -87,11 +90,12 @@ export function useSelene() {
         estado: reunirRascunhos(estado, rascunhos.rascunhos),
         estadoPersistido: estado,
         ...rascunhos,
-        criarRascunho: (modo: 'chat' | 'code', projeto?: Projeto | null) =>
+        criarRascunho: (modo: 'chat' | 'code', projeto?: Projeto | null, projetoChatId: string | null = null) =>
             rascunhos.criarRascunho(
                 modo,
                 projeto,
                 estado.conversas.map((item) => item.id),
+                projetoChatId,
             ),
         erro,
         carregando,

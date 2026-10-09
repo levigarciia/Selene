@@ -15,7 +15,7 @@ export function Modal({ titulo, fechar, children }: { titulo: string; fechar: ()
             ref={referencia}
             data-ui="modal"
             className={[
-                'bg-[#14161a] text-[#e6e7e9] rounded-[15px] w-[min(580px,_90vw)] max-h-[85dvh] overflow-y-auto',
+                'bg-superficie text-principal rounded-[15px] w-[min(580px,_90vw)] max-h-[85dvh] overflow-y-auto',
                 'p-[25px] m-auto border border-solid border-[#393d45]',
                 '[&::backdrop]:bg-[rgb(0_0_0_/_65%)] [&_h2]:font-[550] [&_h2]:text-[17px]',
             ].join(' ')}
@@ -28,9 +28,9 @@ export function Modal({ titulo, fechar, children }: { titulo: string; fechar: ()
                     data-ui="botao-icone"
                     className={[
                         '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                        'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
-                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        'inline-flex items-center justify-center bg-transparent text-secundario rounded-[6px] p-[8px]',
+                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}

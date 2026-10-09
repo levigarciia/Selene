@@ -2,6 +2,12 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { Evento, PonteSelene } from '../shared/contratos';
 
 const ponte: PonteSelene = {
+    criarProjetoChat: (nome) => ipcRenderer.invoke('selene:criarProjetoChat', nome),
+    editarProjetoChat: (id, edicao) => ipcRenderer.invoke('selene:editarProjetoChat', id, edicao),
+    removerProjetoChat: (id) => ipcRenderer.invoke('selene:removerProjetoChat', id),
+    importarArquivosProjetoChat: (id) => ipcRenderer.invoke('selene:importarArquivosProjetoChat', id),
+    removerArquivoProjetoChat: (id, arquivoId) => ipcRenderer.invoke('selene:removerArquivoProjetoChat', id, arquivoId),
+    moverConversaProjetoChat: (id, projetoId) => ipcRenderer.invoke('selene:moverConversaProjetoChat', id, projetoId),
     salvarIconeProjeto: (id, icone) => ipcRenderer.invoke('selene:salvarIconeProjeto', id, icone),
     importarIconeProjeto: (id) => ipcRenderer.invoke('selene:importarIconeProjeto', id),
     adicionarProjeto: (entrada) => ipcRenderer.invoke('selene:adicionarProjeto', entrada),

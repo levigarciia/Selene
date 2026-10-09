@@ -30,9 +30,9 @@ export function ModelosConfiguracoes({
                         type="button"
                         data-ui="botao"
                         className={[
-                            'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                            'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                            '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                            'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                            'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                            '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                             '[[data-ui~=lista-projetos]_>_&]:justify-start [[data-ui~=lista-projetos]_>_&]:gap-[8px]',
                             '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
                         ].join(' ')}
@@ -45,9 +45,9 @@ export function ModelosConfiguracoes({
                         type="button"
                         data-ui="botao"
                         className={[
-                            'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                            'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                            '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                            'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                            'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                            '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                             '[[data-ui~=lista-projetos]_>_&]:justify-start [[data-ui~=lista-projetos]_>_&]:gap-[8px]',
                             '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
                         ].join(' ')}
@@ -76,7 +76,7 @@ export function ModelosConfiguracoes({
                         <p
                             data-ui="estado-vazio-pequeno"
                             className={[
-                                'rounded-[9px] text-[#a1a5ad] text-[12px] text-center mb-[20px] px-[15px] py-[25px]',
+                                'rounded-[9px] text-secundario text-[12px] text-center mb-[20px] px-[15px] py-[25px]',
                                 'border [border-style:dashed] border-[#393d45]',
                             ].join(' ')}
                         >
@@ -96,7 +96,7 @@ export function ModelosConfiguracoes({
                                 className={[
                                     '[[data-ui~=conteudo-configuracoes]_&]:border-b-[1px]',
                                     '[[data-ui~=conteudo-configuracoes]_&]:[border-bottom-style:solid]',
-                                    '[[data-ui~=conteudo-configuracoes]_&]:border-b-[#272a30]',
+                                    '[[data-ui~=conteudo-configuracoes]_&]:border-b-hover',
                                     '[[data-ui~=conteudo-configuracoes]_&]:px-[0]',
                                     '[[data-ui~=conteudo-configuracoes]_&]:py-[18px] flex items-center gap-[12px] px-0',
                                     'py-[10px] [&_strong]:text-[12px] [&_strong]:font-medium',
@@ -110,11 +110,11 @@ export function ModelosConfiguracoes({
                                     <span
                                         data-ui="texto-secundario"
                                         className={[
-                                            'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                            'text-secundario text-[12px] leading-[1.7]',
+                                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                                         ].join(' ')}
@@ -137,10 +137,10 @@ export function ModelosConfiguracoes({
                                         ].join(' '),
                                         [
                                             'inline-flex items-center justify-center bg-transparent',
-                                            'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                            'text-secundario rounded-[6px] p-[8px]',
                                         ].join(' '),
-                                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                     ].join(' ')}
@@ -161,10 +161,10 @@ export function ModelosConfiguracoes({
                                         ].join(' '),
                                         [
                                             'inline-flex items-center justify-center bg-transparent',
-                                            'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                            'text-secundario rounded-[6px] p-[8px]',
                                         ].join(' '),
-                                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                     ].join(' ')}
@@ -184,10 +184,10 @@ export function ModelosConfiguracoes({
                                         ].join(' '),
                                         [
                                             'inline-flex items-center justify-center bg-transparent',
-                                            'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                            'text-secundario rounded-[6px] p-[8px]',
                                         ].join(' '),
-                                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                     ].join(' ')}
@@ -216,11 +216,11 @@ export function ModelosConfiguracoes({
                     <p
                         data-ui="texto-secundario mb-6"
                         className={[
-                            'mb-6 text-[#a1a5ad] text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            'mb-6 text-secundario text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-secundario',
                             '[[data-ui~=usuario-direita]_&]:text-[12px]',
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
@@ -231,9 +231,9 @@ export function ModelosConfiguracoes({
                         <button
                             data-ui="botao"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                     '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',

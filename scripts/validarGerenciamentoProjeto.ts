@@ -68,10 +68,13 @@ try {
     await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).fill('Texto pendente preservado');
     await pagina.getByRole('button', { name: 'Gerenciar projeto Aplicativo', exact: true }).click();
     await pagina.getByRole('heading', { name: 'Projetos', exact: true }).waitFor();
+    assert.equal(await pagina.getByRole('dialog').count(), 0);
     assert.equal(
         await pagina.locator('[data-ui~="tela-projetos"]').evaluate((elemento) => getComputedStyle(elemento).display),
         'grid',
     );
+    await pagina.screenshot({ path: 'artifacts/selene-projetos-t3.png' });
+    await pagina.getByRole('button', { name: 'Escolher ícone', exact: true }).click();
     await pagina.getByRole('button', { name: 'Ícone Cubo', exact: true }).click();
     await pagina.waitForFunction(async () => {
         const estado = await window.selene!.estado();
@@ -92,6 +95,12 @@ try {
     });
     await pagina.screenshot({ path: 'artifacts/selene-gerenciamento-projeto.png' });
     await pagina.getByRole('button', { name: 'Voltar à conversa', exact: true }).click();
+    const fundos = await pagina.evaluate(() => {
+        const sidebar = document.querySelector('[data-ui~="sidebar"]')!;
+        const principal = document.querySelector('[data-ui~="area-principal"]')!;
+        return [getComputedStyle(sidebar).backgroundColor, getComputedStyle(principal).backgroundColor];
+    });
+    assert.deepEqual(fundos, ['rgb(0, 0, 0)', 'rgb(10, 10, 10)']);
     assert.equal(
         await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).inputValue(),
         'Texto pendente preservado',
@@ -117,6 +126,7 @@ try {
         '#8aaddc',
     );
     await pagina.getByRole('button', { name: 'Projetos', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Escolher ícone', exact: true }).click();
     await pagina.getByLabel('Iniciais', { exact: true }).fill('AB');
     await pagina.getByRole('button', { name: 'Usar iniciais', exact: true }).click();
     await pagina.waitForFunction(async () => {
@@ -180,6 +190,7 @@ try {
         'Texto pendente preservado',
     );
     await pagina.getByRole('button', { name: 'Gerenciar projeto Projeto personalizado', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Escolher ícone', exact: true }).click();
     await pagina.getByRole('button', { name: 'Restaurar padrão', exact: true }).click();
     await pagina.waitForFunction(async () => {
         const estado = await window.selene!.estado();

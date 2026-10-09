@@ -84,8 +84,13 @@ try {
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     const seletor = () => pagina.getByRole('button', { name: 'Projeto da conversa', exact: true });
     const adicionar = async () => {
-        await seletor().click();
-        await pagina.getByRole('menuitem', { name: 'Adicionar projeto', exact: true }).click();
+        if (await seletor().isVisible()) {
+            await seletor().click();
+            await pagina.getByRole('menuitem', { name: 'Adicionar projeto', exact: true }).click();
+            return;
+        }
+        await pagina.locator('[data-ui~="breadcrumb-projeto"]').click();
+        await pagina.getByRole('button', { name: 'Adicionar projeto', exact: true }).click();
     };
     assert.equal(await pagina.locator('[data-ui~="grupo-projeto"]').count(), 0);
     assert.equal(await pagina.getByRole('button', { name: 'Projeto Projeto existente', exact: true }).count(), 0);
@@ -102,6 +107,9 @@ try {
     assert.equal(await mensagem().inputValue(), 'Continuação pendente');
     assert.equal(await pagina.getByText('Histórico confirmado', { exact: true }).count(), 1);
     await adicionar();
+    assert.equal(await pagina.getByRole('dialog').count(), 0);
+    await pagina.locator('[data-ui~="adicionar-projeto"]').waitFor();
+    await pagina.screenshot({ path: 'artifacts/selene-adicionar-projeto.png' });
     await app.evaluate(({ dialog }) => {
         dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
     });
@@ -129,10 +137,12 @@ try {
     await pagina.screenshot({ path: 'artifacts/selene-projetos-rascunhos.png' });
     await pagina.keyboard.press('Escape');
     await adicionar();
-    await pagina.getByRole('textbox', { name: 'Nome de Meu projeto', exact: true }).fill('Projeto renomeado');
-    await pagina.getByRole('heading', { name: 'Projetos', exact: true }).click();
-    await pagina.getByRole('textbox', { name: 'Nome de Projeto renomeado', exact: true }).waitFor();
-    await pagina.keyboard.press('Escape');
+    await pagina.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Meu projeto', exact: true }).click();
+    await pagina.getByLabel('Nome do projeto', { exact: true }).fill('Projeto renomeado');
+    await pagina.getByRole('button', { name: 'Salvar nome', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Projeto renomeado', exact: true }).waitFor();
+    await pagina.getByRole('button', { name: 'Voltar à conversa', exact: true }).click();
     if (process.env.SELENE_TESTE_CLONE === '1') {
         await adicionar();
         await pagina.getByRole('button', { name: 'Clonar repositório', exact: true }).click();
@@ -182,6 +192,8 @@ try {
     await novo();
     assert.equal(await pagina.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await adicionar();
+    await pagina.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Projeto renomeado', exact: true }).click();
     await pagina.getByRole('button', { name: 'Remover projeto Projeto renomeado', exact: true }).click();
     await pagina
         .getByRole('button', { name: 'Remover projeto Projeto renomeado', exact: true })

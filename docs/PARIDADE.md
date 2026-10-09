@@ -283,12 +283,32 @@ Esse comportamento é uma decisão própria da Selene solicitada pelo usuário.
 
 Um GGUF real deve responder sem provedor externo. O histórico deve sobreviver ao reinício.
 O gerenciamento de projetos abre pela pasta da sidebar ou pela breadcrumb do projeto atual.
+O cadastro de projetos usa essa mesma tela, sem o modal antigo. Abrir pasta, criar e clonar ficam em um
+painel integrado. Nome, pasta, ícone e remoção aparecem em linhas compactas inspiradas no gerenciamento
+do T3 Code. O seletor de ícone expande na própria tela. A paleta segue a referência escura do T3 Code:
+sidebar em preto puro, chat em `#0a0a0a`, superfícies e seleções em cinza neutro. O cabeçalho mantém
+o céu azul e violeta. Os tokens ficam na configuração do Tailwind em `src/tailwind.css`.
 Permite renomear, escolher símbolo e cor, usar iniciais, importar imagem e restaurar a pasta padrão.
 A identidade persistida aparece no seletor, na breadcrumb e nas conversas da sidebar, incluindo as concluídas.
 Conversas com mensagens exibem o projeto somente na breadcrumb superior. O seletor permanece na tela inicial.
 Essas decisões foram solicitadas pelo usuário, com referências locais do T3 Code em
 `apps/web/src/components/settings/ProjectSettingsPanel.tsx`, `apps/web/src/components/ProjectFavicon.tsx`
 e `apps/web/src/routes/projects.$projectKey.tsx`. Não ampliam a paridade com o Odysseus.
+
+Os projetos de Chat são espaços próprios com nome, ícone, instruções e referências textuais, sem pasta
+de trabalho ou Git. O cadastro aparece na sidebar do modo Chat e agrupa conversas e rascunhos.
+O menu da conversa permite movê-la para um projeto ou devolvê-la ao histórico geral.
+Instruções do projeto substituem a instrução global somente dentro daquele espaço. Referências TXT,
+Markdown, CSV e JSON são copiadas para a persistência, sem alterar os originais. Há até 10 arquivos,
+20000 caracteres por arquivo e 60000 no conjunto. O modelo recebe essas referências automaticamente.
+A opção de contexto entre conversas utiliza as seis últimas mensagens concluídas de cada chat do mesmo
+projeto, com até 12000 caracteres no total, ordenando os chats pelos mais recentes. Não consulta outros
+projetos nem conversas Code e não equivale a uma memória ilimitada ou busca semântica.
+Mover um chat descarta o checkpoint de compactação para não reutilizar contexto do espaço anterior.
+Remover o projeto preserva conversas e rascunhos no histórico geral. Essas decisões foram solicitadas
+pelo usuário, inspiradas em `https://help.openai.com/en/articles/10169521-projects-in-chatgpt`, e não
+ampliam a paridade com o Odysseus. O contexto foi validado com respostas simuladas do motor, sem um GGUF real.
+
 No modo chat não existem ferramentas de computador. No modo code uma escrita ou comando deve aguardar
 aprovação; a recusa precisa voltar ao modelo. Cancelar interrompe a geração, aprovações pendentes e processos
 da tarefa. Fora do acesso completo, leituras e escritas ficam na pasta real do projeto, incluindo links simbólicos.

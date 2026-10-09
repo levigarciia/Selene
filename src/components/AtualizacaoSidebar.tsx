@@ -96,11 +96,11 @@ export function AtualizacaoSidebar({
                         [
                             '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                             [
-                                'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                'inline-flex items-center justify-center bg-transparent text-secundario',
                                 'rounded-[6px] relative',
                             ].join(' '),
                             'p-[8px] border-0 border-solid border-current',
-                            '[&:hover:not(:disabled)]:text-[#e6e7e9] [&:hover:not(:disabled)]:bg-[#24262c]',
+                            '[&:hover:not(:disabled)]:text-principal [&:hover:not(:disabled)]:bg-hover',
                             '[[data-ui~=rodape-entrada]_&]:p-[0]',
                             "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
@@ -206,11 +206,11 @@ export function AtualizacaoSidebar({
                                 <span
                                     data-ui="texto-secundario"
                                     className={[
-                                        'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                        'text-secundario text-[12px] leading-[1.7]',
+                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                                         '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                                         '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                        '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                        '[[data-ui~=usuario-direita]_&]:text-secundario',
                                         '[[data-ui~=usuario-direita]_&]:text-[12px]',
                                         '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                                     ].join(' ')}
@@ -277,11 +277,11 @@ export function AtualizacaoSidebar({
                             <p
                                 data-ui="texto-secundario"
                                 className={[
-                                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                    'text-secundario text-[12px] leading-[1.7]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                    '[[data-ui~=usuario-direita]_&]:text-secundario',
                                     '[[data-ui~=usuario-direita]_&]:text-[12px]',
                                     '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                                 ].join(' ')}

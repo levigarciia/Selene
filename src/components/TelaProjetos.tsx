@@ -1,29 +1,42 @@
-import { PlusIcon } from '@phosphor-icons/react';
+import { PlusIcon, TrashIcon, ChatCircleIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import type { Projeto, Resultado } from '../../shared/contratos';
 import type { useSelene } from '../hooks/useSelene';
 import { possuiRascunho } from '../../shared/rascunhos';
 import { IconeProjeto } from './IconeProjeto';
 import { EscolherIconeProjeto } from './EscolherIconeProjeto';
+import { AdicionarProjeto } from './AdicionarProjeto';
 
-/** Gerencia a identidade e as conversas dos projetos sem descartar a composição em andamento. */
+const botao =
+    'inline-flex items-center justify-center gap-2 rounded-md border border-borda ' +
+    'bg-superficie px-3 py-2 text-xs hover:enabled:bg-borda';
+const linha =
+    'flex items-center justify-between gap-5 p-4 text-[13px] ' +
+    'border-b border-borda last:border-b-0 max-sm:flex-col max-sm:items-stretch max-sm:gap-3';
+
+/** Reúne cadastro, identidade e conversas dos projetos preservando a composição em andamento. */
 export function TelaProjetos({
     dados,
     projetoId,
     selecionarProjeto,
+    adicionando,
     adicionar,
+    cancelarAdicao,
     criar,
     selecionarConversa,
 }: {
     dados: ReturnType<typeof useSelene>;
     projetoId: string | null;
     selecionarProjeto: (id: string) => void;
+    adicionando: boolean;
     adicionar: () => void;
+    cancelarAdicao: () => void;
     criar: (projeto: Projeto) => void;
     selecionarConversa: (id: string) => void;
 }) {
     const [ocupado, definirOcupado] = useState(false);
     const [mensagem, definirMensagem] = useState('');
+    const [editandoIcone, definirEditandoIcone] = useState(false);
     const projetos = dados.estado.projetos;
     const projeto = projetos.find((item) => item.id === projetoId) ?? projetos[0];
     const conversas = dados.estado.conversas.filter(
@@ -53,45 +66,21 @@ export function TelaProjetos({
         <div
             data-ui="tela-projetos"
             className={[
-                'grid grid-cols-[210px_minmax(0,_1fr)] flex-1 min-h-0 gap-[36px] overflow-hidden p-[30px]',
-                '[&_input]:bg-[#141517] [&_input]:text-[#e6e7e9] [&_input]:rounded-[7px] [&_input]:min-w-0',
-                '[&_input]:w-full [&_input]:px-[12px] [&_input]:py-[10px] [&_input]:border',
-                '[&_input]:border-solid [&_input]:border-[#292b30] [&_h2]:text-[14px] [&_h2]:font-medium',
-                '[&_h2]:mt-0 [&_h2]:mb-[14px] [&_h2]:mx-0',
-                '[@media(width<=900px)]:grid-cols-[160px_minmax(0,_1fr)]',
-                '[@media(width<=900px)]:gap-[20px] [@media(width<=900px)]:p-[20px]',
-                '[@media(width<=600px)]:flex [@media(width<=600px)]:flex-col',
-                '[@media(width<=600px)]:overflow-y-auto [@media(width<=600px)]:px-[16px]',
-                '[@media(width<=600px)]:py-[20px]',
+                'grid flex-1 min-h-0 min-w-0 grid-cols-[220px_minmax(0,1fr)] overflow-hidden',
+                '[&_input]:min-w-0 [&_input]:rounded-md [&_input]:border [&_input]:border-borda',
+                '[&_input]:bg-superficie [&_input]:px-3 [&_input]:py-2 [&_input]:text-principal',
+                'max-lg:grid-cols-[180px_minmax(0,1fr)] max-sm:flex max-sm:flex-col max-sm:overflow-y-auto',
             ].join(' ')}
         >
             <nav
                 data-ui="lista-projetos"
-                className={[
-                    'flex flex-col items-stretch gap-[6px] overflow-y-auto pr-[20px] border-r',
-                    'border-solid border-r-[#2b2e34] [@media(width<=600px)]:flex-row',
-                    '[@media(width<=600px)]:shrink-0 [@media(width<=600px)]:overflow-x-auto',
-                    '[@media(width<=600px)]:min-h-[48px] [@media(width<=600px)]:pt-0',
-                    '[@media(width<=600px)]:pb-[16px] [@media(width<=600px)]:border-r-0',
-                    '[@media(width<=600px)]:[border-right-style:solid]',
-                    '[@media(width<=600px)]:border-r-[currentColor] [@media(width<=600px)]:border-b',
-                    '[@media(width<=600px)]:[border-bottom-style:solid]',
-                    '[@media(width<=600px)]:border-b-[#2b2e34] [@media(width<=600px)]:px-0',
-                    '[@media(width<=600px)]:[&_>_button]:shrink-0',
-                ].join(' ')}
                 aria-label="Projetos cadastrados"
+                className={[
+                    'flex flex-col gap-1 overflow-y-auto border-r border-borda p-3',
+                    'max-sm:flex-row max-sm:shrink-0 max-sm:overflow-x-auto max-sm:border-r-0 max-sm:border-b',
+                ].join(' ')}
             >
-                <button
-                    data-ui="botao"
-                    className={[
-                        'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                        'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                        '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                        '[[data-ui~=lista-projetos]_>_&]:justify-start [[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                        '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                    ].join(' ')}
-                    onClick={adicionar}
-                >
+                <button className={`${botao} mb-3 shrink-0 max-sm:mb-0`} disabled={ocupado} onClick={adicionar}>
                     <PlusIcon size={16} /> Adicionar projeto
                 </button>
                 {projetos.map((item) => (
@@ -99,229 +88,173 @@ export function TelaProjetos({
                         key={item.id}
                         data-ui="linha-projeto-gerenciamento"
                         className={[
-                            [
-                                'flex items-center gap-[10px] bg-transparent rounded-[7px] text-[#a1a5ad]',
-                                'text-left min-w-0',
-                            ].join(' '),
-                            'p-[12px] border-0 border-solid border-current [&:hover]:bg-[#1b1d21]',
-                            "[&:hover]:text-[#e6e7e9] [&[aria-current='page']]:bg-[#1b1d21]",
-                            "[&[aria-current='page']]:text-[#e6e7e9]",
+                            'flex min-w-0 items-center gap-3 rounded-md p-3 text-left text-secundario',
+                            'hover:enabled:bg-superficie hover:enabled:text-principal max-sm:shrink-0 max-sm:max-w-60',
+                            'aria-[current=page]:bg-selecionado aria-[current=page]:text-principal',
                         ].join(' ')}
-                        aria-current={item.id === projeto?.id ? 'page' : undefined}
+                        disabled={ocupado}
+                        aria-label={item.nome}
+                        aria-current={!adicionando && item.id === projeto?.id ? 'page' : undefined}
                         onClick={() => {
                             definirMensagem('');
+                            definirEditandoIcone(false);
+                            cancelarAdicao();
                             selecionarProjeto(item.id);
                         }}
                     >
-                        <IconeProjeto projeto={item} tamanho={20} />
-                        <span className="truncate">{item.nome}</span>
+                        <IconeProjeto projeto={item} tamanho={18} />
+                        <span className="min-w-0">
+                            <span className="block truncate text-xs">{item.nome}</span>
+                            <small className="mt-1 block truncate text-[10px] text-discreto" title={item.caminho}>
+                                {item.caminho}
+                            </small>
+                        </span>
                     </button>
                 ))}
             </nav>
-            {projeto ? (
-                <div
-                    data-ui="detalhes-projeto"
-                    className={[
-                        'overflow-y-auto max-w-[700px] pt-0 pr-[8px] pb-[24px] pl-0 min-w-0 w-full',
-                        '[@media(width<=600px)]:overflow-visible [@media(width<=600px)]:shrink-0',
-                    ].join(' ')}
-                    key={projeto.id}
-                >
-                    <form
-                        data-ui="nome-projeto-formulario"
-                        className="flex items-end gap-[12px] [@media(width<=600px)]:flex-wrap"
-                        onSubmit={(evento) => {
-                            evento.preventDefault();
-                            const nome = new FormData(evento.currentTarget).get('nome')?.toString().trim();
-                            if (nome && nome !== projeto.nome)
-                                void executar(() => dados.ponte!.alterarProjeto(projeto.id, nome));
-                        }}
-                    >
-                        <label
-                            data-ui="campo"
-                            className={[
-                                '[[data-ui~=tela-projetos]_&]:flex [[data-ui~=tela-projetos]_&]:flex-col',
-                                '[[data-ui~=tela-projetos]_&]:gap-[9px] [[data-ui~=tela-projetos]_&]:min-w-0',
-                                '[[data-ui~=tela-projetos]_&]:text-[#a1a5ad] [[data-ui~=tela-projetos]_&]:text-[12px]',
-                                '[[data-ui~=nome-projeto-formulario]_&]:flex-1',
-                                '[[data-ui~=iniciais-projeto-formulario]_&]:max-w-[120px]',
-                                '[@media(width<=600px)]:[[data-ui~=nome-projeto-formulario]_&]:[flex-basis:100%]',
-                            ].join(' ')}
-                        >
-                            Nome do projeto
-                            <input
-                                name="nome"
-                                key={projeto.nome}
-                                defaultValue={projeto.nome}
-                                required
-                                maxLength={100}
-                                disabled={ocupado}
-                            />
-                        </label>
-                        <button
-                            data-ui="botao"
-                            className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                                [
-                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
-                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                                ].join(' '),
-                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                            ].join(' ')}
-                            disabled={ocupado}
-                        >
-                            Salvar nome
-                        </button>
-                    </form>
-                    <label
-                        data-ui="campo caminho-projeto"
-                        className={[
-                            '[[data-ui~=tela-projetos]_&]:flex [[data-ui~=tela-projetos]_&]:flex-col',
-                            '[[data-ui~=tela-projetos]_&]:gap-[9px] [[data-ui~=tela-projetos]_&]:min-w-0',
-                            '[[data-ui~=tela-projetos]_&]:text-[#a1a5ad] [[data-ui~=tela-projetos]_&]:text-[12px]',
-                            '[[data-ui~=nome-projeto-formulario]_&]:flex-1 mt-[20px]',
-                            '[[data-ui~=iniciais-projeto-formulario]_&]:max-w-[120px]',
-                            '[@media(width<=600px)]:[[data-ui~=nome-projeto-formulario]_&]:[flex-basis:100%]',
-                        ].join(' ')}
-                    >
-                        Pasta
-                        <input readOnly value={projeto.caminho} />
-                    </label>
-                    <EscolherIconeProjeto
-                        key={`${projeto.id}:${projeto.icone?.tipo}`}
-                        projeto={projeto}
-                        ocupado={ocupado}
-                        salvar={(icone) => executar(() => dados.ponte!.salvarIconeProjeto(projeto.id, icone))}
-                        importar={() => executar(() => dados.ponte!.importarIconeProjeto(projeto.id))}
-                    />
-                    <section
-                        data-ui="conversas-projeto"
-                        className={[
-                            'pt-[28px] pb-0 border-t border-solid border-t-[#292b30] px-0 mx-0',
-                            'my-[28px]',
-                        ].join(' ')}
-                        aria-label="Conversas do projeto"
-                    >
-                        <div
-                            data-ui="cabecalho-conversas-projeto"
-                            className="flex items-center justify-between flex-wrap gap-[12px] mb-[8px] [&_h2]:m-0"
-                        >
-                            <h2>Conversas</h2>
-                            <button
-                                data-ui="botao"
-                                className={[
-                                    'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                    '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                                    [
-                                        '[[data-ui~=lista-projetos]_>_&]:justify-start',
-                                        '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                                    ].join(' '),
-                                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                                ].join(' ')}
-                                onClick={() => criar(projeto)}
+            <div className="min-w-0 overflow-y-auto p-8 max-lg:p-5 max-sm:overflow-visible max-sm:p-4">
+                <div className="mx-auto w-full max-w-[820px]">
+                    {adicionando || !projeto ? (
+                        <AdicionarProjeto dados={dados} fechar={cancelarAdicao} selecionar={criar} />
+                    ) : (
+                        <div data-ui="detalhes-projeto" key={projeto.id}>
+                            <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <IconeProjeto projeto={projeto} tamanho={28} />
+                                    <h2 className="m-0 truncate text-lg font-medium">{projeto.nome}</h2>
+                                </div>
+                                <button className={botao} disabled={ocupado} onClick={() => criar(projeto)}>
+                                    <PlusIcon size={16} /> Nova conversa neste projeto
+                                </button>
+                            </header>
+                            <section
+                                className="overflow-hidden rounded-lg border border-borda"
+                                aria-label="Configurações do projeto"
                             >
-                                Nova conversa neste projeto
-                            </button>
+                                <form
+                                    data-ui="nome-projeto-formulario"
+                                    className={linha}
+                                    onSubmit={(evento) => {
+                                        evento.preventDefault();
+                                        const nome = new FormData(evento.currentTarget).get('nome')?.toString().trim();
+                                        if (nome && nome !== projeto.nome)
+                                            void executar(() => dados.ponte!.alterarProjeto(projeto.id, nome));
+                                    }}
+                                >
+                                    <label htmlFor="nome-projeto">Nome</label>
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <input
+                                            id="nome-projeto"
+                                            aria-label="Nome do projeto"
+                                            name="nome"
+                                            className="w-52 max-sm:flex-1 max-sm:w-full"
+                                            key={projeto.nome}
+                                            defaultValue={projeto.nome}
+                                            required
+                                            maxLength={100}
+                                            disabled={ocupado}
+                                        />
+                                        <button className={`${botao} shrink-0`} disabled={ocupado}>
+                                            Salvar nome
+                                        </button>
+                                    </div>
+                                </form>
+                                <div className={linha}>
+                                    <span>Pasta</span>
+                                    <span className="min-w-0 break-all text-xs text-discreto" title={projeto.caminho}>
+                                        {projeto.caminho}
+                                    </span>
+                                </div>
+                                <div className={linha}>
+                                    <span>Ícone</span>
+                                    <div className="flex items-center gap-3">
+                                        <IconeProjeto projeto={projeto} tamanho={24} />
+                                        <button
+                                            className={botao}
+                                            disabled={ocupado}
+                                            aria-expanded={editandoIcone}
+                                            aria-controls="editor-icone-projeto"
+                                            onClick={() => definirEditandoIcone(!editandoIcone)}
+                                        >
+                                            Escolher ícone
+                                        </button>
+                                    </div>
+                                </div>
+                                {editandoIcone && (
+                                    <div id="editor-icone-projeto" className="border-b border-borda px-4">
+                                        <EscolherIconeProjeto
+                                            key={`${projeto.id}:${projeto.icone?.tipo}`}
+                                            projeto={projeto}
+                                            ocupado={ocupado}
+                                            salvar={(icone) =>
+                                                executar(() => dados.ponte!.salvarIconeProjeto(projeto.id, icone))
+                                            }
+                                            importar={() =>
+                                                executar(() => dados.ponte!.importarIconeProjeto(projeto.id))
+                                            }
+                                        />
+                                    </div>
+                                )}
+                                <div className={linha}>
+                                    <div>
+                                        <span>Remover projeto</span>
+                                        <p className="mt-1 mb-0 text-xs text-discreto">
+                                            Preserva os arquivos e as conversas.
+                                        </p>
+                                    </div>
+                                    <button
+                                        className={`${botao} text-[#e9aaa7]`}
+                                        disabled={ocupado}
+                                        aria-label={`Remover projeto ${projeto.nome}`}
+                                        onClick={() => void executar(() => dados.ponte!.removerProjeto(projeto.id))}
+                                    >
+                                        <TrashIcon size={15} /> Remover da lista
+                                    </button>
+                                </div>
+                            </section>
+                            <section data-ui="conversas-projeto" className="mt-8">
+                                <h3 className="mb-3 text-xs font-medium text-secundario">
+                                    Conversas <span className="ml-2 text-discreto">{conversas.length}</span>
+                                </h3>
+                                {conversas.length ? (
+                                    conversas.map((conversa) => (
+                                        <button
+                                            data-ui="conversa-no-projeto"
+                                            key={conversa.id}
+                                            disabled={ocupado}
+                                            className="flex w-full items-center gap-3 rounded-md p-3 text-left text-xs
+                                            text-principal hover:enabled:bg-superficie"
+                                            onClick={() => selecionarConversa(conversa.id)}
+                                        >
+                                            <ChatCircleIcon size={16} />
+                                            <span className="min-w-0 flex-1 truncate">{conversa.titulo}</span>
+                                            <small className="text-discreto">
+                                                {possuiRascunho(conversa)
+                                                    ? 'Rascunho'
+                                                    : conversa.concluida
+                                                      ? 'Concluída'
+                                                      : ''}
+                                            </small>
+                                        </button>
+                                    ))
+                                ) : (
+                                    <p className="text-xs text-discreto">Nenhuma conversa neste projeto.</p>
+                                )}
+                            </section>
                         </div>
-                        {conversas.map((conversa) => (
-                            <button
-                                data-ui="conversa-no-projeto"
-                                className={[
-                                    [
-                                        'flex justify-between gap-[16px] w-full border-t-0',
-                                        'border-t-[currentColor] border-r-0',
-                                    ].join(' '),
-                                    'border-r-[currentColor] border-b border-b-[#222429] border-l-0',
-                                    [
-                                        'border-l-[currentColor] bg-transparent text-[#b3b8c0] text-left',
-                                        'items-center px-0 py-[12px]',
-                                    ].join(' '),
-                                    [
-                                        'border-solid [&:hover]:text-[#e6e7e9] [&_.truncate]:min-w-0',
-                                        '[&_small]:text-[#b5a2dc]',
-                                    ].join(' '),
-                                ].join(' ')}
-                                key={conversa.id}
-                                onClick={() => selecionarConversa(conversa.id)}
-                            >
-                                <span className="truncate">{conversa.titulo}</span>
-                                {possuiRascunho(conversa) && <small>Rascunho</small>}
-                            </button>
-                        ))}
-                    </section>
-                    <button
-                        data-ui="botao texto-erro"
-                        className={[
-                            'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                            'whitespace-nowrap text-[#e9aaa7] text-[12px] px-[14px] py-[9px] border border-solid',
-                            'border-[#2b2e34] [&:hover:not(:disabled)]:bg-[#272a30]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#e9aaa7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#e9aaa7]',
-                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                            '[[data-ui~=lista-projetos]_>_&]:mb-[12px] [[data-ui~=lista-projetos]_>_&]:justify-start',
-                            '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                            '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                        ].join(' ')}
-                        disabled={ocupado}
-                        title="Preserva arquivos e conversas"
-                        onClick={() => void executar(() => dados.ponte!.removerProjeto(projeto.id))}
-                    >
-                        Remover da lista
-                    </button>
+                    )}
                     {mensagem && (
-                        <p
-                            data-ui="aviso-erro"
-                            className={[
-                                [
-                                    'flex justify-between items-center gap-[12px] text-[#f0b2ae]',
-                                    'bg-[#33201f] rounded-[9px]',
-                                ].join(' '),
-                                'mb-[12px] text-[12px] max-h-[150px] overflow-auto wrap-anywhere p-[12px] border',
-                                'border-solid border-[#6f403b]',
-                            ].join(' ')}
-                            role="alert"
-                        >
+                        <p className="rounded-md bg-[#33201f] p-3 text-xs text-[#f0b2ae]" role="alert">
                             {mensagem}
                         </p>
                     )}
                     {ocupado && (
-                        <span
-                            data-ui="texto-secundario"
-                            className={[
-                                'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
-                                '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                                '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                            ].join(' ')}
-                            role="status"
-                        >
+                        <p className="text-xs text-secundario" role="status">
                             Salvando projeto
-                        </span>
+                        </p>
                     )}
                 </div>
-            ) : (
-                <p
-                    data-ui="texto-secundario"
-                    className={[
-                        'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
-                        '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                        '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                    ].join(' ')}
-                >
-                    Adicione um projeto para começar.
-                </p>
-            )}
+            </div>
         </div>
     );
 }

@@ -43,6 +43,10 @@ Arquivos importados devem ser preservados; somente downloads gerenciados pela Se
 
 ## Interface
 
+Use Tailwind para estilizar toda a interface, com utilitários e variantes. Não escreva CSS puro, estilos
+inline ou novos arquivos CSS para estilizar componentes. O arquivo de entrada do Tailwind deve conter
+somente os imports e as configurações necessários ao próprio Tailwind.
+
 Minimalismo escuro, técnico e discreto. Sidebar com conversas, área central ampla e entrada ancorada na base.
 Use estados de carregamento, ausência de modelos e erros reais. Não apresente funcionalidades planejadas como prontas.
 Não use emojis ou traços como pontuação. Preserve a sintaxe técnica necessária.

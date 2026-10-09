@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { EstadoAtualizacao } from './atualizacoes';
 import { esquemaIconeProjeto, type IconeDeProjeto } from './iconesProjetos';
+import { esquemaProjetoChat, type ProjetoChat, type EdicaoProjetoChat } from './projetosChat';
 
 export const esquemaModelo = z.object({
     id: z.string().uuid(),
@@ -97,6 +98,7 @@ export const esquemaConversa = z.object({
     modo: z.enum(['chat', 'code']),
     projeto: z.string().nullable().default(null),
     projetoId: z.string().uuid().nullable().optional(),
+    projetoChatId: z.string().uuid().nullable().optional(),
     rascunho: z.string().max(30000).optional(),
     anexosRascunho: z.number().int().min(0).max(4).optional(),
     pastaTrabalho: z.string().min(1).optional(),
@@ -138,6 +140,7 @@ export const esquemaRascunho = esquemaConversa.pick({
     modo: true,
     projeto: true,
     projetoId: true,
+    projetoChatId: true,
     modeloId: true,
     nivelRaciocinio: true,
     acessoCompleto: true,
@@ -150,6 +153,7 @@ export const esquemaDados = z.object({
     modelos: z.array(esquemaModelo),
     conversas: z.array(esquemaConversa),
     projetos: z.array(esquemaProjeto).default([]),
+    projetosChat: z.array(esquemaProjetoChat).default([]),
     favoritosCatalogo: z.array(z.string().min(1).max(120)).default([]),
     registrosUso: z.array(esquemaRegistroUso).default([]),
 });
@@ -205,6 +209,12 @@ export const esquemaAlteracao = z
     .partial();
 
 export interface PonteSelene {
+    criarProjetoChat(nome: string): Promise<Resultado<ProjetoChat>>;
+    editarProjetoChat(id: string, edicao: EdicaoProjetoChat): Promise<Resultado<void>>;
+    removerProjetoChat(id: string): Promise<Resultado<void>>;
+    importarArquivosProjetoChat(id: string): Promise<Resultado<void>>;
+    removerArquivoProjetoChat(id: string, arquivoId: string): Promise<Resultado<void>>;
+    moverConversaProjetoChat(id: string, projetoId: string | null): Promise<Resultado<void>>;
     salvarIconeProjeto(id: string, icone: IconeDeProjeto | null): Promise<Resultado<void>>;
     importarIconeProjeto(id: string): Promise<Resultado<boolean>>;
     adicionarProjeto(entrada: NovoProjeto): Promise<Resultado<Projeto | null>>;

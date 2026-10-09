@@ -86,11 +86,11 @@ export function LinhaModeloCatalogo({
                         [
                             '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                             [
-                                'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                'inline-flex items-center justify-center bg-transparent text-secundario',
                                 'rounded-[6px] p-[4px]',
                             ].join(' '),
-                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                            '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                            '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                             "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' '),
@@ -131,11 +131,11 @@ export function LinhaModeloCatalogo({
                         className={[
                             '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                             [
-                                'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                'inline-flex items-center justify-center bg-transparent text-secundario',
                                 'rounded-[6px] p-[8px]',
                             ].join(' '),
-                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                            '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                            '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                             "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' ')}
@@ -154,8 +154,8 @@ export function LinhaModeloCatalogo({
                                 'inline-flex items-center justify-center bg-transparent text-[#a4c1e8]',
                                 'rounded-[6px] p-[6px]',
                             ].join(' '),
-                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                            '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                            '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                             '[[data-ui~=modelo-selecionado]_&]:text-[#b5a2dc]',
                             "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
@@ -177,8 +177,8 @@ export function LinhaModeloCatalogo({
                                 'inline-flex items-center justify-center bg-transparent text-[#a4c1e8]',
                                 'rounded-[6px] p-[6px]',
                             ].join(' '),
-                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                            '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                            '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                             "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' ')}
@@ -225,7 +225,7 @@ export function LinhaModeloCatalogo({
             {download?.fase === 'cancelado' && !local && (
                 <p
                     data-ui="descricao-download"
-                    className="mt-[9px] mr-[3px] mb-0 ml-[25px] text-[11px] leading-[1.5] text-[#a1a5ad]"
+                    className="mt-[9px] mr-[3px] mb-0 ml-[25px] text-[11px] leading-[1.5] text-secundario"
                 >
                     Download cancelado
                 </p>

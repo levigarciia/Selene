@@ -1,6 +1,7 @@
 import { MenuContexto, type PosicaoMenu } from './MenuContexto';
 import { DownloadSimpleIcon, TrashIcon, CheckIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 import type { Conversa } from '../../shared/contratos';
+import type { ProjetoChat } from '../../shared/projetosChat';
 
 export type PosicaoMenuConversa = PosicaoMenu & { conversa: Conversa };
 
@@ -12,6 +13,8 @@ export function MenuConversa({
     exportar,
     excluir,
     concluir,
+    projetosChat = [],
+    moverProjetoChat,
 }: {
     menu: PosicaoMenuConversa;
     ocupado: boolean;
@@ -19,9 +22,42 @@ export function MenuConversa({
     exportar: (id: string) => void;
     excluir: (conversa: Conversa) => void;
     concluir: (conversa: Conversa) => void;
+    projetosChat?: ProjetoChat[];
+    moverProjetoChat?: (conversa: Conversa, projetoId: string | null) => void;
 }) {
     return (
         <MenuContexto posicao={menu} fechar={fechar} titulo={`Ações de ${menu.conversa.titulo}`}>
+            {menu.conversa.modo === 'chat' && moverProjetoChat && (
+                <>
+                    {projetosChat
+                        .filter((item) => item.id !== menu.conversa.projetoChatId)
+                        .map((projeto) => (
+                            <button
+                                key={projeto.id}
+                                role="menuitem"
+                                disabled={ocupado}
+                                onClick={() => {
+                                    fechar();
+                                    moverProjetoChat(menu.conversa, projeto.id);
+                                }}
+                            >
+                                Mover para {projeto.nome}
+                            </button>
+                        ))}
+                    {menu.conversa.projetoChatId && (
+                        <button
+                            role="menuitem"
+                            disabled={ocupado}
+                            onClick={() => {
+                                fechar();
+                                moverProjetoChat(menu.conversa, null);
+                            }}
+                        >
+                            Remover do projeto
+                        </button>
+                    )}
+                </>
+            )}
             {menu.conversa.modo === 'code' && !!menu.conversa.mensagens.length && (
                 <button
                     role="menuitem"

@@ -21,19 +21,15 @@ export function EscolherIconeProjeto({
     salvar,
     importar,
 }: {
-    projeto: Projeto;
+    projeto: Pick<Projeto, 'icone'>;
     ocupado: boolean;
     salvar: (icone: IconeDeProjeto | null) => Promise<void>;
-    importar: () => Promise<void>;
+    importar?: () => Promise<void>;
 }) {
     const [iniciais, definirIniciais] = useState(projeto.icone?.tipo === 'iniciais' ? projeto.icone.texto : '');
     const cor = projeto.icone && projeto.icone.tipo !== 'imagem' ? projeto.icone.cor : 'verde';
     return (
-        <section
-            data-ui="aparencia-projeto"
-            className={['pt-[28px] pb-0 border-t border-solid border-t-[#292b30] px-0 mx-0', 'my-[28px]'].join(' ')}
-            aria-label="Ícone do projeto"
-        >
+        <section data-ui="aparencia-projeto" className="py-5" aria-label="Ícone do projeto">
             <div
                 data-ui="identidade-projeto"
                 className={[
@@ -48,9 +44,9 @@ export function EscolherIconeProjeto({
                         <button
                             data-ui="botao"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                     '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -58,16 +54,17 @@ export function EscolherIconeProjeto({
                                 '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
                             ].join(' ')}
                             disabled={ocupado}
-                            onClick={() => void importar()}
+                            hidden={!importar}
+                            onClick={() => void importar?.()}
                         >
                             Escolher imagem
                         </button>
                         <button
                             data-ui="botao"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                     '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -93,8 +90,8 @@ export function EscolherIconeProjeto({
                         key={nome}
                         data-ui="opcao-icone-projeto"
                         className={[
-                            'flex items-center justify-center w-[42px] h-[42px] rounded-[8px] bg-[#141517] border',
-                            "border-solid border-[#292b30] [&[aria-pressed='true']]:bg-[#302739]",
+                            'flex items-center justify-center w-[42px] h-[42px] rounded-[8px] bg-superficie border',
+                            "border-solid border-borda [&[aria-pressed='true']]:bg-[#302739]",
                             "[&[aria-pressed='true']]:border-[#b5a2dc]",
                         ].join(' ')}
                         aria-label={`Ícone ${nomesSimbolos[nome]}`}
@@ -150,7 +147,7 @@ export function EscolherIconeProjeto({
                     className={[
                         '[[data-ui~=tela-projetos]_&]:flex [[data-ui~=tela-projetos]_&]:flex-col',
                         '[[data-ui~=tela-projetos]_&]:gap-[9px] [[data-ui~=tela-projetos]_&]:min-w-0',
-                        '[[data-ui~=tela-projetos]_&]:text-[#a1a5ad] [[data-ui~=tela-projetos]_&]:text-[12px]',
+                        '[[data-ui~=tela-projetos]_&]:text-secundario [[data-ui~=tela-projetos]_&]:text-[12px]',
                         '[[data-ui~=nome-projeto-formulario]_&]:flex-1',
                         '[[data-ui~=iniciais-projeto-formulario]_&]:max-w-[120px]',
                         '[@media(width<=600px)]:[[data-ui~=nome-projeto-formulario]_&]:[flex-basis:100%]',
@@ -167,9 +164,9 @@ export function EscolherIconeProjeto({
                 <button
                     data-ui="botao"
                     className={[
-                        'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                        'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                        '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                        'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                        'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                         '[[data-ui~=lista-projetos]_>_&]:justify-start [[data-ui~=lista-projetos]_>_&]:gap-[8px]',
                         '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
                     ].join(' ')}

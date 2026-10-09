@@ -41,7 +41,7 @@ export function ProjetosSidebar({
                     <button
                         data-ui="titulo-projeto"
                         className={[
-                            'flex items-center gap-[7px] flex-1 min-w-0 bg-transparent text-[#a1a5ad] text-[12px]',
+                            'flex items-center gap-[7px] flex-1 min-w-0 bg-transparent text-secundario text-[12px]',
                             'text-left px-0 py-[6px] border-0 border-solid border-current [&_svg]:shrink-0',
                         ].join(' ')}
                         title={projeto.caminho}
@@ -73,11 +73,11 @@ export function ProjetosSidebar({
                             className={[
                                 '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                                 [
-                                    'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                    'inline-flex items-center justify-center bg-transparent text-secundario',
                                     'rounded-[6px] p-[8px]',
                                 ].join(' '),
-                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
-                                '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                                 "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}

@@ -14,7 +14,14 @@ export function reunirRascunhos(estado: Estado, rascunhos: Conversa[]): Estado {
         ...estado,
         projetos: estado.projetos.filter((item) => !item.oculto),
         conversas: [
-            ...rascunhos.filter((item) => !existentes.has(item.id)),
+            ...rascunhos
+                .filter((item) => !existentes.has(item.id))
+                .map((item) => ({
+                    ...item,
+                    projetoChatId: estado.projetosChat.some((projeto) => projeto.id === item.projetoChatId)
+                        ? item.projetoChatId
+                        : null,
+                })),
             ...estado.conversas.map((item) =>
                 textos.has(item.id)
                     ? { ...item, rascunho: textos.get(item.id), anexosRascunho: anexos.get(item.id) }

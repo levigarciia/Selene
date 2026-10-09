@@ -182,7 +182,7 @@ export function TelaConversa({
                     data-ui={`estado-motor ${estado.motor.fase === 'pronto' ? 'motor-pronto' : ''}`}
                     className={[
                         [
-                            'ml-auto bg-transparent text-[11px] text-[#a1a5ad] border-0 border-solid',
+                            'ml-auto bg-transparent text-[11px] text-secundario border-0 border-solid',
                             'border-[currentColor]',
                         ].join(' '),
                         estado.motor.fase === 'pronto' ? '[&&]:text-[#b5a2dc]' : '',
@@ -216,7 +216,7 @@ export function TelaConversa({
                         className={[
                             '[[data-ui~=tela-inicial]_&]:min-h-0 [[data-ui~=tela-inicial]_&]:pt-0',
                             '[[data-ui~=tela-inicial]_&]:pb-[28px] [[data-ui~=tela-inicial]_&]:px-0 min-h-full flex',
-                            'flex-col items-center justify-center pt-[35px] pb-[45px] px-0 [&_>_p]:text-[#a1a5ad]',
+                            'flex-col items-center justify-center pt-[35px] pb-[45px] px-0 [&_>_p]:text-secundario',
                             '[&_>_p]:text-[13px] [&_>_p]:text-center',
                         ].join(' ')}
                     >
@@ -234,9 +234,9 @@ export function TelaConversa({
                             <button
                                 data-ui="botao mt-6"
                                 className={[
-                                    'mt-6 inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
-                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
-                                    '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    'mt-6 inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
+                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
+                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                     [
                                         '[[data-ui~=lista-projetos]_>_&]:justify-start',
                                         '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
@@ -297,18 +297,18 @@ export function TelaConversa({
                     className={[
                         [
                             [
-                                'bg-[#141517] rounded-[22px] pt-[17px] pb-[14px]',
+                                'bg-superficie rounded-[22px] pt-[17px] pb-[14px]',
                                 'shadow-[inset_0_1px_0_#ffffff03] px-[16px]',
                             ].join(' '),
-                            'border border-solid border-[#292b30] [&:focus-within]:border-[#8974a8]',
+                            'border border-solid border-borda [&:focus-within]:border-[#8974a8]',
                             [
                                 '[&_textarea]:block [&_textarea]:w-full [&_textarea]:bg-transparent',
                                 '[&_textarea]:resize-none',
                             ].join(' '),
-                            '[&_textarea]:min-h-[68px] [&_textarea]:max-h-[200px] [&_textarea]:text-[#e6e7e9]',
+                            '[&_textarea]:min-h-[68px] [&_textarea]:max-h-[200px] [&_textarea]:text-principal',
                             '[&_textarea]:leading-[1.7] [&_textarea]:outline-none [&_textarea]:p-0',
                             '[&_textarea]:border-0 [&_textarea]:border-solid [&_textarea]:border-current',
-                            '[&_textarea::placeholder]:text-[#858990]',
+                            '[&_textarea::placeholder]:text-discreto',
                         ].join(' '),
                         arrastando ? '[&&]:[outline:1px_solid_#8d9de0]' : '',
                     ].join(' ')}
@@ -358,7 +358,7 @@ export function TelaConversa({
                                                 'absolute top-[-6px] right-[-6px] grid place-items-center',
                                                 'w-[23px] h-[23px] rounded-full',
                                             ].join(' '),
-                                            'bg-[#252830] text-[#eee] border border-solid border-[#2b2e34]',
+                                            'bg-[#252830] text-[#eee] border border-solid border-borda',
                                         ].join(' ')}
                                         disabled={ocupado || anexos.importando}
                                         aria-label={`Remover ${imagem.nome}`}
@@ -458,11 +458,11 @@ export function TelaConversa({
                             <span
                                 data-ui="texto-secundario"
                                 className={[
-                                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                    'text-secundario text-[12px] leading-[1.7]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
                                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
                                     '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                    '[[data-ui~=usuario-direita]_&]:text-secundario',
                                     '[[data-ui~=usuario-direita]_&]:text-[12px]',
                                     '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                                 ].join(' ')}
@@ -474,7 +474,7 @@ export function TelaConversa({
                         {conversa?.mensagens.at(-1)?.usoContexto && (
                             <span
                                 data-ui="uso-contexto"
-                                className="[@media(width<=760px)]:hidden whitespace-nowrap text-[11px] text-[#a1a5ad]"
+                                className="[@media(width<=760px)]:hidden whitespace-nowrap text-[11px] text-secundario"
                                 title="Estimativa conservadora do contexto usado, com reserva para imagens"
                             >
                                 {Math.min(
@@ -494,11 +494,11 @@ export function TelaConversa({
                             className={[
                                 '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
                                 [
-                                    'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                    'inline-flex items-center justify-center bg-transparent text-secundario',
                                     'rounded-[6px] shrink-0',
                                 ].join(' '),
                                 'p-[8px] border-0 border-solid border-current',
-                                '[&:hover:not(:disabled)]:text-[#e6e7e9] [&:hover:not(:disabled)]:bg-[#24262c]',
+                                '[&:hover:not(:disabled)]:text-principal [&:hover:not(:disabled)]:bg-hover',
                                 '[[data-ui~=rodape-entrada]_&]:p-[0]',
                                 "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',

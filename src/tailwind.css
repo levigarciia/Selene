@@ -1,1 +1,17 @@
 @import 'tailwindcss';
+
+@theme {
+    --color-fundo: #0a0a0a;
+    --color-sidebar: #000000;
+    --color-superficie: #111111;
+    --color-selecionado: #1c1c1c;
+    --color-hover: #141414;
+    --color-borda: rgb(255 255 255 / 8%);
+    --color-principal: #f5f5f5;
+    --color-secundario: #a3a3a3;
+    --color-discreto: #737373;
+    --color-sucesso: #34d399;
+    --color-ceu-inicio: oklch(0.200528 0.055699 261.216);
+    --color-ceu-meio: oklch(0.227147 0.086086 277.99);
+    --color-ceu-fim: oklch(0.283792 0.117327 297.201);
+}
