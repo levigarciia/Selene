@@ -4,6 +4,7 @@ import { open, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
+import { esquemaIconeProjeto } from '../shared/iconesProjetos';
 import {
     esquemaNovoProjeto,
     esquemaProjeto,
@@ -25,9 +26,11 @@ import { AnexosImagens } from './services/anexosImagens';
 import { prepararPastaTrabalho, cadastrarProjeto, criarProjetoGerenciado } from './services/projetos';
 import { Atualizacoes } from './services/atualizacoes';
 import electronUpdater from 'electron-updater';
+import { shell } from 'electron';
+import { urlRelease } from '../shared/atualizacoes';
 
 app.setName('Selene');
-app.setPath('userData', join(app.getPath('appData'), 'SeleneRemake'));
+app.setPath('userData', join(app.getPath('appData'), 'Selene'));
 const pastaTeste = process.env.SELENE_TESTE_DADOS;
 if (pastaTeste && process.env.SELENE_TESTE === '1') app.setPath('userData', pastaTeste);
 let janela: BrowserWindow | null = null;
@@ -165,6 +168,9 @@ function registrarOperacoes(): void {
     const vazio = z.tuple([]);
     registrar('estado', vazio, estado);
     registrar('verificarAtualizacao', vazio, () => atualizacoes.verificar());
+    registrar('abrirRelease', z.tuple([z.string().max(80).optional()]), async ([versao]) => {
+        await shell.openExternal(urlRelease(versao));
+    });
     registrar('anexarImagens', z.tuple([z.array(esquemaEntradaImagem).min(1).max(4)]), ([imagens]) =>
         anexos.importar(imagens),
     );
@@ -204,7 +210,8 @@ function registrarOperacoes(): void {
             return projeto;
         }
         const escolha = await dialog.showOpenDialog(janela!, {
-            properties: ['openDirectory'], title: 'Adicionar projeto',
+            properties: ['openDirectory'],
+            title: 'Adicionar projeto',
         });
         if (escolha.canceled) return null;
         const projeto = await cadastrarProjeto(persistencia.dados, escolha.filePaths[0]);
@@ -217,11 +224,46 @@ function registrarOperacoes(): void {
         projeto.nome = nome;
         await salvar();
     });
-    registrar('removerProjeto', z.tuple([uuid]), async ([id]) => {
-        persistencia.dados.projetos = persistencia.dados.projetos.filter((item) => item.id !== id);
-        for (const conversa of persistencia.dados.conversas) {
-            if (conversa.projetoId === id) conversa.projetoId = null;
+    registrar('salvarIconeProjeto', z.tuple([uuid, esquemaIconeProjeto.nullable()]), async ([id, icone]) => {
+        const projeto = persistencia.dados.projetos.find((item) => item.id === id);
+        if (!projeto) throw new Error('Projeto não encontrado.');
+        projeto.icone = icone;
+        await salvar();
+    });
+    registrar('importarIconeProjeto', z.tuple([uuid]), async ([id]) => {
+        const projeto = persistencia.dados.projetos.find((item) => item.id === id);
+        if (!projeto) throw new Error('Projeto não encontrado.');
+        const escolha = await dialog.showOpenDialog(janela!, {
+            title: 'Escolher ícone do projeto',
+            properties: ['openFile'],
+            filters: [{ name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'webp', 'ico'] }],
+        });
+        if (escolha.canceled) return false;
+        const arquivo = escolha.filePaths[0];
+        const metadados = await stat(arquivo);
+        if (!metadados.isFile() || metadados.size > 2 * 1024 ** 2) {
+            throw new Error('Escolha uma imagem de até 2 MB.');
         }
+        const imagem = nativeImage.createFromPath(arquivo);
+        if (imagem.isEmpty()) throw new Error('Não foi possível abrir a imagem do ícone.');
+        const tamanho = imagem.getSize();
+        const escala = Math.min(1, 96 / Math.max(tamanho.width, tamanho.height));
+        projeto.icone = esquemaIconeProjeto.parse({
+            tipo: 'imagem',
+            dados: imagem
+                .resize({
+                    width: Math.max(1, Math.round(tamanho.width * escala)),
+                    height: Math.max(1, Math.round(tamanho.height * escala)),
+                })
+                .toDataURL(),
+        });
+        await salvar();
+        return true;
+    });
+    registrar('removerProjeto', z.tuple([uuid]), async ([id]) => {
+        const projeto = persistencia.dados.projetos.find((item) => item.id === id);
+        if (!projeto) throw new Error('Projeto não encontrado.');
+        projeto.oculto = true;
         await salvar();
     });
     registrar('promoverRascunho', z.tuple([esquemaRascunho]), async ([entrada]) => {
@@ -234,11 +276,17 @@ function registrarOperacoes(): void {
             ? persistencia.dados.projetos.find((item) => item.id === entrada.projetoId)
             : persistencia.dados.projetos.find((item) => item.caminho === entrada.projeto);
         if ((entrada.projetoId || entrada.projeto) && !projeto) throw new Error('Projeto não encontrado.');
+        const { rascunho, ...opcoes } = entrada;
+        const caminhoProjeto = entrada.modo === 'code' && projeto ? await realpath(projeto.caminho) : null;
+        const promovida = persistencia.dados.conversas.find((item) => item.id === entrada.id);
+        if (promovida) return promovida;
         const conversa = {
-            ...entrada, projeto: entrada.modo === 'code' && projeto ? await realpath(projeto.caminho) : null,
-            projetoId: entrada.modo === 'code' ? projeto?.id ?? null : null,
+            ...opcoes,
+            projeto: caminhoProjeto,
+            projetoId: entrada.modo === 'code' ? (projeto?.id ?? null) : null,
             acessoCompleto: entrada.modo === 'code' && entrada.acessoCompleto,
-            mensagens: [], atualizadoEm: new Date().toISOString(),
+            mensagens: [],
+            atualizadoEm: new Date().toISOString(),
         };
         persistencia.dados.conversas.unshift(conversa);
         await salvar();
@@ -297,6 +345,7 @@ function registrarOperacoes(): void {
         if (caminho === null) {
             await prepararPastaTrabalho(conversa, app.getPath('userData'));
             conversa.projeto = null;
+            conversa.projetoId = null;
             conversa.atualizadoEm = new Date().toISOString();
             await salvar();
             return true;

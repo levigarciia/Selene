@@ -6,19 +6,26 @@ import type { Conversa, Dados, NovoProjeto, Projeto } from '../../shared/contrat
 import { executarProcesso } from './processos';
 
 /** Mantém os projetos antigos disponíveis independentemente da existência das suas conversas. */
-export function migrarProjetos(dados: Dados): void {
+export function migrarProjetos(dados: Dados): boolean {
+    let mudou = false;
     for (const conversa of dados.conversas) {
         if (conversa.modo !== 'code' || !conversa.projeto) continue;
         let projeto = dados.projetos.find((item) => item.caminho === conversa.projeto);
         if (!projeto) {
             projeto = {
-                id: randomUUID(), nome: basename(conversa.projeto), caminho: conversa.projeto,
-                origem: 'pasta', criadoEm: new Date().toISOString(),
+                id: randomUUID(),
+                nome: basename(conversa.projeto),
+                caminho: conversa.projeto,
+                origem: 'pasta',
+                criadoEm: new Date().toISOString(),
             };
             dados.projetos.push(projeto);
+            mudou = true;
         }
+        if (conversa.projetoId !== projeto.id) mudou = true;
         conversa.projetoId = projeto.id;
     }
+    return mudou;
 }
 
 /** Cadastra pastas reais uma única vez, sem criar conversas ou modificar os arquivos do usuário. */
@@ -26,9 +33,15 @@ export async function cadastrarProjeto(dados: Dados, caminho: string): Promise<P
     const pasta = await realpath(caminho);
     if (!(await stat(pasta)).isDirectory()) throw new Error('O projeto precisa ser uma pasta.');
     const existente = dados.projetos.find((item) => item.caminho === pasta);
-    if (existente) return existente;
+    if (existente) {
+        existente.oculto = false;
+        return existente;
+    }
     const projeto: Projeto = {
-        id: randomUUID(), nome: basename(pasta), caminho: pasta, origem: 'pasta',
+        id: randomUUID(),
+        nome: basename(pasta),
+        caminho: pasta,
+        origem: 'pasta',
         criadoEm: new Date().toISOString(),
     };
     dados.projetos.push(projeto);
@@ -36,9 +49,17 @@ export async function cadastrarProjeto(dados: Dados, caminho: string): Promise<P
 }
 
 async function git(pasta: string, argumentos: string[], limiteMs = 30000): Promise<void> {
-    const resultado = await executarProcesso('git', argumentos, pasta, new AbortController().signal, {
-        ...process.env, GIT_TERMINAL_PROMPT: '0',
-    }, limiteMs);
+    const resultado = await executarProcesso(
+        'git',
+        argumentos,
+        pasta,
+        new AbortController().signal,
+        {
+            ...process.env,
+            GIT_TERMINAL_PROMPT: '0',
+        },
+        limiteMs,
+    );
     if (resultado.codigo !== 0) throw new Error(`Não foi possível concluir a operação Git. ${resultado.saida}`);
 }
 
@@ -53,29 +74,48 @@ export function validarUrlRepositorio(entrada: string): string {
 
 /** Cria ou clona projetos em pastas exclusivas gerenciadas pela Selene. */
 export async function criarProjetoGerenciado(
-    dados: Dados, pastaDados: string, entrada: Exclude<NovoProjeto, { tipo: 'pasta' }>,
+    dados: Dados,
+    pastaDados: string,
+    entrada: Exclude<NovoProjeto, { tipo: 'pasta' }>,
 ): Promise<Projeto> {
     const url = entrada.tipo === 'clonar' ? validarUrlRepositorio(entrada.url) : null;
     const nome = entrada.tipo === 'criar' ? entrada.nome : basename(new URL(url!).pathname).replace(/\.git$/, '');
     if (!nome.trim()) throw new Error('Informe o nome do projeto ou uma URL com o nome do repositório.');
     const raiz = join(pastaDados, 'projects');
     await mkdir(raiz, { recursive: true });
-    const identificador = nome.normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 60) || 'projeto';
+    const identificador =
+        nome
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-zA-Z0-9]+/g, '_')
+            .slice(0, 60) || 'projeto';
     const pasta = await mkdtemp(join(raiz, `${identificador}_`));
     try {
+        let aviso: string | undefined;
         if (url) {
             await git(raiz, ['clone', '--', url, pasta], 120000);
         } else {
             await git(pasta, ['init', '--initial-branch=main']);
             await writeFile(join(pasta, 'README.md'), `${nome}\n\nProjeto criado na Selene.\n`);
             await mkdir(join(pasta, 'assets'));
+            await writeFile(
+                join(pasta, 'assets', 'icon.svg'),
+                '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+                    '<path d="M23 23A12 12 0 0 1 9 5a12 12 0 1 0 14 18Z" fill="#91b6a0"/></svg>\n',
+            );
             await writeFile(join(pasta, '.gitignore'), 'node_modules/\ndist/\n');
-            await git(pasta, ['add', '--', 'README.md', '.gitignore']);
+            await git(pasta, ['add', '--', 'README.md', '.gitignore', 'assets/icon.svg']);
+            try {
+                await git(pasta, ['commit', '-m', 'Cria estrutura inicial do projeto']);
+            } catch {
+                aviso =
+                    'Projeto criado. O commit inicial não foi concluído. Verifique a identidade e a configuração do Git.';
+            }
         }
         const projeto = await cadastrarProjeto(dados, pasta);
         projeto.nome = nome;
         projeto.origem = url ? 'clonado' : 'criado';
+        if (aviso) projeto.aviso = aviso;
         return projeto;
     } catch (erro) {
         await rm(pasta, { recursive: true, force: true });

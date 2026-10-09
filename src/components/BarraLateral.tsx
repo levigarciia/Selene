@@ -6,11 +6,10 @@ import {
     MagnifyingGlassIcon,
     MoonIcon,
     PlusIcon,
+    FolderIcon,
     SidebarSimpleIcon,
-    FolderPlusIcon,
     CaretDownIcon,
     ChartBarIcon,
-    ArrowClockwiseIcon,
     TrashIcon,
 } from '@phosphor-icons/react';
 import type { Conversa, Estado } from '../../shared/contratos';
@@ -18,6 +17,8 @@ import { agruparHistorico, type GrupoHistorico } from '../../shared/historico';
 import { MenuConversa, type PosicaoMenuConversa } from './MenuConversa';
 import { MenuContexto, type PosicaoMenu } from './MenuContexto';
 import { LinhaConversaSidebar } from './LinhaConversaSidebar';
+import { possuiRascunho } from '../../shared/rascunhos';
+import { AtualizacaoSidebar } from './AtualizacaoSidebar';
 
 /** Use para separar os modos, navegar pelo histórico e acompanhar as tarefas do agente. */
 export function BarraLateral({
@@ -28,10 +29,11 @@ export function BarraLateral({
     concluir,
     selecionar,
     criar,
-    criarProjeto,
     configurar,
+    gerenciarProjetos,
     estatisticas,
     atualizar,
+    abrirRelease,
     excluirConcluidas,
     recolhida,
     alternar,
@@ -46,10 +48,11 @@ export function BarraLateral({
     concluir: (conversa: Conversa) => void;
     selecionar: (id: string) => void;
     criar: (origemId?: string) => void;
-    criarProjeto: () => void;
     configurar: () => void;
+    gerenciarProjetos: () => void;
     estatisticas: () => void;
     atualizar: () => void;
+    abrirRelease: (versao?: string) => void;
     excluirConcluidas: () => void;
     recolhida: boolean;
     alternar: () => void;
@@ -75,8 +78,13 @@ export function BarraLateral({
     const conversas = estado.conversas.filter(
         (conversa) =>
             conversa.modo === modo &&
+            (conversa.mensagens.length || possuiRascunho(conversa)) &&
             (!termo ||
-                `${conversa.titulo} ${conversa.projeto ?? ''} ${conversa.mensagens.map((item) => item.texto).join(' ')}`
+                `${conversa.titulo} ${conversa.projeto ?? ''} ${
+                    estado.projetos.find((item) => item.id === conversa.projetoId || item.caminho === conversa.projeto)
+                        ?.nome ?? ''
+                }
+                    ${conversa.rascunho ?? ''} ${conversa.mensagens.map((item) => item.texto).join(' ')}`
                     .toLocaleLowerCase('pt-BR')
                     .includes(termo)),
     );
@@ -95,6 +103,25 @@ export function BarraLateral({
     function abrirMenuConcluidas(origem: HTMLElement, x: number, y: number) {
         definirMenu(null);
         definirMenuConcluidas({ origem, x, y });
+    }
+
+    function renderizarConversa(conversa: Conversa) {
+        return (
+            <LinhaConversaSidebar
+                key={conversa.id}
+                conversa={conversa}
+                estado={estado}
+                selecionada={!configurando && ativa === conversa.id}
+                recolhida={recolhida}
+                agora={agora}
+                selecionar={selecionar}
+                concluir={concluir}
+                abrirMenu={(posicao) => {
+                    definirMenuConcluidas(null);
+                    definirMenu(posicao);
+                }}
+            />
+        );
     }
 
     function renderizarGrupo(grupo: GrupoHistorico) {
@@ -146,22 +173,7 @@ export function BarraLateral({
                         <CaretDownIcon size={12} className={!aberta ? 'grupo-fechado' : ''} />
                     </button>
                 )}
-                {visiveis.map((conversa) => (
-                    <LinhaConversaSidebar
-                        key={conversa.id}
-                        conversa={conversa}
-                        estado={estado}
-                        selecionada={!configurando && ativa === conversa.id}
-                        recolhida={recolhida}
-                        agora={agora}
-                        selecionar={selecionar}
-                        concluir={concluir}
-                        abrirMenu={(posicao) => {
-                            definirMenuConcluidas(null);
-                            definirMenu(posicao);
-                        }}
-                    />
-                ))}
+                {visiveis.map(renderizarConversa)}
                 {aberta && !recolhida && !todos && grupo.itens.length > itens.length && (
                     <button
                         className="mostrar-conversas"
@@ -234,11 +246,11 @@ export function BarraLateral({
                 {modo === 'code' && (
                     <button
                         className="botao-icone"
-                        onClick={criarProjeto}
-                        aria-label="Adicionar projeto"
-                        title="Adicionar projeto"
+                        aria-label="Projetos"
+                        title="Gerenciar projetos"
+                        onClick={gerenciarProjetos}
                     >
-                        <FolderPlusIcon size={18} />
+                        <FolderIcon size={18} />
                     </button>
                 )}
                 <button
@@ -276,14 +288,7 @@ export function BarraLateral({
                 <button className="botao-icone" onClick={estatisticas} aria-label="Estatísticas" title="Estatísticas">
                     <ChartBarIcon size={19} />
                 </button>
-                <button
-                    className="botao-icone botao-atualizar-sidebar"
-                    onClick={atualizar}
-                    aria-label="Procurar atualizações"
-                    title="Procurar atualizações"
-                >
-                    <ArrowClockwiseIcon size={19} />
-                </button>
+                <AtualizacaoSidebar estado={estado.atualizacao} verificar={atualizar} abrirRelease={abrirRelease} />
             </footer>
             {menu && (
                 <MenuConversa

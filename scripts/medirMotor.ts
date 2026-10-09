@@ -149,13 +149,13 @@ async function medirPerfil(perfil: Perfil, modelo: string): Promise<Medicao[]> {
 
 const appData = process.env.APPDATA;
 if (!appData) throw new Error('Pasta de dados do Windows indisponível.');
-const dados = JSON.parse(await readFile(join(appData, 'SeleneRemake', 'selene.json'), 'utf8'));
+const dados = JSON.parse(await readFile(join(appData, 'Selene', 'selene.json'), 'utf8'));
 const modelo =
     process.env.SELENE_TESTE_GGUF ??
     dados.modelos.find((item: { catalogoId?: string }) => item.catalogoId === 'qwen3.5-9b-q4')?.caminho;
 if (!modelo) throw new Error('Informe SELENE_TESTE_GGUF ou disponibilize Qwen3.5 9B na Selene.');
-const vulkan = join(appData, 'SeleneRemake/runtime/b11521-vulkan/llama-server.exe');
-const rocm = process.env.SELENE_BENCH_ROCM ?? join(appData, 'SeleneRemake/runtime/b10327-rocm/llama-server.exe');
+const vulkan = join(appData, 'Selene/runtime/b11521-vulkan/llama-server.exe');
+const rocm = process.env.SELENE_BENCH_ROCM ?? join(appData, 'Selene/runtime/b10327-rocm/llama-server.exe');
 const perfis: Perfil[] = [
     { nome: 'vulkan-original', executavel: vulkan, dispositivo: 'Vulkan0', argumentos: [] },
     { nome: 'vulkan-flash', executavel: vulkan, dispositivo: 'Vulkan0', argumentos: ['-fa', 'on'] },

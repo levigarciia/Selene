@@ -252,6 +252,10 @@ export class Agente {
             sistema.push(
                 'Você é um agente de programação. Use ferramentas para inspecionar e alterar o projeto.',
                 'Planeje tarefas complexas, valide os resultados e relate apenas ações realmente concluídas.',
+                'Para trabalhos com várias etapas, use atualizar_plano para registrar objetivos curtos e claros. ' +
+                    'Atualize o plano ao iniciar ou concluir cada objetivo, enviando todas as etapas. ' +
+                    'Comandos, leituras e arquivos são ações do histórico, não objetivos individuais. ' +
+                    'Pedidos simples não precisam de plano. Não marque objetivos incompletos como concluídos.',
                 'Não use npm. Use Bun. Peça esclarecimentos no texto quando necessário.',
                 conversa.acessoCompleto
                     ? 'O usuário autorizou ferramentas com acesso completo nesta conversa.'

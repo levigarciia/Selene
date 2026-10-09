@@ -242,7 +242,9 @@ describe('Streaming', () => {
         await persistencia.salvar();
         const reaberta = new Persistencia(pasta);
         await reaberta.abrir();
-        expect(reaberta.dados.conversas[0]).toEqual(conversa);
+        expect(reaberta.dados.conversas[0]).toMatchObject(conversa);
+        expect(reaberta.dados.projetos[0].caminho).toBe(conversa.projeto!);
+        expect(reaberta.dados.conversas[0].projetoId).toBe(reaberta.dados.projetos[0].id);
     });
     test('mensagens antigas preservam o texto sem dividir parágrafos ou palavras', () => {
         const mensagem: Mensagem = {

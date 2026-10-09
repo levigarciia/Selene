@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { esquemaDados, type Estado, type Resultado } from '../../shared/contratos';
+import { esquemaDados, type Estado, type Projeto, type Resultado } from '../../shared/contratos';
 import { useRascunhos } from './useRascunhos';
 import { reunirRascunhos } from '../../shared/rascunhos';
 
@@ -84,7 +84,19 @@ export function useSelene() {
         }
     }, []);
     return {
-        estado: reunirRascunhos(estado, rascunhos.rascunhos), estadoPersistido: estado,
-        ...rascunhos, erro, carregando, executar, definirErro, ponte: window.selene,
+        estado: reunirRascunhos(estado, rascunhos.rascunhos),
+        estadoPersistido: estado,
+        ...rascunhos,
+        criarRascunho: (modo: 'chat' | 'code', projeto?: Projeto | null) =>
+            rascunhos.criarRascunho(
+                modo,
+                projeto,
+                estado.conversas.map((item) => item.id),
+            ),
+        erro,
+        carregando,
+        executar,
+        definirErro,
+        ponte: window.selene,
     };
 }

@@ -22,6 +22,8 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
 
 * Distribuição Windows por instalador NSIS e releases automáticas em envios para `main`.
   A instalação verifica e baixa atualizações, mostra estado em Geral e aplica a atualização ao encerrar.
+  O botão da sidebar mostra progresso, versão instalada e notas por release em painel aberto por mouse ou teclado.
+  As notas da distribuição são geradas a partir dos commits posteriores à release publicada.
   Decisão própria da Selene, solicitada pelo usuário, sem ampliar a paridade com o Odysseus.
 
 * Importação de GGUF, instalação de motor CPU, Vulkan ou ROCm, carga e descarga de modelo.
@@ -231,7 +233,7 @@ identificados no catálogo. Uma atualização futura deste documento exige confe
 ## Critérios próprios do MVP
 
 A tela inicial aproxima o título, a seleção de projeto e a entrada. No modo Code, o seletor oferece
-pastas recentes das conversas, escolha de outra pasta e início sem projeto. Nesse último caso, a Selene
+projetos cadastrados, adição de projetos e início sem projeto. Nesse último caso, a Selene
 cria uma pasta persistente por conversa em `scratch`, dentro dos dados do aplicativo. As ferramentas
 respeitam essa pasta e mantêm as aprovações e o acesso completo definidos pelo usuário. A pasta continua
 disponível após reiniciar e não é apagada ao excluir a conversa.
@@ -240,18 +242,50 @@ Referências de experiência: `apps/web/src/components/NoProjectsHero.tsx`,
 e `apps/server/src/project/ManagedProjectFolders.ts` do T3 Code local. Essa decisão própria não amplia
 a paridade com o Odysseus.
 
+Projetos têm cadastro independente das conversas. A Selene abre pastas existentes, cria projetos por nome
+em `projects` com Git, README e ícone inicial, e clona repositórios por URL HTTPS. A sidebar lista conversas
+diretamente, sem grupos ou ações de projeto. A composição oferece um menu compacto para escolher o projeto,
+começar sem projeto ou adicionar uma pasta. O topo mostra projeto e conversa em breadcrumbs.
+Renomear altera o nome exibido.
+Remover da lista oculta o cadastro e preserva arquivos, conversas e rascunhos. Pastas antes vinculadas somente
+a conversas são cadastradas automaticamente na migração.
+
+Rascunhos de texto ficam no armazenamento local da interface e sobrevivem ao reinício. O estado Rascunho
+aparece na sidebar quando há texto não enviado. Novos chats vazios reutilizam uma composição vazia e não
+criam conversas no processo principal. A conversão em conversa ocorre no primeiro envio e mantém o mesmo
+identificador. Texto pendente em conversas existentes é preservado sem substituir suas mensagens.
+Anexos não enviados continuam preservados durante a sessão; sua recuperação após reiniciar não faz parte
+dessa implementação. Referências adicionais do T3: `apps/web/src/composerDraftStore.ts`,
+`apps/web/src/hooks/useHandleNewThread.ts`, `apps/web/src/components/CommandPalette.tsx`
+e `apps/web/src/components/Sidebar.tsx`.
+
 Por solicitação do usuário, o modo Code apresenta ações expansíveis em linha, brilho durante a execução,
 histórico recolhido após concluir e painel de tarefas com acesso ao histórico. Os cortes do texto são
 registrados durante a geração. Mensagens antigas preservam o texto integral, sem cortes inferidos.
+O painel acompanha somente os objetivos do último plano válido enviado por `atualizar_plano` na resposta atual.
+Comandos, leituras e caminhos de arquivos permanecem no histórico de ações e não geram tarefas automaticamente.
+Sem plano, o painel não aparece. Ao concluir, interromper ou falhar, ele sai da área de entrada e o histórico
+preserva o plano. Referências locais do T3 Code: `apps/web/src/components/ChatView.tsx`,
+`apps/web/src/session-logic.ts` e `apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.ts`.
 O acesso completo permanece salvo por conversa, inclusive ao escolher um projeto ou reiniciar.
 Essas decisões de experiência seguem as imagens fornecidas do T3 Code e não ampliam a paridade com o Odysseus.
 
 O contexto é obtido automaticamente do GGUF pelo motor e confirmado pelo endpoint `/props`.
-Falhas de alocação reduzem a reserva de contexto automaticamente. A resposta utiliza o espaço restante
+O modo automático ajusta o contexto e as camadas na GPU à memória disponível, dividindo os pesos com a RAM
+quando necessário. Mantém uma margem de 1024 MiB, ampliada para 2048 MiB quando há projetor visual na GPU.
+Falhas de alocação reduzem a reserva efetivamente tentada, até 2048 tokens. Limites manuais permanecem explícitos.
+A resposta utiliza o espaço restante
 após preparar o histórico, com compactação automática e sem exigir limites manuais na interface.
 Esse comportamento é uma decisão própria da Selene solicitada pelo usuário.
 
 Um GGUF real deve responder sem provedor externo. O histórico deve sobreviver ao reinício.
+O gerenciamento de projetos abre pela pasta da sidebar ou pela breadcrumb do projeto atual.
+Permite renomear, escolher símbolo e cor, usar iniciais, importar imagem e restaurar a pasta padrão.
+A identidade persistida aparece no seletor, na breadcrumb e nas conversas da sidebar, incluindo as concluídas.
+Conversas com mensagens exibem o projeto somente na breadcrumb superior. O seletor permanece na tela inicial.
+Essas decisões foram solicitadas pelo usuário, com referências locais do T3 Code em
+`apps/web/src/components/settings/ProjectSettingsPanel.tsx`, `apps/web/src/components/ProjectFavicon.tsx`
+e `apps/web/src/routes/projects.$projectKey.tsx`. Não ampliam a paridade com o Odysseus.
 No modo chat não existem ferramentas de computador. No modo code uma escrita ou comando deve aguardar
 aprovação; a recusa precisa voltar ao modelo. Cancelar interrompe a geração, aprovações pendentes e processos
 da tarefa. Fora do acesso completo, leituras e escritas ficam na pasta real do projeto, incluindo links simbólicos.

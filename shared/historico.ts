@@ -1,4 +1,5 @@
 import type { Conversa } from './contratos';
+import { possuiRascunho } from './rascunhos';
 
 export type AtividadeConversa = {
     fase:
@@ -10,7 +11,8 @@ export type AtividadeConversa = {
         | 'concluida'
         | 'erro'
         | 'interrompida'
-        | 'nova';
+        | 'nova'
+        | 'rascunho';
     nome: string;
     ocupada: boolean;
 };
@@ -27,6 +29,7 @@ export function obterAtividadeConversa(conversa: Conversa, execucao: string | nu
         if (acao) return { fase: 'ferramenta', nome: 'Ferramenta', ocupada: true };
         return { fase: 'trabalhando', nome: 'Trabalhando', ocupada: true };
     }
+    if (possuiRascunho(conversa)) return { fase: 'rascunho', nome: 'Rascunho', ocupada: false };
     if (!mensagem) return { fase: 'nova', nome: 'Nova', ocupada: false };
     if (mensagem.estado === 'erro') return { fase: 'erro', nome: 'Erro', ocupada: false };
     if (mensagem.estado === 'interrompida' || mensagem.estado === 'gerando') {
@@ -53,7 +56,7 @@ export function agruparHistorico(
         { chave: 'concluidas', nome: 'Concluídas', itens: [] },
     ];
     const ordenadas = conversas
-        .filter((conversa) => conversa.modo === modo)
+        .filter((conversa) => conversa.modo === modo && (conversa.mensagens.length || possuiRascunho(conversa)))
         .sort((a, b) => {
             const data = (conversa: Conversa) => {
                 const mensagem = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');

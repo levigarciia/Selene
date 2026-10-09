@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EntradaImagem, ImagemRascunho, PonteSelene } from '../../shared/contratos';
 
 async function lerArquivo(arquivo: File): Promise<EntradaImagem> {
@@ -25,12 +25,22 @@ async function lerArquivo(arquivo: File): Promise<EntradaImagem> {
 }
 
 /** Mantém os anexos de cada rascunho até confirmar o envio pelo processo principal. */
-export function useAnexos(ativa: string | null, ponte: PonteSelene | undefined, informarErro: (erro: string) => void) {
+export function useAnexos(
+    ativa: string | null,
+    ponte: PonteSelene | undefined,
+    informarErro: (erro: string) => void,
+    informarQuantidade?: (quantidade: number) => void,
+) {
     const [rascunhos, definirRascunhos] = useState<Record<string, ImagemRascunho[]>>({});
     const [importando, definirImportando] = useState(false);
     const bloqueio = useRef(false);
     const chave = ativa ?? 'nova';
     const imagens = rascunhos[chave] ?? [];
+    const informar = useRef(informarQuantidade);
+    informar.current = informarQuantidade;
+    useEffect(() => {
+        informar.current?.(imagens.length);
+    }, [ativa, imagens.length]);
 
     async function anexar(arquivos: File[]) {
         if (!arquivos.length || bloqueio.current) return;

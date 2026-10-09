@@ -19,6 +19,7 @@ import { useAnexos } from '../hooks/useAnexos';
 import { ImagemConversa } from './ImagemConversa';
 import { TarefasConversa } from './TarefasConversa';
 import { SeletorProjeto } from './SeletorProjeto';
+import type { Conversa } from '../../shared/contratos';
 
 /** Coordena os dois modos do MVP e os controles da conversa selecionada. */
 export function TelaConversa({
@@ -28,6 +29,7 @@ export function TelaConversa({
     configurar,
     visivel,
     modoInicial,
+    adicionarProjeto,
 }: {
     dados: ReturnType<typeof useSelene>;
     ativa: string | null;
@@ -35,19 +37,23 @@ export function TelaConversa({
     configurar: () => void;
     visivel: boolean;
     modoInicial: 'chat' | 'code';
+    adicionarProjeto: () => void;
 }) {
     const { estado, executar, ponte } = dados;
-    const [texto, definirTexto] = useState('');
     const [catalogoAberto, definirCatalogoAberto] = useState(false);
     const [enviando, definirEnviando] = useState(false);
     const [selecionandoProjeto, definirSelecionandoProjeto] = useState(false);
     const rolagem = useRef<HTMLDivElement>(null);
     const acompanhar = useRef(true);
-    const preservarRascunho = useRef(false);
     const seletorImagens = useRef<HTMLInputElement>(null);
-    const anexos = useAnexos(ativa, ponte, dados.definirErro);
     const [arrastando, definirArrastando] = useState(false);
     const conversa = estado.conversas.find((item) => item.id === ativa);
+    const anexos = useAnexos(ativa, ponte, dados.definirErro, (quantidade) => {
+        if (conversa && quantidade !== (conversa.anexosRascunho ?? 0)) {
+            dados.alterarRascunho(conversa, { anexosRascunho: quantidade });
+        }
+    });
+    const texto = conversa?.rascunho ?? '';
     const modo = conversa?.modo ?? modoInicial;
     const ocupado = !!estado.conversaEmExecucao || enviando || selecionandoProjeto;
     const inicial = !conversa?.mensagens.length;
@@ -62,8 +68,6 @@ export function TelaConversa({
         .find((mensagem) => mensagem.papel === 'assistant');
 
     useEffect(() => {
-        if (!preservarRascunho.current) definirTexto('');
-        preservarRascunho.current = false;
         definirCatalogoAberto(false);
         acompanhar.current = true;
     }, [ativa]);
@@ -77,11 +81,11 @@ export function TelaConversa({
     }, [conversa?.mensagens, visivel]);
 
     async function obterConversa() {
-        if (conversa) return conversa;
-        const nova = await executar(() => ponte!.novaConversa(modo));
+        if (conversa && dados.estadoPersistido.conversas.some((item) => item.id === conversa.id)) return conversa;
+        const rascunho = conversa ?? dados.criarRascunho(modo);
+        const nova = await executar(() => ponte!.promoverRascunho({ ...rascunho, modeloId: modeloId || null }));
         if (nova) {
-            anexos.transferir(nova.id);
-            preservarRascunho.current = true;
+            if (ativa !== nova.id) anexos.transferir(nova.id);
             selecionar(nova.id);
             return nova;
         }
@@ -104,7 +108,7 @@ export function TelaConversa({
                     anexos.imagens.map((imagem) => imagem.id),
                 );
                 if (resultado.ok) {
-                    definirTexto('');
+                    dados.confirmarEnvioRascunho(atual.id, texto);
                     anexos.limpar(atual.id);
                 }
                 return resultado;
@@ -118,21 +122,44 @@ export function TelaConversa({
         if (ocupado) return;
         definirSelecionandoProjeto(true);
         try {
-            const atual = await obterConversa();
-            if (atual) await executar(() => ponte!.escolherProjeto(atual.id, caminho));
+            if (caminho === undefined) return adicionarProjeto();
+            const atual = conversa ?? dados.criarRascunho(modo);
+            const projeto = estado.projetos.find((item) => item.caminho === caminho);
+            if (caminho !== null && !projeto) return dados.definirErro('Projeto não encontrado.');
+            if (dados.estadoPersistido.conversas.some((item) => item.id === atual.id)) {
+                await executar(() => ponte!.escolherProjeto(atual.id, caminho));
+            } else {
+                dados.alterarRascunho(atual, { projeto: projeto?.caminho ?? null, projetoId: projeto?.id ?? null });
+            }
+            selecionar(atual.id);
         } finally {
             definirSelecionandoProjeto(false);
         }
     }
 
+    async function alterarOpcoes(alteracao: Partial<Conversa>) {
+        const atual = conversa ?? dados.criarRascunho(modo);
+        if (dados.estadoPersistido.conversas.some((item) => item.id === atual.id)) {
+            await executar(() => ponte!.alterarConversa(atual.id, alteracao));
+        } else {
+            dados.alterarRascunho(atual, alteracao);
+        }
+        selecionar(atual.id);
+    }
+
+    function definirTexto(texto: string) {
+        const atual = conversa ?? dados.criarRascunho(modo);
+        dados.alterarRascunho(atual, { rascunho: texto });
+        selecionar(atual.id);
+    }
+
     const seletorProjeto = modo === 'code' && (
-        <SeletorProjeto conversa={conversa} conversas={estado.conversas} ocupado={ocupado} escolher={escolherProjeto} />
+        <SeletorProjeto conversa={conversa} projetos={estado.projetos} ocupado={ocupado} escolher={escolherProjeto} />
     );
 
     return (
         <div className={`tela-conversa ${inicial ? 'tela-inicial' : ''}`}>
             <div className="barra-contexto">
-                {!inicial && seletorProjeto}
                 <button
                     className={`estado-motor ${estado.motor.fase === 'pronto' ? 'motor-pronto' : ''}`}
                     onClick={configurar}
@@ -246,6 +273,7 @@ export function TelaConversa({
                         aria-label="Mensagem"
                         placeholder={modo === 'code' ? 'Descreva o que você quer fazer' : 'Escreva sua mensagem'}
                         rows={3}
+                        maxLength={30000}
                         value={texto}
                         onChange={(evento) => definirTexto(evento.target.value)}
                         onPaste={(evento) => {
@@ -269,10 +297,7 @@ export function TelaConversa({
                             modeloId={modeloId}
                             aberto={catalogoAberto}
                             definirAberto={definirCatalogoAberto}
-                            selecionar={async (id) => {
-                                const atual = await obterConversa();
-                                if (atual) await executar(() => ponte!.alterarConversa(atual.id, { modeloId: id }));
-                            }}
+                            selecionar={(id) => alterarOpcoes({ modeloId: id })}
                         />
                         {!!niveis.length && (
                             <MenuOpcoesEntrada
@@ -286,14 +311,7 @@ export function TelaConversa({
                                 alterar={async (valor) => {
                                     const escolhido = niveis.find((item) => item === valor);
                                     if (!escolhido) return;
-                                    const atual = await obterConversa();
-                                    if (atual)
-                                        await executar(() =>
-                                            ponte!.alterarConversa(atual.id, {
-                                                modeloId,
-                                                nivelRaciocinio: escolhido,
-                                            }),
-                                        );
+                                    await alterarOpcoes({ modeloId, nivelRaciocinio: escolhido });
                                 }}
                             />
                         )}
@@ -324,15 +342,7 @@ export function TelaConversa({
                                             'Arquivos e comandos em todo o computador sem aprovação nesta conversa.',
                                     },
                                 ]}
-                                alterar={async (valor) => {
-                                    const atual = await obterConversa();
-                                    if (atual)
-                                        await executar(() =>
-                                            ponte!.alterarConversa(atual.id, {
-                                                acessoCompleto: valor === 'completo',
-                                            }),
-                                        );
-                                }}
+                                alterar={(valor) => alterarOpcoes({ acessoCompleto: valor === 'completo' })}
                             />
                         )}
                         <div className="flex-1" />

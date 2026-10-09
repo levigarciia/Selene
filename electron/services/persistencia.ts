@@ -20,7 +20,10 @@ export class Persistencia {
                 bruto.configuracao.backend = 'auto';
             }
             this.dados = esquemaDados.parse(bruto);
-            if (bruto.projetos === undefined) migrarProjetos(this.dados);
+            const projetosMigrados = migrarProjetos(this.dados);
+            if (bruto.projetos === undefined || projetosMigrados) {
+                await this.salvar();
+            }
             for (const conversa of this.dados.conversas) {
                 if (conversa.modo === 'chat') conversa.acessoCompleto = false;
                 for (const mensagem of conversa.mensagens) {

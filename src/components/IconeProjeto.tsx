@@ -1,0 +1,51 @@
+import {
+    FolderIcon,
+    CodeIcon,
+    TerminalIcon,
+    CubeIcon,
+    GlobeIcon,
+    BookOpenIcon,
+    GameControllerIcon,
+    RocketIcon,
+} from '@phosphor-icons/react';
+import type { Projeto } from '../../shared/contratos';
+import { coresProjeto } from '../../shared/iconesProjetos';
+
+const simbolos = {
+    pasta: FolderIcon,
+    codigo: CodeIcon,
+    terminal: TerminalIcon,
+    cubo: CubeIcon,
+    globo: GlobeIcon,
+    livro: BookOpenIcon,
+    jogo: GameControllerIcon,
+    foguete: RocketIcon,
+};
+
+/** Usa a identidade persistida do projeto em todas as superfícies, com pasta como padrão. */
+export function IconeProjeto({ projeto, tamanho = 16 }: { projeto?: Projeto; tamanho?: number }) {
+    const icone = projeto?.icone;
+    if (icone?.tipo === 'imagem') {
+        return <img className="icone-projeto" src={icone.dados} alt="" width={tamanho} height={tamanho} />;
+    }
+    if (icone?.tipo === 'iniciais') {
+        return (
+            <span
+                className="icone-projeto iniciais-projeto"
+                aria-hidden="true"
+                style={{ width: tamanho, height: tamanho, color: coresProjeto[icone.cor], fontSize: tamanho * 0.55 }}
+            >
+                {icone.texto}
+            </span>
+        );
+    }
+    const Simbolo = icone?.tipo === 'simbolo' ? simbolos[icone.nome] : FolderIcon;
+    return (
+        <Simbolo
+            className="icone-projeto"
+            aria-hidden="true"
+            size={tamanho}
+            color={icone?.tipo === 'simbolo' ? coresProjeto[icone.cor] : undefined}
+        />
+    );
+}

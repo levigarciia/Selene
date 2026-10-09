@@ -90,11 +90,11 @@ export function ConfiguracaoMotor({
                 <label>
                     Camadas na GPU
                     <input
-                        type="number"
+                        type={configuracao.limitesAutomaticos ? 'text' : 'number'}
                         min="0"
                         max="999"
-                        value={configuracao.camadasGpu}
-                        disabled={ocupado}
+                        value={configuracao.limitesAutomaticos ? 'Automáticas' : configuracao.camadasGpu}
+                        disabled={ocupado || configuracao.limitesAutomaticos}
                         onChange={(evento) => alterar('camadasGpu', Number(evento.target.value))}
                     />
                 </label>

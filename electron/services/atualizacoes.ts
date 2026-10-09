@@ -1,10 +1,16 @@
 import type { AppUpdater } from 'electron-updater';
-import type { EstadoAtualizacao } from '../../shared/atualizacoes';
+import { normalizarNotasRelease, type EstadoAtualizacao } from '../../shared/atualizacoes';
 
 const intervaloVerificacao = 4 * 60 * 60 * 1000;
 type Atualizador = Pick<
     AppUpdater,
-    'autoDownload' | 'autoInstallOnAppQuit' | 'allowPrerelease' | 'allowDowngrade' | 'on' | 'checkForUpdates'
+    | 'autoDownload'
+    | 'autoInstallOnAppQuit'
+    | 'allowPrerelease'
+    | 'allowDowngrade'
+    | 'fullChangelog'
+    | 'on'
+    | 'checkForUpdates'
 >;
 
 /** Use após criar a janela para baixar releases oficiais e instalar somente ao encerrar o aplicativo. */
@@ -34,10 +40,18 @@ export class Atualizacoes {
         autoUpdater.autoInstallOnAppQuit = true;
         autoUpdater.allowPrerelease = false;
         autoUpdater.allowDowngrade = false;
-        autoUpdater.on('checking-for-update', () => this.alterar({ fase: 'verificando' }));
-        autoUpdater.on('update-not-available', () => this.alterar({ fase: 'atualizada' }));
-        autoUpdater.on('update-available', ({ version }) => {
-            this.alterar({ fase: 'baixando', versaoNova: version, progresso: 0 });
+        autoUpdater.fullChangelog = true;
+        autoUpdater.on('checking-for-update', () => this.alterar({ fase: 'verificando', progresso: undefined }));
+        autoUpdater.on('update-not-available', () => {
+            this.alterar({ fase: 'atualizada', versaoNova: undefined, notas: [], releasesOmitidas: 0 });
+        });
+        autoUpdater.on('update-available', ({ version, releaseNotes }) => {
+            this.alterar({
+                fase: 'baixando',
+                versaoNova: version,
+                progresso: 0,
+                ...normalizarNotasRelease(releaseNotes, version),
+            });
         });
         autoUpdater.on('download-progress', ({ percent }) => {
             this.alterar({ fase: 'baixando', versaoNova: this.estado.versaoNova, progresso: percent });
@@ -68,7 +82,7 @@ export class Atualizacoes {
     }
 
     private alterar(estado: Omit<EstadoAtualizacao, 'versaoAtual'>): void {
-        this.estado = { versaoAtual: this.versaoAtual, ...estado };
+        this.estado = { ...this.estado, versaoAtual: this.versaoAtual, erro: undefined, ...estado };
         this.publicar();
     }
 }

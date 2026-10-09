@@ -22,7 +22,7 @@ export function MenuConversa({
 }) {
     return (
         <MenuContexto posicao={menu} fechar={fechar} titulo={`Ações de ${menu.conversa.titulo}`}>
-            {menu.conversa.modo === 'code' && (
+            {menu.conversa.modo === 'code' && !!menu.conversa.mensagens.length && (
                 <button
                     role="menuitem"
                     disabled={ocupado}
@@ -35,15 +35,17 @@ export function MenuConversa({
                     {menu.conversa.concluida ? 'Retomar conversa' : 'Concluir conversa'}
                 </button>
             )}
-            <button
-                role="menuitem"
-                onClick={() => {
-                    fechar();
-                    exportar(menu.conversa.id);
-                }}
-            >
-                <DownloadSimpleIcon size={17} /> Exportar conversa
-            </button>
+            {!!menu.conversa.mensagens.length && (
+                <button
+                    role="menuitem"
+                    onClick={() => {
+                        fechar();
+                        exportar(menu.conversa.id);
+                    }}
+                >
+                    <DownloadSimpleIcon size={17} /> Exportar conversa
+                </button>
+            )}
             <button
                 role="menuitem"
                 className="texto-erro"

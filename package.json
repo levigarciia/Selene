@@ -21,6 +21,8 @@
         "start": "bun scripts/abrir.ts",
         "test:desktop": "bun scripts/testarDesktop.ts",
         "test:sidebar": "bun scripts/testarDesktop.ts scripts/validarSidebar.ts",
+        "test:projetos": "bun scripts/testarDesktop.ts scripts/validarProjetosRascunhos.ts",
+        "test:gerenciamento": "bun scripts/testarDesktop.ts scripts/validarGerenciamentoProjeto.ts",
         "test:contexto": "bun scripts/testarDesktop.ts scripts/validarContextoImagens.ts",
         "formatar": "prettier --write .",
         "dist:win": "bun run build && electron-builder --win nsis --x64 --publish never",

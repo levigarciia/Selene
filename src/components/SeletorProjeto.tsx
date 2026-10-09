@@ -1,58 +1,75 @@
-import { CaretDownIcon, FolderIcon } from '@phosphor-icons/react';
-import type { Conversa } from '../../shared/contratos';
+﻿import { useCallback, useState } from 'react';
+import { FolderPlusIcon, SelectionIcon } from '@phosphor-icons/react';
+import { IconeProjeto } from './IconeProjeto';
+import type { Conversa, Projeto } from '../../shared/contratos';
+import { MenuContexto, type PosicaoMenu } from './MenuContexto';
 
-/** Seleciona uma pasta recente, abre o seletor do desktop ou inicia um espaço sem projeto. */
+/** Use para escolher o projeto da composição ou abrir o cadastro de uma nova pasta. */
 export function SeletorProjeto({
     conversa,
-    conversas,
+    projetos,
     ocupado,
     escolher,
 }: {
     conversa?: Conversa;
-    conversas: Conversa[];
+    projetos: Projeto[];
     ocupado: boolean;
     escolher: (caminho?: string | null) => Promise<void>;
 }) {
-    const projetos = [
-        ...new Set(
-            conversas
-                .filter((item) => item.modo === 'code' && item.projeto)
-                .sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm))
-                .map((item) => item.projeto!),
-        ),
-    ];
-    const valor = conversa?.projeto ?? (conversa?.pastaTrabalho ? 'sem' : 'escolher');
+    const [menu, definirMenu] = useState<PosicaoMenu | null>(null);
+    const fechar = useCallback(() => definirMenu(null), []);
+    const projetoAtual = projetos.find((projeto) => projeto.caminho === conversa?.projeto);
+    const nome = projetoAtual?.nome ?? conversa?.projeto?.split(/[\\/]/).at(-1) ?? 'Sem projeto';
+
+    function selecionar(caminho?: string | null) {
+        fechar();
+        menu?.origem.focus();
+        void escolher(caminho);
+    }
+
     return (
-        <div className="seletor-projeto" title={conversa?.projeto ?? conversa?.pastaTrabalho}>
-            <FolderIcon size={18} />
-            <select
+        <div className="seletor-projeto">
+            <button
+                type="button"
+                className="gatilho-projeto"
                 aria-label="Projeto da conversa"
-                value={valor}
+                aria-haspopup="menu"
+                aria-expanded={!!menu}
                 disabled={ocupado}
-                onChange={(evento) => {
-                    const caminho = evento.target.value;
-                    void escolher(caminho === 'sem' ? null : caminho === 'abrir' ? undefined : caminho);
+                title={conversa?.projeto ?? undefined}
+                onClick={(evento) => {
+                    if (menu) return fechar();
+                    const origem = evento.currentTarget;
+                    const limites = origem.getBoundingClientRect();
+                    definirMenu({ origem, x: limites.left + limites.width / 2 - 80, y: limites.bottom + 5 });
                 }}
             >
-                <option value="escolher" disabled>
-                    Escolher projeto
-                </option>
-                <option value="sem">{valor === 'sem' ? 'Sem projeto' : 'Começar sem projeto'}</option>
-                {!!projetos.length && (
-                    <optgroup label="Projetos recentes">
-                        {projetos.map((projeto) => (
-                            <option key={projeto} value={projeto}>
-                                {projetos.filter((item) => item.split(/[\\/]/).at(-1) === projeto.split(/[\\/]/).at(-1))
-                                    .length > 1
-                                    ? projeto
-                                    : projeto.split(/[\\/]/).at(-1)}
-                            </option>
-                        ))}
-                    </optgroup>
-                )}
-                <option value="abrir">Escolher outra pasta...</option>
-            </select>
-            <CaretDownIcon size={14} />
+                <IconeProjeto projeto={projetoAtual} tamanho={16} />
+                {nome}
+            </button>
+            {menu && !ocupado && (
+                <MenuContexto posicao={menu} fechar={fechar} titulo="Projeto da conversa" classe="menu-projetos">
+                    <button role="menuitemradio" aria-checked={!conversa?.projeto} onClick={() => selecionar(null)}>
+                        <SelectionIcon size={16} /> Sem projeto
+                    </button>
+                    {projetos.map((projeto) => (
+                        <button
+                            key={projeto.id}
+                            role="menuitemradio"
+                            aria-checked={conversa?.projeto === projeto.caminho}
+                            title={projeto.caminho}
+                            onClick={() => selecionar(projeto.caminho)}
+                        >
+                            <IconeProjeto projeto={projeto} tamanho={16} />{' '}
+                            <span className="truncate">{projeto.nome}</span>
+                        </button>
+                    ))}
+                    <div className="separador-menu-projetos" role="separator" />
+                    <button role="menuitem" onClick={() => selecionar()}>
+                        <FolderPlusIcon size={16} /> Adicionar projeto
+                    </button>
+                </MenuContexto>
+            )}
         </div>
     );
 }

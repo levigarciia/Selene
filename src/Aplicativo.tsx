@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowLeftIcon, XIcon } from '@phosphor-icons/react';
+import { useEffect, useState } from 'react';
+import { ArrowLeftIcon, CaretRightIcon, XIcon } from '@phosphor-icons/react';
 import type { Conversa } from '../shared/contratos';
 import { useSelene } from './hooks/useSelene';
 import { BarraLateral } from './components/BarraLateral';
@@ -8,6 +8,10 @@ import { Configuracoes } from './components/Configuracoes';
 import { TelaConversa } from './components/TelaConversa';
 import { Modal } from './components/Modal';
 import { Estatisticas } from './components/Estatisticas';
+import { AdicionarProjeto } from './components/AdicionarProjeto';
+import type { Projeto } from '../shared/contratos';
+import { TelaProjetos } from './components/TelaProjetos';
+import { IconeProjeto } from './components/IconeProjeto';
 
 function lerSidebarRecolhida(): boolean {
     try {
@@ -29,22 +33,46 @@ export function Aplicativo() {
     const [excluindo, definirExcluindo] = useState<Conversa | null>(null);
     const [excluindoConcluidas, definirExcluindoConcluidas] = useState(false);
     const [estatisticasAbertas, definirEstatisticasAbertas] = useState(false);
-    const [atualizacoesAbertas, definirAtualizacoesAbertas] = useState(false);
     const [apagando, definirApagando] = useState(false);
+    const [projetosAbertos, definirProjetosAbertos] = useState(false);
+    const [gerenciandoProjetos, definirGerenciandoProjetos] = useState(false);
+    const [projetoGerenciadoId, definirProjetoGerenciadoId] = useState<string | null>(null);
     const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === 'code' && item.concluida).length;
     const ativa = ativas[modoInicial];
     const conversa = estado.conversas.find((item) => item.id === ativa);
+    const projetoAtual = estado.projetos.find(
+        (item) => item.id === conversa?.projetoId || item.caminho === conversa?.projeto,
+    );
     const ocupado = !!estado.conversaEmExecucao;
+    useEffect(() => {
+        if (carregando || ativas[modoInicial]) return;
+        const novo = dados.criarRascunho(modoInicial);
+        definirAtivas((anteriores) => ({ ...anteriores, [modoInicial]: novo.id }));
+    }, [carregando, modoInicial, ativas]);
     function configurar() {
+        definirGerenciandoProjetos(false);
         definirConfiguracoesMontadas(true);
         definirConfigurando(true);
     }
     function selecionar(id: string) {
+        definirGerenciandoProjetos(false);
         const escolhida = estado.conversas.find((item) => item.id === id);
         const modo = escolhida?.modo ?? modoInicial;
         definirModoInicial(modo);
         definirAtivas((anteriores) => ({ ...anteriores, [modo]: id }));
         definirConfigurando(false);
+    }
+    function criar(projeto?: Projeto | null, modo: 'chat' | 'code' = modoInicial) {
+        definirGerenciandoProjetos(false);
+        const novo = dados.criarRascunho(modo, projeto);
+        definirModoInicial(modo);
+        definirAtivas((anteriores) => ({ ...anteriores, [modo]: novo.id }));
+        definirConfigurando(false);
+    }
+    function abrirProjetos(id: string | null = projetoAtual?.id ?? null) {
+        definirProjetoGerenciadoId(id);
+        definirConfigurando(false);
+        definirGerenciandoProjetos(true);
     }
     if (carregando) return <div className="tela-carregando">Abrindo a Selene</div>;
     return (
@@ -53,6 +81,7 @@ export function Aplicativo() {
                 estado={estado}
                 modo={modoInicial}
                 alterarModo={(modo) => {
+                    definirGerenciandoProjetos(false);
                     definirModoInicial(modo);
                     definirConfigurando(false);
                 }}
@@ -62,10 +91,12 @@ export function Aplicativo() {
                 ativa={ativa}
                 selecionar={selecionar}
                 configurar={configurar}
+                gerenciarProjetos={() => abrirProjetos()}
                 estatisticas={() => definirEstatisticasAbertas(true)}
-                atualizar={() => definirAtualizacoesAbertas(true)}
+                atualizar={() => void executar(() => ponte!.verificarAtualizacao())}
+                abrirRelease={(versao) => void executar(() => ponte!.abrirRelease(versao))}
                 excluirConcluidas={() => definirExcluindoConcluidas(true)}
-                configurando={configurando}
+                configurando={configurando || gerenciandoProjetos}
                 recolhida={recolhida}
                 alternar={() => {
                     definirRecolhida((anterior) => {
@@ -75,21 +106,12 @@ export function Aplicativo() {
                         return !anterior;
                     });
                 }}
-                criar={async (origemId) => {
-                    const nova = await executar(() =>
-                        ponte!.novaConversa(
-                            origemId ? 'code' : (conversa?.modo ?? modoInicial),
-                            origemId ?? conversa?.id,
-                        ),
+                criar={(origemId) => {
+                    const origem = estado.conversas.find((item) => item.id === origemId);
+                    const projeto = estado.projetos.find(
+                        (item) => item.id === origemId || item.caminho === (origem?.projeto ?? conversa?.projeto),
                     );
-                    if (nova) selecionar(nova.id);
-                }}
-                criarProjeto={async () => {
-                    const nova = await executar(() => ponte!.novaConversa('code'));
-                    if (!nova) return;
-                    const escolhido = await executar(() => ponte!.escolherProjeto(nova.id));
-                    if (escolhido) selecionar(nova.id);
-                    else await executar(() => ponte!.excluirConversa(nova.id));
+                    criar(projeto, origemId ? 'code' : modoInicial);
                 }}
                 exportar={(id) => {
                     void executar(() => ponte!.exportarConversa(id));
@@ -98,7 +120,18 @@ export function Aplicativo() {
             />
             <main className="area-principal">
                 <BarraJanela ponte={ponte}>
-                    {configurando ? (
+                    {gerenciandoProjetos ? (
+                        <>
+                            <button
+                                className="botao-icone"
+                                aria-label="Voltar à conversa"
+                                onClick={() => definirGerenciandoProjetos(false)}
+                            >
+                                <ArrowLeftIcon size={18} />
+                            </button>
+                            <h1 className="titulo-tela">Projetos</h1>
+                        </>
+                    ) : configurando ? (
                         <>
                             <button
                                 className="botao-icone"
@@ -110,22 +143,46 @@ export function Aplicativo() {
                             <h1 className="titulo-tela">Configurações</h1>
                         </>
                     ) : conversa ? (
-                        <input
-                            className="titulo-conversa"
-                            aria-label="Título da conversa"
-                            key={`${conversa.id}:${conversa.titulo}`}
-                            defaultValue={conversa.titulo}
-                            disabled={ocupado}
-                            onBlur={(evento) => {
-                                const titulo = evento.target.value.trim();
-                                if (titulo && titulo !== conversa.titulo) {
-                                    void executar(() => ponte!.alterarConversa(conversa.id, { titulo }));
-                                }
-                            }}
-                            onKeyDown={(evento) => {
-                                if (evento.key === 'Enter') evento.currentTarget.blur();
-                            }}
-                        />
+                        <nav className="breadcrumbs-conversa" aria-label="Localização da conversa">
+                            {modoInicial === 'code' ? (
+                                <button
+                                    className="breadcrumb-projeto"
+                                    title={conversa.projeto ?? undefined}
+                                    aria-label={
+                                        projetoAtual ? `Gerenciar projeto ${projetoAtual.nome}` : 'Gerenciar projetos'
+                                    }
+                                    onClick={() => abrirProjetos()}
+                                >
+                                    <IconeProjeto projeto={projetoAtual} tamanho={15} />
+                                    <span className="truncate">
+                                        {projetoAtual?.nome ?? conversa.projeto?.split(/[\\/]/).at(-1) ?? 'Sem projeto'}
+                                    </span>
+                                </button>
+                            ) : (
+                                <span className="breadcrumb-projeto">Chat</span>
+                            )}
+                            <CaretRightIcon size={12} aria-hidden="true" />
+                            <input
+                                className="titulo-conversa"
+                                aria-label="Título da conversa"
+                                key={`${conversa.id}:${conversa.titulo}`}
+                                defaultValue={conversa.titulo}
+                                disabled={ocupado}
+                                onBlur={(evento) => {
+                                    const titulo = evento.target.value.trim();
+                                    if (titulo && titulo !== conversa.titulo) {
+                                        if (dados.estadoPersistido.conversas.some((item) => item.id === conversa.id)) {
+                                            void executar(() => ponte!.alterarConversa(conversa.id, { titulo }));
+                                        } else {
+                                            dados.alterarRascunho(conversa, { titulo });
+                                        }
+                                    }
+                                }}
+                                onKeyDown={(evento) => {
+                                    if (evento.key === 'Enter') evento.currentTarget.blur();
+                                }}
+                            />
+                        </nav>
                     ) : (
                         <span className="texto-secundario">Selene</span>
                     )}
@@ -138,7 +195,7 @@ export function Aplicativo() {
                         </button>
                     </div>
                 )}
-                <div className="area-tela" hidden={configurando}>
+                <div className="area-tela" hidden={configurando || gerenciandoProjetos}>
                     {(['chat', 'code'] as const).map((modo) => (
                         <div className="area-tela" key={modo} hidden={modo !== modoInicial}>
                             <TelaConversa
@@ -147,23 +204,36 @@ export function Aplicativo() {
                                 ativa={ativas[modo]}
                                 selecionar={selecionar}
                                 configurar={configurar}
-                                visivel={!configurando && modo === modoInicial}
+                                visivel={!configurando && !gerenciandoProjetos && modo === modoInicial}
+                                adicionarProjeto={() => definirProjetosAbertos(true)}
                             />
                         </div>
                     ))}
                 </div>
+                {gerenciandoProjetos && (
+                    <TelaProjetos
+                        dados={dados}
+                        projetoId={projetoGerenciadoId}
+                        selecionarProjeto={definirProjetoGerenciadoId}
+                        adicionar={() => definirProjetosAbertos(true)}
+                        criar={(projeto) => criar(projeto, 'code')}
+                        selecionarConversa={selecionar}
+                    />
+                )}
                 {configuracoesMontadas && (
                     <div className="area-tela" hidden={!configurando}>
                         <Configuracoes estado={estado} ponte={ponte} executar={executar} />
                     </div>
                 )}
             </main>
-            {estatisticasAbertas && <Estatisticas estado={estado} fechar={() => definirEstatisticasAbertas(false)} />}
-            {atualizacoesAbertas && (
-                <Modal titulo="Atualizações" fechar={() => definirAtualizacoesAbertas(false)}>
-                    <p className="texto-secundario">A fonte de atualizações ainda não foi configurada.</p>
-                </Modal>
+            {projetosAbertos && (
+                <AdicionarProjeto
+                    dados={dados}
+                    fechar={() => definirProjetosAbertos(false)}
+                    selecionar={(projeto) => criar(projeto, 'code')}
+                />
             )}
+            {estatisticasAbertas && <Estatisticas estado={estado} fechar={() => definirEstatisticasAbertas(false)} />}
             {excluindoConcluidas && (
                 <Modal
                     titulo="Apagar todos os chats concluídos?"
@@ -216,8 +286,15 @@ export function Aplicativo() {
                             disabled={estado.conversaEmExecucao === excluindo.id}
                             onClick={() =>
                                 executar(async () => {
+                                    if (!dados.estadoPersistido.conversas.some((item) => item.id === excluindo.id)) {
+                                        dados.removerRascunho(excluindo.id);
+                                        definirAtivas((anteriores) => ({ ...anteriores, [excluindo.modo]: null }));
+                                        definirExcluindo(null);
+                                        return { ok: true, valor: undefined };
+                                    }
                                     const resultado = await ponte!.excluirConversa(excluindo.id);
                                     if (resultado.ok) {
+                                        dados.removerRascunho(excluindo.id);
                                         definirAtivas((anteriores) => ({
                                             chat: anteriores.chat === excluindo.id ? null : anteriores.chat,
                                             code: anteriores.code === excluindo.id ? null : anteriores.code,

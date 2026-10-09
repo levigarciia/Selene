@@ -1,6 +1,5 @@
 import {
     ChatCircleIcon,
-    CodeIcon,
     CircleNotchIcon,
     TerminalIcon,
     ClockIcon,
@@ -8,10 +7,12 @@ import {
     StopCircleIcon,
     CheckCircleIcon,
     PlusIcon,
+    PencilSimpleIcon,
     CheckIcon,
     ArrowCounterClockwiseIcon,
 } from '@phosphor-icons/react';
 import type { Conversa, Estado } from '../../shared/contratos';
+import { IconeProjeto } from './IconeProjeto';
 import { obterAtividadeConversa, tempoConversa } from '../../shared/historico';
 import type { PosicaoMenuConversa } from './MenuConversa';
 
@@ -38,9 +39,10 @@ export function LinhaConversaSidebar({
     const atividade = obterAtividadeConversa(conversa, estado.conversaEmExecucao);
     const mensagem = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
     const modelo = estado.modelos.find((item) => item.id === conversa.modeloId);
+    const projeto = estado.projetos.find((item) => item.id === conversa.projetoId || item.caminho === conversa.projeto);
     const encerrada = conversa.concluida && !atividade.ocupada;
     const pronta = conversa.modo === 'code' && !encerrada && atividade.fase === 'concluida';
-    const destacar = atividade.ocupada || pronta || atividade.fase === 'erro' || atividade.fase === 'interrompida';
+    const destacar = atividade.ocupada || pronta || ['erro', 'interrompida', 'rascunho'].includes(atividade.fase);
     const comando =
         atividade.ocupada &&
         mensagem?.acoes.find((item) => item.nome === 'executar_terminal' && item.estado === 'executando');
@@ -55,10 +57,12 @@ export function LinhaConversaSidebar({
                   ? StopCircleIcon
                   : atividade.ocupada
                     ? CircleNotchIcon
-                    : atividade.fase === 'nova'
-                      ? PlusIcon
-                      : CheckCircleIcon;
-    const permiteAcao = conversa.modo === 'code' && !atividade.ocupada && !recolhida;
+                    : atividade.fase === 'rascunho'
+                      ? PencilSimpleIcon
+                      : atividade.fase === 'nova'
+                        ? PlusIcon
+                        : CheckCircleIcon;
+    const permiteAcao = conversa.modo === 'code' && !!conversa.mensagens.length && !atividade.ocupada && !recolhida;
     return (
         <div className={`linha-sidebar ${permiteAcao ? 'linha-sidebar-acoes' : ''}`}>
             <button
@@ -84,7 +88,7 @@ export function LinhaConversaSidebar({
             >
                 {encerrada && !recolhida ? (
                     <>
-                        <CodeIcon size={14} />
+                        <IconeProjeto projeto={projeto} tamanho={14} />
                         <span className="truncate">{conversa.titulo}</span>
                         <small className="tempo-encerrada">
                             {tempoConversa(conversa.encerradaEm ?? conversa.atualizadoEm, agora)}
@@ -102,8 +106,18 @@ export function LinhaConversaSidebar({
                 ) : (
                     <>
                         <span className="linha-projeto-conversa">
-                            {conversa.modo === 'code' ? <CodeIcon size={14} /> : <ChatCircleIcon size={14} />}
-                            <span className="truncate">{conversa.projeto?.split(/[\\/]/).at(-1) || 'Sem projeto'}</span>
+                            {conversa.modo === 'code' ? (
+                                <IconeProjeto projeto={projeto} tamanho={14} />
+                            ) : (
+                                <ChatCircleIcon size={14} />
+                            )}
+                            <span className="truncate">
+                                {estado.projetos.find(
+                                    (item) => item.id === conversa.projetoId || item.caminho === conversa.projeto,
+                                )?.nome ??
+                                    conversa.projeto?.split(/[\\/]/).at(-1) ??
+                                    'Sem projeto'}
+                            </span>
                             <span className={`estado-conversa estado-${atividade.fase}`}>
                                 {destacar && <Icone size={13} className={Icone === CircleNotchIcon ? 'girando' : ''} />}
                                 {destacar ? <span>{atividade.nome}</span> : tempoConversa(conversa.atualizadoEm, agora)}
@@ -139,7 +153,7 @@ export function LinhaConversaSidebar({
                     </>
                 )}
             </button>
-            {conversa.modo === 'code' && !recolhida && (
+            {conversa.modo === 'code' && !!conversa.mensagens.length && !recolhida && (
                 <button
                     className="botao-icone acao-hover-conversa"
                     disabled={atividade.ocupada}

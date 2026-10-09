@@ -20,7 +20,8 @@ test('somente processamento, contexto e camadas exigem recarregar o motor', () =
     expect(mesmaConfiguracaoMotor(atual, { ...atual, limitesAutomaticos: false })).toBe(false);
     const manual = { ...atual, limitesAutomaticos: false };
     expect(mesmaConfiguracaoMotor(manual, { ...manual, contexto: 4096 })).toBe(false);
-    expect(mesmaConfiguracaoMotor(atual, { ...atual, camadasGpu: 20 })).toBe(false);
+    expect(mesmaConfiguracaoMotor(atual, { ...atual, camadasGpu: 20 })).toBe(true);
+    expect(mesmaConfiguracaoMotor(manual, { ...manual, camadasGpu: 20 })).toBe(false);
 });
 
 const pastas: string[] = [];

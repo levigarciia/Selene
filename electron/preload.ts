@@ -2,11 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { Evento, PonteSelene } from '../shared/contratos';
 
 const ponte: PonteSelene = {
+    salvarIconeProjeto: (id, icone) => ipcRenderer.invoke('selene:salvarIconeProjeto', id, icone),
+    importarIconeProjeto: (id) => ipcRenderer.invoke('selene:importarIconeProjeto', id),
     adicionarProjeto: (entrada) => ipcRenderer.invoke('selene:adicionarProjeto', entrada),
     alterarProjeto: (id, nome) => ipcRenderer.invoke('selene:alterarProjeto', id, nome),
     removerProjeto: (id) => ipcRenderer.invoke('selene:removerProjeto', id),
     promoverRascunho: (entrada) => ipcRenderer.invoke('selene:promoverRascunho', entrada),
     verificarAtualizacao: () => ipcRenderer.invoke('selene:verificarAtualizacao'),
+    abrirRelease: (versao) => ipcRenderer.invoke('selene:abrirRelease', versao),
     estado: () => ipcRenderer.invoke('selene:estado'),
     novaConversa: (modo, origemId) => ipcRenderer.invoke('selene:nova', modo, origemId),
     alterarConversa: (id, alteracao) => ipcRenderer.invoke('selene:alterar', id, alteracao),

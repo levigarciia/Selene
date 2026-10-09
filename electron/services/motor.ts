@@ -7,7 +7,7 @@ import { instalarRuntime, localizarServidor, pastaRuntime } from './instalador';
 import { encerrarProcesso } from './processos';
 import { detectarBackend, detectarDispositivo } from './dispositivosMotor';
 import { mesmaConfiguracaoMotor } from '../../shared/configuracaoMotor';
-import { contextoAposFalha, contextoDoServidor } from './limitesModelo';
+import { argumentosMemoriaMotor, contextoAposFalha, contextoDoServidor } from './limitesModelo';
 import { prepararProjetorVisual } from './projetorVisual';
 
 async function reservarPorta(): Promise<number> {
@@ -143,12 +143,9 @@ export class MotorLocal {
                     String(this.porta),
                     '--api-key',
                     this.chave,
-                    '-c',
-                    String(configuracao.limitesAutomaticos ? contextoTentado : configuracao.contexto),
                     '-np',
                     '1',
-                    '-ngl',
-                    backend === 'cpu' ? '0' : String(configuracao.camadasGpu),
+                    ...argumentosMemoriaMotor(configuracao, backend, contextoTentado, !!projetorVisual),
                     '--jinja',
                     '--no-webui',
                     ...(projetorVisual ? ['--mmproj', projetorVisual] : []),

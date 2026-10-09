@@ -8,11 +8,13 @@ export function MenuContexto({
     titulo,
     fechar,
     children,
+    classe,
 }: {
     posicao: PosicaoMenu;
     titulo: string;
     fechar: () => void;
     children: ReactNode;
+    classe?: string;
 }) {
     const raiz = useRef<HTMLDivElement>(null);
     useLayoutEffect(() => {
@@ -20,7 +22,8 @@ export function MenuContexto({
         const tamanho = elemento.getBoundingClientRect();
         elemento.style.left = `${Math.max(8, Math.min(posicao.x, window.innerWidth - tamanho.width - 8))}px`;
         elemento.style.top = `${Math.max(8, Math.min(posicao.y, window.innerHeight - tamanho.height - 8))}px`;
-        elemento.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+        const selecionado = elemento.querySelector<HTMLButtonElement>('button[aria-checked="true"]');
+        (selecionado ?? elemento.querySelector<HTMLButtonElement>('button:not(:disabled)'))?.focus();
     }, [posicao]);
     useEffect(() => {
         const fora = (evento: MouseEvent) => {
@@ -46,7 +49,7 @@ export function MenuContexto({
     return (
         <div
             ref={raiz}
-            className="menu-conversa"
+            className={`menu-conversa ${classe ?? ''}`}
             role="menu"
             aria-label={titulo}
             onKeyDown={(evento) => {

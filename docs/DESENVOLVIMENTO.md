@@ -59,8 +59,8 @@ A Selene foi refeita. A branch [main](https://github.com/levigarciia/Selene/tree
 A implementação anterior e seu histórico estão preservados na branch
 [old](https://github.com/levigarciia/Selene/tree/old). As releases antigas continuam disponíveis.
 
-O remake usa dados próprios em `%APPDATA%/SeleneRemake`. Conversas e configurações da versão anterior
-não são migradas automaticamente. A atualização não apaga os dados antigos.
+A Selene usa `%APPDATA%/Selene` para seus dados locais. Os dados anteriormente salvos em
+`%APPDATA%/SeleneRemake` permanecem nessa pasta e não são transferidos automaticamente.
 Recursos antigos que ainda não foram implementados não fazem parte desta versão.
 
 ## Desenvolvimento
@@ -96,7 +96,7 @@ para publicar releases. Nenhum token do GitHub é incorporado ao aplicativo dist
 * `tests`: testes automatizados.
 * `docs`: instruções do projeto, paridade funcional e evidências de validação.
 
-Conversas e configurações ficam em `%APPDATA%/SeleneRemake/selene.json`.
+Conversas e configurações ficam em `%APPDATA%/Selene/selene.json`.
 Modelos baixados, motor e anexos também ficam nos dados locais do aplicativo.
 GGUF importados permanecem na pasta original. Remover a referência de uma importação preserva seu arquivo.
 Excluir um modelo baixado pela Selene remove o arquivo gerenciado.

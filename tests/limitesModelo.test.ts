@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { contextoAposFalha, contextoDoServidor } from '../electron/services/limitesModelo';
+import { argumentosMemoriaMotor, contextoAposFalha, contextoDoServidor } from '../electron/services/limitesModelo';
 import { esquemaConfiguracao } from '../shared/contratos';
 import { esquemaConversa } from '../shared/contratos';
 import { randomUUID } from 'node:crypto';
@@ -19,6 +19,32 @@ test('reduz contexto apenas em falhas de memória e encerra as tentativas no lim
     expect(contextoAposFalha('out of memory', 16384)).toBe(8192);
     expect(contextoAposFalha('out of memory', 2048)).toBeNull();
     expect(contextoAposFalha('modelo inválido', 8192)).toBeNull();
+    expect(contextoAposFalha('n_ctx_train = 262144\nn_ctx = 8192\nErrorOutOfDeviceMemory', 0)).toBe(4096);
+    expect(contextoAposFalha('n_ctx = 2048\nfailed to allocate Vulkan0 buffer', 0)).toBeNull();
+});
+
+test('libera contexto e camadas para ajustar o modelo à VRAM disponível', () => {
+    const configuracao = esquemaConfiguracao.parse({ camadasGpu: 99 });
+    for (const backend of ['vulkan', 'rocm'] as const) {
+        const argumentos = argumentosMemoriaMotor(configuracao, backend);
+        expect(argumentos).not.toContain('-c');
+        expect(argumentos[argumentos.indexOf('-ngl') + 1]).toBe('auto');
+        expect(argumentos[argumentos.indexOf('--fit') + 1]).toBe('on');
+        expect(argumentos[argumentos.indexOf('--fit-ctx') + 1]).toBe('2048');
+        expect(argumentos[argumentos.indexOf('--fit-target') + 1]).toBe('1024');
+    }
+    const visual = argumentosMemoriaMotor(configuracao, 'vulkan', 4096, true);
+    expect(visual[visual.indexOf('--fit-target') + 1]).toBe('2048');
+    expect(visual[visual.indexOf('-c') + 1]).toBe('4096');
+    expect(visual[visual.indexOf('-ngl') + 1]).toBe('auto');
+    const cpu = argumentosMemoriaMotor(configuracao, 'cpu');
+    expect(cpu[cpu.indexOf('-ngl') + 1]).toBe('0');
+});
+
+test('preserva contexto e camadas explícitos no modo manual sem ajuste de memória', () => {
+    const configuracao = esquemaConfiguracao.parse({ limitesAutomaticos: false, contexto: 8192, camadasGpu: 20 });
+    expect(argumentosMemoriaMotor(configuracao, 'vulkan')).toEqual(['-c', '8192', '-ngl', '20', '--fit', 'off']);
+    expect(argumentosMemoriaMotor(configuracao, 'cpu')).toEqual(['-c', '8192', '-ngl', '0', '--fit', 'off']);
 });
 
 test('resposta usa o contexto carregado em vez do limite manual antigo', async () => {

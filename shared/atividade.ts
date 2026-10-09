@@ -31,10 +31,10 @@ export function montarAtividade(mensagem: Mensagem, limite = mensagem.texto.leng
 
 /** Obtém somente o último plano validado e executado para acompanhar uma tarefa. */
 export function obterPlano(mensagem?: Mensagem) {
-    const acao = mensagem?.acoes
-        .slice()
-        .reverse()
-        .find((item) => item.nome === 'atualizar_plano' && item.estado === 'concluida');
-    const resultado = esquemaPlano.safeParse(acao?.argumentos);
-    return resultado.success ? resultado.data.etapas : [];
+    for (const acao of mensagem?.acoes.slice().reverse() ?? []) {
+        if (acao.nome !== 'atualizar_plano' || acao.estado !== 'concluida') continue;
+        const resultado = esquemaPlano.safeParse(acao.argumentos);
+        if (resultado.success) return resultado.data.etapas;
+    }
+    return [];
 }

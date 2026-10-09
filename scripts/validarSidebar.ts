@@ -75,6 +75,7 @@ try {
         rodape: document.querySelector('.rodape-sidebar')!.getBoundingClientRect().top,
     }));
     assert.ok(posicoes.concluidas - posicoes.atual > 200);
+    assert.equal(await pagina.locator('.grupo-projeto').count(), 0);
     assert.ok(posicoes.rodape - posicoes.concluidas < 80);
     assert.equal(await pagina.locator('.rodape-sidebar button').count(), 3);
     assert.equal((await pagina.locator('.rodape-sidebar').innerText()).trim(), '');
@@ -96,12 +97,13 @@ try {
         await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).inputValue(),
         'Rascunho Code preservado',
     );
+    await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).fill('');
     await pagina.getByRole('button', { name: 'Conversa Code 1', exact: true }).click({ button: 'right' });
     await pagina.getByRole('menuitem', { name: 'Concluir conversa', exact: true }).click();
     await grupo.getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
     await grupo.getByRole('button', { name: 'Conversa Code 1', exact: true }).click({ button: 'right' });
     await pagina.getByRole('menuitem', { name: 'Retomar conversa', exact: true }).click();
-    await pagina.locator('.grupo-atuais').getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
+    await pagina.locator('.historico').getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
     const linha = pagina.locator('.linha-sidebar').filter({
         has: pagina.getByRole('button', { name: 'Conversa Code 1', exact: true }),
     });
@@ -110,7 +112,7 @@ try {
     await grupo.getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
     await linha.hover();
     await linha.getByRole('button', { name: 'Retomar conversa: Conversa Code 1', exact: true }).click();
-    await pagina.locator('.grupo-atuais').getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
+    await pagina.locator('.historico').getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
     await pagina.getByRole('button', { name: 'Nova conversa', exact: true }).click();
     const estadoNovo = await pagina.evaluate(() => window.selene!.estado());
     assert.ok(estadoNovo.ok);
@@ -120,7 +122,10 @@ try {
     await app.evaluate(({ dialog }) => {
         dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
     });
-    await pagina.getByRole('button', { name: 'Adicionar projeto', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Projeto da conversa', exact: true }).click();
+    await pagina.getByRole('menuitem', { name: 'Adicionar projeto', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Abrir pasta existente', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Fechar diálogo', exact: true }).click();
     await pagina.waitForFunction(
         (quantidade) =>
             window
@@ -179,7 +184,7 @@ try {
         { ...base.valor, conversaEmExecucao: null },
     );
     await pagina
-        .locator('.grupo-atuais')
+        .locator('.historico')
         .getByRole('button', { name: 'Conversa Code 1', exact: true })
         .getByText('Pronto', { exact: true })
         .waitFor();
@@ -210,9 +215,10 @@ try {
     await estatisticas.getByRole('button', { name: 'Mês', exact: true }).click();
     await estatisticas.getByRole('button', { name: 'Total', exact: true }).click();
     await pagina.keyboard.press('Escape');
-    await pagina.getByRole('button', { name: 'Procurar atualizações', exact: true }).click();
-    await pagina.getByText('A fonte de atualizações ainda não foi configurada.', { exact: true }).waitFor();
-    await pagina.keyboard.press('Escape');
+    assert.equal(
+        await pagina.getByRole('button', { name: 'Procurar atualizações', exact: true }).getAttribute('aria-disabled'),
+        'true',
+    );
     await pagina.getByRole('button', { name: 'Concluídas', exact: true }).click({ button: 'right' });
     await pagina.getByRole('menuitem', { name: 'Apagar todos os chats concluídos', exact: true }).click();
     await pagina.getByRole('button', { name: 'Cancelar', exact: true }).click();

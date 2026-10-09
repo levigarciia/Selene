@@ -64,7 +64,9 @@ export const ferramentas = [
     ),
     definir(
         'atualizar_plano',
-        'Mostra ao usuário as etapas e o andamento do trabalho.',
+        'Registra os objetivos do trabalho e atualiza seu progresso. Envie o plano completo a cada atualização. ' +
+            'Use resultados a alcançar, sem listar cada comando, leitura ou caminho de arquivo. ' +
+            'Mantenha no máximo um objetivo em andamento e conclua apenas objetivos realizados.',
         {
             etapas: {
                 type: 'array',

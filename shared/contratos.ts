@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { EstadoAtualizacao } from './atualizacoes';
+import { esquemaIconeProjeto, type IconeDeProjeto } from './iconesProjetos';
 
 export const esquemaModelo = z.object({
     id: z.string().uuid(),
@@ -95,6 +96,7 @@ export const esquemaConversa = z.object({
     projeto: z.string().nullable().default(null),
     projetoId: z.string().uuid().nullable().optional(),
     rascunho: z.string().max(30000).optional(),
+    anexosRascunho: z.number().int().min(0).max(4).optional(),
     pastaTrabalho: z.string().min(1).optional(),
     acessoCompleto: z.boolean().default(false),
     modeloId: z.string().uuid().nullable().default(null),
@@ -116,7 +118,10 @@ export const esquemaProjeto = z.object({
     nome: z.string().trim().min(1).max(100),
     caminho: z.string().min(1),
     origem: z.enum(['pasta', 'criado', 'clonado']).default('pasta'),
+    oculto: z.boolean().optional(),
+    icone: esquemaIconeProjeto.nullable().optional(),
     criadoEm: z.string().datetime(),
+    aviso: z.string().optional(),
 });
 export type Projeto = z.infer<typeof esquemaProjeto>;
 export const esquemaNovoProjeto = z.discriminatedUnion('tipo', [
@@ -126,8 +131,15 @@ export const esquemaNovoProjeto = z.discriminatedUnion('tipo', [
 ]);
 export type NovoProjeto = z.infer<typeof esquemaNovoProjeto>;
 export const esquemaRascunho = esquemaConversa.pick({
-    id: true, titulo: true, modo: true, projeto: true, projetoId: true,
-    modeloId: true, nivelRaciocinio: true, acessoCompleto: true, rascunho: true,
+    id: true,
+    titulo: true,
+    modo: true,
+    projeto: true,
+    projetoId: true,
+    modeloId: true,
+    nivelRaciocinio: true,
+    acessoCompleto: true,
+    rascunho: true,
 });
 export const esquemaDados = z.object({
     versao: z.literal(1),
@@ -191,11 +203,14 @@ export const esquemaAlteracao = z
     .partial();
 
 export interface PonteSelene {
+    salvarIconeProjeto(id: string, icone: IconeDeProjeto | null): Promise<Resultado<void>>;
+    importarIconeProjeto(id: string): Promise<Resultado<boolean>>;
     adicionarProjeto(entrada: NovoProjeto): Promise<Resultado<Projeto | null>>;
     alterarProjeto(id: string, nome: string): Promise<Resultado<void>>;
     removerProjeto(id: string): Promise<Resultado<void>>;
     promoverRascunho(entrada: z.infer<typeof esquemaRascunho>): Promise<Resultado<Conversa>>;
     verificarAtualizacao(): Promise<Resultado<void>>;
+    abrirRelease(versao?: string): Promise<Resultado<void>>;
     estado(): Promise<Resultado<Estado>>;
     novaConversa(modo: 'chat' | 'code', origemId?: string): Promise<Resultado<Conversa>>;
     alterarConversa(id: string, alteracao: z.infer<typeof esquemaAlteracao>): Promise<Resultado<void>>;

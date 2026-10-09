@@ -182,6 +182,21 @@ Data: 9 de outubro de 2026.
 * A suíte desktop geral teve timeout ao aguardar o texto do seletor de permissões, fora do fluxo de imagens.
 * Executável corrigido: `release/visao/Selene.exe`. A instância aberta permaneceu disponível durante a validação.
 
+## Projetos e rascunhos em 9 de outubro de 2026
+
+* TypeScript, 73 testes unitários e build aprovados.
+* `bun run test:projetos`: cadastro independente, migração, criação com Git, renomeação, recolhimento,
+  seleção e remoção preservando arquivos e conversas passaram no Electron.
+* Uma execução com `SELENE_TESTE_CLONE=1` clonou `octocat/Hello-World` por HTTPS e conferiu seu README.
+* Cliques repetidos em Nova conversa não criaram conversas nem linhas vazias na sidebar.
+* Dois rascunhos Chat, um rascunho Code por projeto e texto pendente em conversa existente sobreviveram
+  ao reinício e foram restaurados pela sidebar. Limpar o texto removeu a linha do rascunho vazio.
+* `bun scripts/testarDesktop.ts scripts/validarEnvioRascunho.ts`: falha preservou texto, nova tentativa
+  manteve o identificador e envio confirmado limpou o rascunho. Texto alterado durante o envio foi preservado.
+* O envio desse teste utilizou respostas IPC controladas. Não foi executada uma nova geração com GGUF real.
+* `bun run test:sidebar`: navegação, categorias de atividade, conclusão, retomada e estatísticas passaram.
+* O texto de rascunhos é persistente. Anexos não enviados permanecem disponíveis durante a sessão.
+
 ## Distribuição do remake em 9 de outubro de 2026
 
 * `bun run verificar`, `bun test` e `bun run build`: aprovados, com 65 testes.
@@ -195,3 +210,59 @@ Data: 9 de outubro de 2026.
 * A entrega entre duas instalações reais ainda não foi validada. A primeira publicação será acompanhada
   pelo GitHub Actions. As instalações antigas dependem da preferência de atualização já habilitada.
 * A branch `old` preserva o commit remoto `ec2d8a2513a620db0388bc161c9df3cea25dbe48`.
+
+## Detalhes de releases na sidebar em 9 de outubro de 2026
+
+* Referência inspecionada: `SidebarUpdatePill.tsx`, `SidebarUpdateReleaseNotes.tsx` e `releaseNotes.ts`
+  na cópia local `D:/Saas/t3code-main/t3code-main`.
+* Atualizador: histórico completo habilitado; notas aceitam texto ou grupos por versão, com remoção de HTML
+  e limites de seis versões, oito itens por versão e 220 caracteres por item.
+* Cinco testes de atualização aprovados. Cobrem preservação das notas durante o download, recuperação após
+  falha, normalização do histórico e restrição de links ao repositório oficial.
+* `bun run build`: aprovado. `bun scripts/testarDesktop.ts scripts/validarAtualizacoes.ts`: aprovado.
+  O teste da interface usa dados de release simulados, com o aplicativo Electron e sua ponte IPC reais.
+* Interface validada com mouse e teclado, Escape, abertura do link oficial por shell simulado,
+  progresso de download e sidebar recolhida em 840 por 620 pixels. Capturas em `artifacts/selene-atualizacao*.png`.
+* A suíte completa do workspace teve uma falha em `tests/nucleo.test.ts`, por `projetoId` adicional no estado
+  persistido. O teste desktop anterior também falhou ao acessar a primeira conversa após criar um rascunho.
+  Essas áreas estão em alteração no workspace e não fazem parte da validação do fluxo de atualizações.
+* As próximas publicações gerarão notas com os títulos dos commits desde a release anterior.
+  Nenhuma nova release foi publicada durante esta alteração.
+
+## Seleção de projeto e breadcrumbs em 9 de outubro de 2026
+
+* Menu compacto conforme a imagem fornecida, com Sem projeto, projetos cadastrados e Adicionar projeto.
+* Sidebar sem grupos de projeto e sem botão de cadastro. Conversas atuais permanecem na lista direta.
+* Breadcrumbs com projeto e título editável da conversa no topo.
+* `bun run verificar`, `bun test` e `bun run build`: aprovados, com 73 testes.
+* `bun run test:projetos`: aprovado no Electron. Seleção por mouse e teclado, opção Sem projeto,
+  breadcrumbs, persistência de rascunhos e remoção preservando arquivos validados.
+* `bun run test:sidebar`: aprovado no Electron, incluindo categorias, estados, conclusão e reinício.
+* Captura conferida em `artifacts/selene-projetos-rascunhos.png`.
+
+## Ajuste de memória do motor em 9 de outubro de 2026
+
+* Erro recebido na GTX 1660: falha de alocação Vulkan do cache do Qwen3.5 9B.
+  O padrão de 99 camadas impedia o ajuste automático da distribuição dos pesos.
+* Contexto e camadas automáticos agora permitem ao llama.cpp ajustar a carga à memória livre.
+  A margem é de 1024 MiB, ou 2048 MiB com projetor visual. O modo manual preserva seus limites.
+* `bun run verificar`, `bun test`, `bun run build` e `git diff --check`: aprovados, com 75 testes.
+* `bun scripts/validarMotor.ts`: aprovado com GGUF real e ROCm na RX 7700 XT.
+  Cancelamento, GGUF inválido, recuperação, três respostas e encerramento foram validados.
+* `MotorLocal` com Vulkan e o projetor visual gerou uma resposta com contexto de 94976 tokens na RX 7700 XT.
+* Teste nativo Vulkan com contexto de 2048 e margem ampliada para limitar o orçamento da GPU:
+  resposta gerada com 8 das 33 camadas na GPU e os demais pesos na RAM.
+  Registro em `artifacts/validacao-memoria-vulkan.log`; roteiro local em `.teste-dados/validarMemoria.ts`.
+* O orçamento reduzido exercita o ajuste de memória na Radeon disponível. Não simula o driver NVIDIA
+  e não confirma a execução na GTX 1660. Nenhuma nova release foi publicada nesta validação.
+
+## Gerenciamento de projetos em 9 de outubro de 2026
+
+* Pasta da sidebar e breadcrumb abrem a tela de gerenciamento.
+* Nome, símbolo, cor, iniciais, imagem e restauração do ícone persistem no cadastro.
+* `bun run build` e `bun test`: aprovados, com 82 testes.
+* `bun run test:gerenciamento`: aprovado no Electron. Verifica rascunho preservado, importação
+  cancelada, arquivo original intacto, propagação aos chats e persistência após reiniciar.
+* Capturas conferidas em `artifacts/selene-gerenciamento-projeto.png` e
+  `artifacts/selene-gerenciamento-projeto-estreito.png`, sem excesso horizontal em 420 pixels.
+* Projeto repetido abaixo da breadcrumb removido das conversas com mensagens.

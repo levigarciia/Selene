@@ -6,6 +6,6 @@ export function mesmaConfiguracaoMotor(anterior: Configuracao, atual: Configurac
         anterior.backend === atual.backend &&
         anterior.limitesAutomaticos === atual.limitesAutomaticos &&
         (atual.limitesAutomaticos || anterior.contexto === atual.contexto) &&
-        anterior.camadasGpu === atual.camadasGpu
+        (atual.limitesAutomaticos || anterior.camadasGpu === atual.camadasGpu)
     );
 }

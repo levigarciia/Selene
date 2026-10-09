@@ -58,8 +58,8 @@ bun scripts/medirMotor.ts
 Para validar o motor integrado, cancelamento da carga, falha de inicialização e encerramento:
 
 ```powershell
-$env:SELENE_TESTE_GGUF = "$env:APPDATA/SeleneRemake/models/qwen3.5-9b-q4.gguf"
-$env:SELENE_TESTE_RUNTIME = "$env:APPDATA/SeleneRemake/runtime"
+$env:SELENE_TESTE_GGUF = "$env:APPDATA/Selene/models/qwen3.5-9b-q4.gguf"
+$env:SELENE_TESTE_RUNTIME = "$env:APPDATA/Selene/runtime"
 bun scripts/validarMotor.ts
 ```
 

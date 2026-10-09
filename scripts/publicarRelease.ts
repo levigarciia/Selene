@@ -23,13 +23,19 @@ const arquivos = (await readdir('release'))
     .filter((nome) => nome.endsWith('.exe') || nome.endsWith('.blockmap') || nome === 'latest.yml')
     .map((nome) => `release/${nome}`);
 if (arquivos.length !== 3) throw new Error('A distribuição precisa de instalador, blockmap e latest.yml.');
+const anterior = JSON.parse(await executar(['api', `repos/${repositorio}/releases/latest`]));
+const comparacao = JSON.parse(
+    await executar(['api', `repos/${repositorio}/compare/${encodeURIComponent(anterior.tag_name)}...${commit}`]),
+);
+const novidades = comparacao.commits
+    .map((item: { commit: { message: string } }) => item.commit.message.split('\n')[0].trim())
+    .filter(Boolean);
+const resumo = [...new Set<string>(novidades)].map((titulo) => `* ${titulo}`).join('\n');
 await Bun.write(
     'release/notas.md',
-    `Distribuição automática da Selene para Windows x64.\n\n` +
-        `Código publicado: ${commit}.\n\n` +
-        `Instale o arquivo Selene Setup para receber as próximas atualizações automaticamente.\n` +
-        `A versão anterior permanece na branch [old](https://github.com/${repositorio}/tree/old).\n` +
-        `Os dados antigos permanecem no computador, sem migração automática para esta versão.\n`,
+    `## Novidades\n\n${resumo || '* Atualização da Selene.'}\n\n` +
+        `Consulte [as alterações completas](https://github.com/${repositorio}/compare/` +
+        `${encodeURIComponent(anterior.tag_name)}...${tag}).\n`,
 );
 const consulta = Bun.spawn(['gh', 'release', 'view', tag, '--json', 'isDraft'], { stdout: 'pipe', stderr: 'pipe' });
 const [conteudo, erroConsulta, codigoConsulta] = await Promise.all([

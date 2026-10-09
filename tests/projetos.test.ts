@@ -5,6 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { esquemaConversa } from '../shared/contratos';
 import { prepararPastaTrabalho } from '../electron/services/projetos';
+import {
+    cadastrarProjeto,
+    criarProjetoGerenciado,
+    migrarProjetos,
+    validarUrlRepositorio,
+} from '../electron/services/projetos';
+import { esquemaDados } from '../shared/contratos';
 import { prepararFerramenta } from '../electron/services/ferramentas';
 import { Persistencia } from '../electron/services/persistencia';
 
@@ -59,4 +66,70 @@ test('conversas sem projeto isolam arquivos, exigem aprovação e retomam a mesm
     expect(await leitura.executar(new AbortController().signal)).toContain('Persistente');
     primeira.id = '../fora';
     await expect(prepararPastaTrabalho(primeira, dados)).rejects.toThrow();
+});
+
+test('o cadastro deduplica pastas e preserva projetos sem conversas após reiniciar', async () => {
+    const pasta = await mkdtemp(join(tmpdir(), 'selene-cadastro-'));
+    pastas.push(pasta);
+    const dados = esquemaDados.parse({ versao: 1, configuracao: {}, modelos: [], conversas: [] });
+    const primeiro = await cadastrarProjeto(dados, pasta);
+    expect((await cadastrarProjeto(dados, pasta)).id).toBe(primeiro.id);
+    expect(dados.projetos).toHaveLength(1);
+    const persistencia = new Persistencia(pasta);
+    persistencia.dados = dados;
+    await persistencia.salvar();
+    const restaurada = new Persistencia(pasta);
+    await restaurada.abrir();
+    expect(restaurada.dados.projetos[0].id).toBe(primeiro.id);
+    primeiro.oculto = true;
+    expect((await cadastrarProjeto(dados, pasta)).oculto).toBe(false);
+});
+
+test('projetos legados são cadastrados uma vez e ligados às suas conversas', () => {
+    const dados = esquemaDados.parse({
+        versao: 1,
+        configuracao: {},
+        modelos: [],
+        conversas: [
+            {
+                id: randomUUID(),
+                titulo: 'Legado',
+                modo: 'code',
+                projeto: 'D:\\Projetos\\Legado',
+                atualizadoEm: new Date().toISOString(),
+            },
+        ],
+    });
+    migrarProjetos(dados);
+    migrarProjetos(dados);
+    expect(dados.projetos).toHaveLength(1);
+    expect(dados.conversas[0].projetoId).toBe(dados.projetos[0].id);
+});
+
+test('criar projetos reserva pastas próprias mesmo com nomes iguais ou caracteres de caminho', async () => {
+    const pasta = await mkdtemp(join(tmpdir(), 'selene-criacao-'));
+    pastas.push(pasta);
+    const dados = esquemaDados.parse({ versao: 1, configuracao: {}, modelos: [], conversas: [] });
+    const entrada = { tipo: 'criar' as const, nome: '../Projeto' };
+    const primeiro = await criarProjetoGerenciado(dados, pasta, entrada);
+    const segundo = await criarProjetoGerenciado(dados, pasta, entrada);
+    expect(primeiro.caminho).not.toBe(segundo.caminho);
+    expect(primeiro.caminho.startsWith(join(pasta, 'projects'))).toBe(true);
+    expect(await readFile(join(primeiro.caminho, 'README.md'), 'utf8')).toContain('../Projeto');
+    expect(dados.conversas).toHaveLength(0);
+});
+
+test('a clonagem recusa caminhos locais, opções e URLs com credenciais antes de executar Git', () => {
+    for (const url of [
+        'file:///C:/dados',
+        '--upload-pack=malicioso',
+        'http://github.com/a/b',
+        'https://usuario:senha@github.com/a/b',
+        'https://github.com/a/b?token=segredo',
+    ]) {
+        expect(() => validarUrlRepositorio(url)).toThrow();
+    }
+    expect(validarUrlRepositorio('https://github.com/octocat/Hello-World.git')).toBe(
+        'https://github.com/octocat/Hello-World.git',
+    );
 });
