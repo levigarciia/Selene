@@ -105,10 +105,7 @@ export class CompactadorContexto {
             throw new Error('A mensagem ou as imagens excedem o contexto disponível. Reduza o envio.');
         }
         if (estimarTokens([...sistema, pedido], ferramentas) + reservaResumo * 2 > limite) {
-            throw new Error(
-                'A mensagem, as imagens ou as instruções excedem o contexto. ' +
-                    'Reduza o envio.',
-            );
+            throw new Error('A mensagem, as imagens ou as instruções excedem o contexto. ' + 'Reduza o envio.');
         }
         let inicioRecentes = historico.length;
         for (let indice = historico.length - 1; indice > indicePedido; indice--) {
@@ -180,7 +177,12 @@ export class CompactadorContexto {
         for (let inicio = 0; inicio < transcricao.length;) {
             sinal.throwIfAborted();
             const montarMensagens = (fim: number): MensagemModelo[] => [
-                { role: 'system', content: instrucaoResumo },
+                {
+                    role: 'system',
+                    content:
+                        `${instrucaoResumo}\nEscreva no máximo ${Math.max(24, Math.floor(maxTokens / 4))} palavras. ` +
+                        'Responda diretamente com o resumo, sem introdução nem análise.',
+                },
                 {
                     role: 'user',
                     content:
@@ -194,25 +196,45 @@ export class CompactadorContexto {
                 if (!tamanho)
                     throw new Error('O contexto não comporta o resumo. Reduza o envio ou inicie outra conversa.');
             }
-            const resultado = await receberResposta(
-                await this.dependencias.completar(
-                    {
-                        model: 'local',
-                        messages: montarMensagens(inicio + tamanho),
-                        stream: true,
-                        temperature: 0.1,
-                        max_tokens: maxTokens,
-                        chat_template_kwargs: { enable_thinking: false },
-                    },
+            let resumoTrecho = '';
+            for (let tentativa = 0; tentativa < 3; tentativa++) {
+                sinal.throwIfAborted();
+                const resultado = await receberResposta(
+                    await this.dependencias.completar(
+                        {
+                            model: 'local',
+                            messages: montarMensagens(inicio + tamanho),
+                            stream: true,
+                            temperature: 0.1,
+                            max_tokens: maxTokens,
+                            chat_template_kwargs: { enable_thinking: false },
+                        },
+                        sinal,
+                    ),
                     sinal,
-                ),
-                sinal,
-                () => {},
-            );
-            if (!resultado.texto.trim() || resultado.chamadas.length || resultado.motivo === 'length') {
-                throw new Error('A compactação não produziu um resumo completo. O histórico original foi preservado.');
+                    () => {},
+                );
+                if (resultado.chamadas.length) {
+                    throw new Error(
+                        'O modelo solicitou ferramentas em vez de resumir. O histórico original foi preservado.',
+                    );
+                }
+                if (resultado.texto.trim() && resultado.motivo === 'stop') {
+                    resumoTrecho = resultado.texto.trim();
+                    break;
+                }
+                if (tentativa === 2) {
+                    const causa =
+                        resultado.motivo === 'length'
+                            ? 'O resumo atingiu o limite de geração mesmo após novas tentativas.'
+                            : !resultado.texto.trim()
+                              ? 'O modelo não retornou texto para o resumo após novas tentativas.'
+                              : 'O modelo não confirmou a conclusão do resumo após novas tentativas.';
+                    throw new Error(`${causa} O histórico original foi preservado.`);
+                }
+                tamanho = Math.max(1, Math.floor(tamanho / 2));
             }
-            resumo = resultado.texto.trim();
+            resumo = resumoTrecho;
             inicio += tamanho;
         }
         return resumo;

@@ -207,6 +207,8 @@ A prioridade solicitada para imagens anexadas e compactação automática foi im
 Isso não conclui biblioteca, indexação de documentos, galeria ou todas as funções de conversas e agentes.
 O T3 Code local foi consultado para a experiência de anexos, estado de compactação e continuação da conversa.
 Seus adaptadores delegam a compactação nativa ao provedor; a Selene usa um resumo gerado pelo GGUF local.
+Resumos vazios ou incompletos permitem até três tentativas por trecho, reduzindo o trecho pela metade
+sem avançar o histórico antes de obter um resumo concluído. Falhas informam a causa e preservam o histórico original.
 Essa referência de experiência não amplia o catálogo de paridade com o Odysseus.
 
 1. Agente code: navegação de código, plano revisável, aprovações com escopo, registros de execução

@@ -165,6 +165,73 @@ describe('Anexos de imagens', () => {
 });
 
 describe('Compactação automática', () => {
+    test('recupera resumo truncado sem avançar o histórico e continua a conversa', async () => {
+        const conversa = criarConversa();
+        historicoLongo(conversa);
+        const originais = structuredClone(conversa.mensagens);
+        const trechos: string[] = [];
+        const agente = new Agente({
+            salvar: async () => {},
+            publicar: () => {},
+            completar: async (corpo) => {
+                const pedido = corpo as { messages: MensagemModelo[] };
+                if (!String(pedido.messages[0].content).startsWith('Resuma')) return resposta('Continuando.');
+                trechos.push(String(pedido.messages[1].content));
+                if (trechos.length === 1) return resposta('Resumo cortado.', 'length');
+                return resposta('Objetivo: projeto Alfa. Decisão: Bun. Escrita recusada.');
+            },
+        });
+        await agente.executar(conversa, 'Continue.', esquemaConfiguracao.parse({}));
+        expect(trechos[0]).toContain(trechos[1]);
+        expect(trechos[1].length).toBeLessThan(trechos[0].length);
+        expect(trechos.slice(2).join('')).toContain('Resumo anterior:');
+        expect(trechos.slice(2).join('')).not.toContain('Resumo cortado.');
+        expect(conversa.mensagens.slice(0, 2)).toEqual(originais);
+        expect(conversa.contextoCompactado?.ateMensagemId).toBe(originais[1].id);
+        expect(conversa.mensagens.at(-1)?.estado).toBe('concluida');
+    });
+
+    test('limita novas tentativas e preserva o checkpoint quando o modelo só produz resumos truncados', async () => {
+        const conversa = criarConversa();
+        historicoLongo(conversa);
+        const originais = structuredClone(conversa.mensagens);
+        let tentativas = 0;
+        const agente = new Agente({
+            salvar: async () => {},
+            publicar: () => {},
+            completar: async () => {
+                tentativas++;
+                return resposta('Resumo cortado.', 'length');
+            },
+        });
+        await agente.executar(conversa, 'Continue.', esquemaConfiguracao.parse({}));
+        expect(tentativas).toBe(3);
+        expect(conversa.contextoCompactado).toBeUndefined();
+        expect(conversa.mensagens.slice(0, 2)).toEqual(originais);
+        expect(conversa.mensagens.at(-1)?.texto).toContain('limite de geração');
+        expect(conversa.mensagens.at(-1)?.faseContexto).toBeUndefined();
+    });
+
+    test('cancelamento após resumo truncado impede uma nova tentativa', async () => {
+        const conversa = criarConversa();
+        historicoLongo(conversa);
+        let tentativas = 0;
+        const agente = new Agente({
+            salvar: async () => {},
+            publicar: () => {},
+            completar: async () => {
+                tentativas++;
+                agente.cancelar();
+                return resposta('Resumo cortado.', 'length');
+            },
+        });
+        await agente.executar(conversa, 'Continue.', esquemaConfiguracao.parse({}));
+        expect(tentativas).toBe(1);
+        expect(conversa.contextoCompactado).toBeUndefined();
+        expect(conversa.mensagens.at(-1)?.estado).toBe('interrompida');
+        expect(conversa.mensagens.at(-1)?.faseContexto).toBeUndefined();
+    });
+
     test('resume em partes, continua o pedido e restaura checkpoint sem perder o histórico original', async () => {
         const pasta = await criarPasta();
         const persistencia = new Persistencia(pasta);

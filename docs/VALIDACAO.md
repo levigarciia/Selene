@@ -84,6 +84,11 @@ Resumos antigos usam texto e descobertas visuais já descritas. Os pixels das im
 no histórico, mas não são reenviados automaticamente ao modelo. Durante uma tarefa, resultados antigos
 de ferramentas podem virar resumo temporário; o registro completo de ações continua persistido.
 
+A recuperação de resumos incompletos pede um limite explícito de palavras e permite até três tentativas por trecho.
+Cada repetição reduz o trecho pela metade, mantendo o resumo anterior válido e a posição inicial do trecho.
+Testes simulados confirmam recuperação de truncamento, limite de tentativas e cancelamento sem alterar o histórico.
+Essa recuperação ainda não foi validada com inferência real do Qwen3.5 9B em NVIDIA.
+
 Scripts: `bun run test:contexto` verifica a interface. As variáveis `SELENE_TESTE_GGUF`, `SELENE_TESTE_RUNTIME`
 e `SELENE_TESTE_PROJETOR` habilitam a inferência, a compactação e a visão reais em perfil isolado.
 Capturas: `artifacts/selene-anexos.png`, `artifacts/selene-compactacao.png` e `artifacts/selene-visao.png`.
