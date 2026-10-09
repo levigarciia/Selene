@@ -31,7 +31,9 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
 * Entrada de conversa com controles compactos, logos das famílias e favoritos no início do seletor de modelos.
 * Nível de raciocínio por conversa nos modelos compatíveis e seleção de permissões em menu na entrada.
 * Conversas locais persistentes, histórico, busca, renomeação, exclusão e exportação.
-* Streaming de texto, Markdown, cancelamento e indicação de erros.
+* Streaming de texto e raciocínio separado em seção recolhível, Markdown, cancelamento e indicação de erros.
+  O brilho das ações acompanha somente a mensagem da execução atual. A tarefa encerra ações ainda pendentes.
+  Os níveis do Qwen controlam orçamentos de 25%, 50% e 75% dos tokens de geração.
 * Listagem, leitura, escrita, edição de arquivos e execução de terminal.
 * Ciclo de ferramentas do agente e histórico de ações.
 * Configurações em tela própria, separadas em Geral, Modelos e Motor, com catálogo integrado.

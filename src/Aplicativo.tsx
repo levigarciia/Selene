@@ -74,9 +74,31 @@ export function Aplicativo() {
         definirConfigurando(false);
         definirGerenciandoProjetos(true);
     }
-    if (carregando) return <div className="tela-carregando">Abrindo a Selene</div>;
+    if (carregando)
+        return (
+            <div data-ui="tela-carregando" className="grid place-items-center h-dvh text-[#b5bbc4]">
+                Abrindo a Selene
+            </div>
+        );
     return (
-        <div className={`aplicativo ${recolhida ? 'aplicativo-recolhido' : ''}`}>
+        <div
+            data-ui={`aplicativo ${recolhida ? 'aplicativo-recolhido' : ''}`}
+            className={[
+                [
+                    'grid grid-cols-[290px_minmax(0,_1fr)] h-dvh min-h-[600px]',
+                    '[@media(width<=1000px)]:grid-cols-[240px_minmax(0,_1fr)]',
+                    '[@media(width<=760px)]:grid-cols-[minmax(0,_1fr)]',
+                    '[@media(width<=760px)]:grid-rows-[auto_minmax(0,_1fr)]',
+                ].join(' '),
+                recolhida
+                    ? [
+                          '[&&]:grid-cols-[72px_minmax(0,_1fr)]',
+                          '[@media(width<=760px)]:[&&]:grid-cols-[minmax(0,_1fr)]',
+                          '[@media(width<=760px)]:[&&]:grid-rows-[auto_minmax(0,_1fr)]',
+                      ].join(' ')
+                    : '',
+            ].join(' ')}
+        >
             <BarraLateral
                 estado={estado}
                 modo={modoInicial}
@@ -118,35 +140,90 @@ export function Aplicativo() {
                 }}
                 excluir={definirExcluindo}
             />
-            <main className="area-principal">
+            <main data-ui="area-principal" className="flex flex-col min-h-0 min-w-0">
                 <BarraJanela ponte={ponte}>
                     {gerenciandoProjetos ? (
                         <>
                             <button
-                                className="botao-icone"
+                                data-ui="botao-icone"
+                                className={[
+                                    [
+                                        '[[data-ui~=marca]_&]:ml-auto',
+                                        '[[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                                    ].join(' '),
+                                    [
+                                        'inline-flex items-center justify-center bg-transparent',
+                                        'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                    ].join(' '),
+                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                                    '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                    '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                                ].join(' ')}
                                 aria-label="Voltar à conversa"
                                 onClick={() => definirGerenciandoProjetos(false)}
                             >
                                 <ArrowLeftIcon size={18} />
                             </button>
-                            <h1 className="titulo-tela">Projetos</h1>
+                            <h1
+                                data-ui="titulo-tela"
+                                className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] mt-0 mb-[13px] mx-0"
+                            >
+                                Projetos
+                            </h1>
                         </>
                     ) : configurando ? (
                         <>
                             <button
-                                className="botao-icone"
+                                data-ui="botao-icone"
+                                className={[
+                                    [
+                                        '[[data-ui~=marca]_&]:ml-auto',
+                                        '[[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                                    ].join(' '),
+                                    [
+                                        'inline-flex items-center justify-center bg-transparent',
+                                        'text-[#a1a5ad] rounded-[6px] p-[8px]',
+                                    ].join(' '),
+                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                                    '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                    '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                                ].join(' ')}
                                 aria-label="Voltar à conversa"
                                 onClick={() => definirConfigurando(false)}
                             >
                                 <ArrowLeftIcon size={18} />
                             </button>
-                            <h1 className="titulo-tela">Configurações</h1>
+                            <h1
+                                data-ui="titulo-tela"
+                                className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] mt-0 mb-[13px] mx-0"
+                            >
+                                Configurações
+                            </h1>
                         </>
                     ) : conversa ? (
-                        <nav className="breadcrumbs-conversa" aria-label="Localização da conversa">
+                        <nav
+                            data-ui="breadcrumbs-conversa"
+                            className="flex items-center gap-[10px] min-w-0 text-[#85858c] [&_svg]:shrink-0"
+                            aria-label="Localização da conversa"
+                        >
                             {modoInicial === 'code' ? (
                                 <button
-                                    className="breadcrumb-projeto"
+                                    data-ui="breadcrumb-projeto"
+                                    className={[
+                                        'flex items-center gap-[7px] min-w-0 max-w-[180px] [flex-shrink:2]',
+                                        [
+                                            '[&:is(button)]:bg-transparent [&:is(button)]:text-inherit',
+                                            '[&:is(button)]:text-[inherit]',
+                                        ].join(' '),
+                                        '[&:is(button)]:text-left [&:is(button)]:px-0 [&:is(button)]:py-[4px]',
+                                        [
+                                            '[&:is(button)]:border-0 [&:is(button)]:border-solid',
+                                            '[&:is(button)]:border-current',
+                                        ].join(' '),
+                                        '[&:is(button):hover]:text-[#e6e7e9]',
+                                    ].join(' ')}
                                     title={conversa.projeto ?? undefined}
                                     aria-label={
                                         projetoAtual ? `Gerenciar projeto ${projetoAtual.nome}` : 'Gerenciar projetos'
@@ -159,11 +236,36 @@ export function Aplicativo() {
                                     </span>
                                 </button>
                             ) : (
-                                <span className="breadcrumb-projeto">Chat</span>
+                                <span
+                                    data-ui="breadcrumb-projeto"
+                                    className={[
+                                        'flex items-center gap-[7px] min-w-0 max-w-[180px] [flex-shrink:2]',
+                                        [
+                                            '[&:is(button)]:bg-transparent [&:is(button)]:text-inherit',
+                                            '[&:is(button)]:text-[inherit]',
+                                        ].join(' '),
+                                        '[&:is(button)]:text-left [&:is(button)]:px-0 [&:is(button)]:py-[4px]',
+                                        [
+                                            '[&:is(button)]:border-0 [&:is(button)]:border-solid',
+                                            '[&:is(button)]:border-current',
+                                        ].join(' '),
+                                        '[&:is(button):hover]:text-[#e6e7e9]',
+                                    ].join(' ')}
+                                >
+                                    Chat
+                                </span>
                             )}
                             <CaretRightIcon size={12} aria-hidden="true" />
                             <input
-                                className="titulo-conversa"
+                                data-ui="titulo-conversa"
+                                className={[
+                                    '[[data-ui~=breadcrumbs-conversa]_&]:min-w-0',
+                                    [
+                                        '[[data-ui~=breadcrumbs-conversa]_&]:text-ellipsis bg-transparent',
+                                        'w-[300px] max-w-[35vw]',
+                                    ].join(' '),
+                                    'text-[#b9bdc4] border-0 border-solid border-current',
+                                ].join(' ')}
                                 aria-label="Título da conversa"
                                 key={`${conversa.id}:${conversa.titulo}`}
                                 defaultValue={conversa.titulo}
@@ -184,20 +286,68 @@ export function Aplicativo() {
                             />
                         </nav>
                     ) : (
-                        <span className="texto-secundario">Selene</span>
+                        <span
+                            data-ui="texto-secundario"
+                            className={[
+                                'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                                '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                                '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                            ].join(' ')}
+                        >
+                            Selene
+                        </span>
                     )}
                 </BarraJanela>
                 {erro && (
-                    <div className="aviso-erro aviso-global" role="alert">
+                    <div
+                        data-ui="aviso-erro aviso-global"
+                        className={[
+                            [
+                                'mt-[16px] mb-[12px] flex justify-between items-center gap-[12px]',
+                                'text-[#f0b2ae] bg-[#33201f]',
+                            ].join(' '),
+                            'rounded-[9px] text-[12px] max-h-[150px] overflow-auto wrap-anywhere p-[12px] mx-[30px]',
+                            'border border-solid border-[#6f403b]',
+                        ].join(' ')}
+                        role="alert"
+                    >
                         <span>{erro}</span>
-                        <button className="botao-icone" aria-label="Fechar aviso" onClick={() => definirErro('')}>
+                        <button
+                            data-ui="botao-icone"
+                            className={[
+                                '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                                [
+                                    'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                    'rounded-[6px] p-[8px]',
+                                ].join(' '),
+                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                                '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                            ].join(' ')}
+                            aria-label="Fechar aviso"
+                            onClick={() => definirErro('')}
+                        >
                             <XIcon size={16} />
                         </button>
                     </div>
                 )}
-                <div className="area-tela" hidden={configurando || gerenciandoProjetos}>
+                <div
+                    data-ui="area-tela"
+                    className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
+                    hidden={configurando || gerenciandoProjetos}
+                >
                     {(['chat', 'code'] as const).map((modo) => (
-                        <div className="area-tela" key={modo} hidden={modo !== modoInicial}>
+                        <div
+                            data-ui="area-tela"
+                            className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
+                            key={modo}
+                            hidden={modo !== modoInicial}
+                        >
                             <TelaConversa
                                 dados={dados}
                                 modoInicial={modo}
@@ -221,7 +371,11 @@ export function Aplicativo() {
                     />
                 )}
                 {configuracoesMontadas && (
-                    <div className="area-tela" hidden={!configurando}>
+                    <div
+                        data-ui="area-tela"
+                        className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
+                        hidden={!configurando}
+                    >
                         <Configuracoes estado={estado} ponte={ponte} executar={executar} />
                     </div>
                 )}
@@ -241,15 +395,51 @@ export function Aplicativo() {
                         if (!apagando) definirExcluindoConcluidas(false);
                     }}
                 >
-                    <p className="texto-secundario mb-6">
+                    <p
+                        data-ui="texto-secundario mb-6"
+                        className={[
+                            'mb-6 text-[#a1a5ad] text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                        ].join(' ')}
+                    >
                         {quantidadeConcluidas} conversas Code serão apagadas. As estatísticas de uso serão preservadas.
                     </p>
                     <div className="flex justify-end gap-3">
-                        <button className="botao" disabled={apagando} onClick={() => definirExcluindoConcluidas(false)}>
+                        <button
+                            data-ui="botao"
+                            className={[
+                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
+                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                [
+                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                ].join(' '),
+                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                            ].join(' ')}
+                            disabled={apagando}
+                            onClick={() => definirExcluindoConcluidas(false)}
+                        >
                             Cancelar
                         </button>
                         <button
-                            className="botao botao-primario"
+                            data-ui="botao botao-primario"
+                            className={[
+                                'inline-flex items-center justify-center gap-[9px] bg-[#d8e5dd] rounded-[8px]',
+                                'whitespace-nowrap text-[#18241e] px-[14px] py-[9px] border border-solid',
+                                'border-transparent [&:hover:not(:disabled)]:bg-[#c0d5c8]',
+                                [
+                                    '[[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                ].join(' '),
+                                '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                            ].join(' ')}
                             disabled={apagando || quantidadeConcluidas === 0}
                             onClick={async () => {
                                 definirApagando(true);
@@ -276,13 +466,50 @@ export function Aplicativo() {
             )}
             {excluindo && (
                 <Modal titulo="Excluir esta conversa?" fechar={() => definirExcluindo(null)}>
-                    <p className="texto-secundario mb-6">O histórico de {excluindo.titulo} será removido.</p>
+                    <p
+                        data-ui="texto-secundario mb-6"
+                        className={[
+                            'mb-6 text-[#a1a5ad] text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                        ].join(' ')}
+                    >
+                        O histórico de {excluindo.titulo} será removido.
+                    </p>
                     <div className="flex justify-end gap-3">
-                        <button className="botao" onClick={() => definirExcluindo(null)}>
+                        <button
+                            data-ui="botao"
+                            className={[
+                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
+                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                [
+                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                ].join(' '),
+                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                            ].join(' ')}
+                            onClick={() => definirExcluindo(null)}
+                        >
                             Cancelar
                         </button>
                         <button
-                            className="botao botao-primario"
+                            data-ui="botao botao-primario"
+                            className={[
+                                'inline-flex items-center justify-center gap-[9px] bg-[#d8e5dd] rounded-[8px]',
+                                'whitespace-nowrap text-[#18241e] px-[14px] py-[9px] border border-solid',
+                                'border-transparent [&:hover:not(:disabled)]:bg-[#c0d5c8]',
+                                [
+                                    '[[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                ].join(' '),
+                                '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                            ].join(' ')}
                             disabled={estado.conversaEmExecucao === excluindo.id}
                             onClick={() =>
                                 executar(async () => {

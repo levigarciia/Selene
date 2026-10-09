@@ -74,6 +74,10 @@ bun run dev
 
 A interface acompanha alterações durante o desenvolvimento. Reinicie o comando após mudar o processo principal.
 
+Os estilos ficam nas classes Tailwind dos componentes. `src/tailwind.css` contém somente a importação do Tailwind.
+Os atributos `data-ui` identificam elementos para os estados visuais e as validações desktop.
+Valores calculados, como posições de menus e dimensões de ícones, permanecem definidos durante a execução.
+
 ```powershell
 bun run verificar
 bun test

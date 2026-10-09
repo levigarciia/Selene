@@ -66,7 +66,7 @@ try {
     await mensagem().waitFor();
     for (let indice = 0; indice < 8; indice++) await novo();
     assert.equal((await obter()).conversas.length, 1);
-    assert.equal(await pagina.locator('.item-conversa').count(), 0);
+    assert.equal(await pagina.locator('[data-ui~="item-conversa"]').count(), 0);
     await mensagem().fill('Primeiro rascunho');
     await pagina
         .getByRole('button', { name: 'Primeiro rascunho', exact: true })
@@ -77,7 +77,7 @@ try {
     await mensagem().fill('Segundo rascunho');
     await novo();
     await mensagem().fill('   ');
-    assert.equal(await pagina.locator('.item-conversa').count(), 2);
+    assert.equal(await pagina.locator('[data-ui~="item-conversa"]').count(), 2);
     await pagina.getByRole('button', { name: 'Primeiro rascunho', exact: true }).click();
     assert.equal(await mensagem().inputValue(), 'Primeiro rascunho');
     assert.equal((await obter()).conversas.length, 1);
@@ -87,7 +87,7 @@ try {
         await seletor().click();
         await pagina.getByRole('menuitem', { name: 'Adicionar projeto', exact: true }).click();
     };
-    assert.equal(await pagina.locator('.grupo-projeto').count(), 0);
+    assert.equal(await pagina.locator('[data-ui~="grupo-projeto"]').count(), 0);
     assert.equal(await pagina.getByRole('button', { name: 'Projeto Projeto existente', exact: true }).count(), 0);
     await seletor().click();
     await pagina.getByRole('menuitemradio', { name: 'Projeto existente', exact: true }).click();

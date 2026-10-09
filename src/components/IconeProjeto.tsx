@@ -26,12 +26,25 @@ const simbolos = {
 export function IconeProjeto({ projeto, tamanho = 16 }: { projeto?: Projeto; tamanho?: number }) {
     const icone = projeto?.icone;
     if (icone?.tipo === 'imagem') {
-        return <img className="icone-projeto" src={icone.dados} alt="" width={tamanho} height={tamanho} />;
+        return (
+            <img
+                data-ui="icone-projeto"
+                className="inline-flex shrink-0 object-contain align-middle"
+                src={icone.dados}
+                alt=""
+                width={tamanho}
+                height={tamanho}
+            />
+        );
     }
     if (icone?.tipo === 'iniciais') {
         return (
             <span
-                className="icone-projeto iniciais-projeto"
+                data-ui="icone-projeto iniciais-projeto"
+                className={[
+                    'inline-flex shrink-0 object-contain align-middle items-center justify-center font-[650]',
+                    'leading-[1]',
+                ].join(' ')}
                 aria-hidden="true"
                 style={{ width: tamanho, height: tamanho, color: coresProjeto[icone.cor], fontSize: tamanho * 0.55 }}
             >
@@ -42,7 +55,8 @@ export function IconeProjeto({ projeto, tamanho = 16 }: { projeto?: Projeto; tam
     const Simbolo = icone?.tipo === 'simbolo' ? simbolos[icone.nome] : FolderIcon;
     return (
         <Simbolo
-            className="icone-projeto"
+            data-ui="icone-projeto"
+            className="inline-flex shrink-0 object-contain align-middle"
             aria-hidden="true"
             size={tamanho}
             color={icone?.tipo === 'simbolo' ? coresProjeto[icone.cor] : undefined}

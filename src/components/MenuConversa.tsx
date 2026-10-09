@@ -48,7 +48,14 @@ export function MenuConversa({
             )}
             <button
                 role="menuitem"
-                className="texto-erro"
+                data-ui="texto-erro"
+                className={[
+                    'text-[#e9aaa7] text-[12px]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#e9aaa7]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                    '[[data-ui~=usuario-direita]_&]:text-[#e9aaa7]',
+                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                ].join(' ')}
                 disabled={ocupado}
                 onClick={() => {
                     fechar();

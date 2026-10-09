@@ -110,7 +110,7 @@ try {
     assert.equal(await painel.locator('li').count(), 48);
     assert.equal(
         await painel
-            .locator('.notas-atualizacao')
+            .locator('[data-ui~="notas-atualizacao"]')
             .evaluate((elemento) => elemento.scrollHeight > elemento.clientHeight),
         true,
     );

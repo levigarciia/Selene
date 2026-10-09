@@ -129,6 +129,7 @@ export class Agente {
                     ),
                     controle.signal,
                     (trecho) => {
+                        resposta.faseGeracao = 'respondendo';
                         resposta.texto += trecho;
                         const agora = performance.now();
                         if (agora - ultimaPublicacao >= 40) {
@@ -137,12 +138,23 @@ export class Agente {
                         }
                     },
                     (chamada) => {
+                        delete resposta.faseGeracao;
                         const acao = this.obterAcao(resposta, chamada.id, chamada.nome);
                         acao.nome = chamada.nome || acao.nome;
                         if (chamada.id) acao.chamadaId = chamada.id;
                         const interpretados = tentarInterpretarArgumentos(chamada.argumentos);
                         if (interpretados) acao.argumentos = interpretados;
                         this.dependencias.publicar(resposta);
+                    },
+                    (trecho) => {
+                        const iniciou = resposta.faseGeracao !== 'raciocinando';
+                        resposta.faseGeracao = 'raciocinando';
+                        resposta.raciocinio = (resposta.raciocinio ?? '') + trecho;
+                        const agora = performance.now();
+                        if (iniciou || agora - ultimaPublicacao >= 40) {
+                            ultimaPublicacao = agora;
+                            this.dependencias.publicar(resposta);
+                        }
                     },
                 );
                 if (resultado.desempenho) {
@@ -226,6 +238,14 @@ export class Agente {
             resposta.texto += `${resposta.texto ? '\n\n' : ''}${detalhe}`;
         } finally {
             this.pendente = null;
+            delete resposta.faseGeracao;
+            delete resposta.faseContexto;
+            for (const acao of resposta.acoes) {
+                if (['preparando', 'aguardando', 'executando'].includes(acao.estado)) {
+                    acao.estado = resposta.estado === 'interrompida' ? 'interrompida' : 'erro';
+                    acao.resultado ||= 'A tarefa encerrou antes de concluir esta ação.';
+                }
+            }
             resposta.concluidoEm = new Date().toISOString();
             try {
                 await this.dependencias.salvar();

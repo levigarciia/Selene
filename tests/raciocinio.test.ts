@@ -48,9 +48,12 @@ test('envia o nível persistido ao motor e reserva tokens para a resposta final'
             modeloId: qwen.id,
             nivelRaciocinio: nivel,
         });
+        const publicacoes: string[] = [];
         const agente = new Agente({
             salvar: async () => {},
-            publicar: () => {},
+            publicar: (mensagem) => {
+                if (mensagem.faseGeracao === 'raciocinando') publicacoes.push(mensagem.raciocinio ?? '');
+            },
             completar: async (corpo) => {
                 const pedido = corpo as {
                     reasoning_budget_tokens: number;
@@ -70,6 +73,9 @@ test('envia o nível persistido ao motor e reserva tokens para a resposta final'
             },
         });
         await agente.executar(conversa, 'Pergunta', esquemaConfiguracao.parse({}), [], qwen);
+        expect(publicacoes).toContain('Analisando');
+        expect(conversa.mensagens.at(-1)?.raciocinio).toBe('Analisando');
+        expect(conversa.mensagens.at(-1)?.faseGeracao).toBeUndefined();
         expect(conversa.mensagens.at(-1)?.texto).toBe('Resposta final');
         expect(conversa.mensagens.at(-1)?.estado).toBe('concluida');
     }

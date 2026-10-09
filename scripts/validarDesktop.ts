@@ -70,7 +70,7 @@ try {
     await pagina.screenshot({ path: 'artifacts/selene-code.png' });
     const dimensoes = pagina.viewportSize();
     await pagina.setViewportSize({ width: 420, height: 760 });
-    const entradaDentroDaTela = await pagina.locator('.entrada:visible').evaluate((elemento) => {
+    const entradaDentroDaTela = await pagina.locator('[data-ui~="entrada"]:visible').evaluate((elemento) => {
         const limites = elemento.getBoundingClientRect();
         return limites.left >= 0 && limites.right <= window.innerWidth && elemento.scrollWidth <= elemento.clientWidth;
     });

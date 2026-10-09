@@ -31,10 +31,19 @@ export function ProjetosSidebar({
         }
         const aberto = !!termo || !fechados.has(projeto.id);
         return (
-            <section className="grupo-projeto" key={projeto.id} aria-label={`Projeto ${projeto.nome}`}>
-                <div className="cabecalho-projeto">
+            <section
+                data-ui="grupo-projeto"
+                className="mb-[12px]"
+                key={projeto.id}
+                aria-label={`Projeto ${projeto.nome}`}
+            >
+                <div data-ui="cabecalho-projeto" className="flex items-center gap-[4px] px-[6px] py-[4px]">
                     <button
-                        className="titulo-projeto"
+                        data-ui="titulo-projeto"
+                        className={[
+                            'flex items-center gap-[7px] flex-1 min-w-0 bg-transparent text-[#a1a5ad] text-[12px]',
+                            'text-left px-0 py-[6px] border-0 border-solid border-current [&_svg]:shrink-0',
+                        ].join(' ')}
                         title={projeto.caminho}
                         aria-label={recolhida ? `Novo chat em ${projeto.nome}` : `Projeto ${projeto.nome}`}
                         aria-expanded={recolhida ? undefined : aberto}
@@ -48,13 +57,30 @@ export function ProjetosSidebar({
                             });
                         }}
                     >
-                        {!recolhida && <CaretDownIcon size={12} className={aberto ? '' : 'grupo-fechado'} />}
+                        {!recolhida && (
+                            <CaretDownIcon
+                                size={12}
+                                data-ui={aberto ? '' : 'grupo-fechado'}
+                                className={aberto ? '' : '[&&]:[transform:rotate(-90deg)]'}
+                            />
+                        )}
                         <IconeProjeto projeto={projeto} tamanho={16} />
                         {!recolhida && <span className="truncate">{projeto.nome}</span>}
                     </button>
                     {!recolhida && (
                         <button
-                            className="botao-icone"
+                            data-ui="botao-icone"
+                            className={[
+                                '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                                [
+                                    'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                    'rounded-[6px] p-[8px]',
+                                ].join(' '),
+                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                                '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                            ].join(' ')}
                             aria-label={`Novo chat em ${projeto.nome}`}
                             onClick={() => criar(projeto.id)}
                         >

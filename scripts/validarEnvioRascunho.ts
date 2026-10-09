@@ -87,7 +87,7 @@ try {
     await pagina.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
     await pagina.getByRole('alert').getByText('Falha de envio simulada', { exact: true }).waitFor();
     assert.equal(await campo.inputValue(), 'Pedido de teste');
-    assert.equal(await pagina.locator('.item-conversa').count(), 1);
+    assert.equal(await pagina.locator('[data-ui~="item-conversa"]').count(), 1);
     const promovida = await pagina.evaluate(() => window.selene!.estado());
     assert.ok(promovida.ok);
     assert.equal(promovida.valor.conversas.length, 1);
@@ -95,8 +95,8 @@ try {
     await pagina.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
     await pagina.getByText('Resposta controlada', { exact: true }).waitFor();
     assert.equal(await campo.inputValue(), '');
-    assert.equal(await pagina.locator('.item-conversa').count(), 1);
-    assert.equal(await pagina.locator('.item-conversa').getByText('Rascunho', { exact: true }).count(), 0);
+    assert.equal(await pagina.locator('[data-ui~="item-conversa"]').count(), 1);
+    assert.equal(await pagina.locator('[data-ui~="item-conversa"]').getByText('Rascunho', { exact: true }).count(), 0);
     assert.equal(await pagina.evaluate(() => JSON.parse(localStorage.getItem('selene.rascunhos.v1')!).length), 0);
     const final = await pagina.evaluate(() => window.selene!.estado());
     assert.ok(final.ok);

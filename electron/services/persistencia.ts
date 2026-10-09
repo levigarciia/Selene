@@ -28,6 +28,7 @@ export class Persistencia {
                 if (conversa.modo === 'chat') conversa.acessoCompleto = false;
                 for (const mensagem of conversa.mensagens) {
                     delete mensagem.faseContexto;
+                    delete mensagem.faseGeracao;
                     if (mensagem.estado === 'gerando') mensagem.estado = 'interrompida';
                     for (const acao of mensagem.acoes) {
                         if (['preparando', 'aguardando', 'executando'].includes(acao.estado)) {

@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { FolderPlusIcon, SelectionIcon } from '@phosphor-icons/react';
 import { IconeProjeto } from './IconeProjeto';
 import type { Conversa, Projeto } from '../../shared/contratos';
@@ -28,10 +28,18 @@ export function SeletorProjeto({
     }
 
     return (
-        <div className="seletor-projeto">
+        <div data-ui="seletor-projeto" className="max-w-[min(360px,_100%)]">
             <button
                 type="button"
-                className="gatilho-projeto"
+                data-ui="gatilho-projeto"
+                className={[
+                    'max-w-full overflow-hidden text-ellipsis whitespace-nowrap bg-transparent text-[#dedee0]',
+                    [
+                        'text-[14px] font-semibold [text-decoration:underline] underline-offset-[3px] flex',
+                        'items-center',
+                    ].join(' '),
+                    'gap-[7px] p-0 border-0 border-solid border-current',
+                ].join(' ')}
                 aria-label="Projeto da conversa"
                 aria-haspopup="menu"
                 aria-expanded={!!menu}
@@ -60,11 +68,16 @@ export function SeletorProjeto({
                             title={projeto.caminho}
                             onClick={() => selecionar(projeto.caminho)}
                         >
-                            <IconeProjeto projeto={projeto} tamanho={16} />{' '}
+                            <IconeProjeto projeto={projeto} tamanho={16} />
+                            {''}
                             <span className="truncate">{projeto.nome}</span>
                         </button>
                     ))}
-                    <div className="separador-menu-projetos" role="separator" />
+                    <div
+                        data-ui="separador-menu-projetos"
+                        className="h-[1px] bg-[#242424] mx-[8px] my-[5px]"
+                        role="separator"
+                    />
                     <button role="menuitem" onClick={() => selecionar()}>
                         <FolderPlusIcon size={16} /> Adicionar projeto
                     </button>

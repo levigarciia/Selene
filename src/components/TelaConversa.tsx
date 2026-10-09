@@ -158,10 +158,35 @@ export function TelaConversa({
     );
 
     return (
-        <div className={`tela-conversa ${inicial ? 'tela-inicial' : ''}`}>
-            <div className="barra-contexto">
+        <div
+            data-ui={`tela-conversa ${inicial ? 'tela-inicial' : ''}`}
+            className={[
+                'flex flex-col flex-1 min-w-0 min-h-0',
+                inicial
+                    ? [
+                          '[&&]:grid',
+                          '[&&]:grid-rows-[auto_minmax(24px,_1fr)_auto_auto_minmax(24px,_1.3fr)]',
+                          '[&&]:overflow-y-auto',
+                      ].join(' ')
+                    : '',
+            ].join(' ')}
+        >
+            <div
+                data-ui="barra-contexto"
+                className={[
+                    '[[data-ui~=tela-inicial]_&]:row-[1] flex items-center gap-[17px] min-h-[76px] px-[30px]',
+                    'py-[20px] [@media(width<=760px)]:gap-[10px] [@media(width<=760px)]:p-[16px]',
+                ].join(' ')}
+            >
                 <button
-                    className={`estado-motor ${estado.motor.fase === 'pronto' ? 'motor-pronto' : ''}`}
+                    data-ui={`estado-motor ${estado.motor.fase === 'pronto' ? 'motor-pronto' : ''}`}
+                    className={[
+                        [
+                            'ml-auto bg-transparent text-[11px] text-[#a1a5ad] border-0 border-solid',
+                            'border-[currentColor]',
+                        ].join(' '),
+                        estado.motor.fase === 'pronto' ? '[&&]:text-[#94b7a5]' : '',
+                    ].join(' ')}
                     onClick={configurar}
                 >
                     {estado.motor.fase === 'pronto'
@@ -172,7 +197,12 @@ export function TelaConversa({
                 </button>
             </div>
             <div
-                className="conteudo-conversa"
+                data-ui="conteudo-conversa"
+                className={[
+                    '[[data-ui~=tela-inicial]_&]:row-[3] [[data-ui~=tela-inicial]_&]:overflow-visible flex-1',
+                    'min-h-0 overflow-y-auto px-[36px] py-0 [@media(width<=760px)]:px-[20px]',
+                    '[@media(width<=760px)]:py-[0]',
+                ].join(' ')}
                 ref={rolagem}
                 onScroll={() => {
                     const elemento = rolagem.current;
@@ -181,22 +211,51 @@ export function TelaConversa({
                 }}
             >
                 {!conversa?.mensagens.length ? (
-                    <div className="boas-vindas">
-                        <MoonIcon size={38} weight="thin" className="simbolo-selene" />
-                        <h1>{modo === 'chat' ? 'O que vamos explorar?' : 'Em que vamos trabalhar?'}</h1>
+                    <div
+                        data-ui="boas-vindas"
+                        className={[
+                            '[[data-ui~=tela-inicial]_&]:min-h-0 [[data-ui~=tela-inicial]_&]:pt-0',
+                            '[[data-ui~=tela-inicial]_&]:pb-[28px] [[data-ui~=tela-inicial]_&]:px-0 min-h-full flex',
+                            'flex-col items-center justify-center pt-[35px] pb-[45px] px-0 [&_>_p]:text-[#a1a5ad]',
+                            '[&_>_p]:text-[13px] [&_>_p]:text-center',
+                        ].join(' ')}
+                    >
+                        <MoonIcon
+                            size={38}
+                            weight="thin"
+                            data-ui="simbolo-selene"
+                            className="text-[#94b7a5] mb-[24px]"
+                        />
+                        <h1 className="text-[29px] leading-[1.3] font-[450] tracking-[-0.7px] mt-0 mb-[13px] mx-0">
+                            {modo === 'chat' ? 'O que vamos explorar?' : 'Em que vamos trabalhar?'}
+                        </h1>
                         {modo === 'chat' ? <p>Tudo no seu computador.</p> : seletorProjeto}
                         {estado.modelos.length === 0 && (
-                            <button className="botao mt-6" onClick={() => definirCatalogoAberto(true)}>
+                            <button
+                                data-ui="botao mt-6"
+                                className={[
+                                    'mt-6 inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
+                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
+                                    '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    [
+                                        '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                        '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                    ].join(' '),
+                                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                                ].join(' ')}
+                                onClick={() => definirCatalogoAberto(true)}
+                            >
                                 Explorar modelos
                             </button>
                         )}
                     </div>
                 ) : (
-                    <div className="lista-mensagens">
+                    <div data-ui="lista-mensagens" className="max-w-[730px] pt-[20px] pb-[40px] px-0 mx-auto my-0">
                         {conversa.mensagens.map((mensagem) => (
                             <MensagemConversa
                                 key={mensagem.id}
                                 mensagem={mensagem}
+                                emExecucao={estado.conversaEmExecucao === conversa.id && mensagem === ultimaResposta}
                                 modo={modo}
                                 ponte={ponte}
                                 executar={executar}
@@ -205,22 +264,54 @@ export function TelaConversa({
                     </div>
                 )}
             </div>
-            <div className="area-entrada">
+            <div
+                data-ui="area-entrada"
+                className={[
+                    '[[data-ui~=tela-inicial]_&]:row-[4] [[data-ui~=tela-inicial]_&]:w-[min(760px,_100%)]',
+                    '[[data-ui~=tela-inicial]_&]:pb-0 w-[min(800px,_100%)] pt-0 pb-[24px] px-[30px] mx-auto',
+                    'my-0 [@media(width<=760px)]:pt-0 [@media(width<=760px)]:pb-[20px]',
+                    '[@media(width<=760px)]:px-[16px]',
+                ].join(' ')}
+            >
                 {modo === 'code' && (
                     <TarefasConversa
                         mensagem={ultimaResposta}
                         abrirHistorico={() => {
                             const elemento = document.getElementById(`mensagem-${ultimaResposta?.id}`);
-                            const historico = elemento?.querySelector<HTMLDetailsElement>('.historico-tarefa');
+                            const historico = elemento?.querySelector<HTMLDetailsElement>(
+                                '[data-ui~="historico-tarefa"]',
+                            );
                             if (historico) historico.open = true;
                             acompanhar.current = false;
                             elemento?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }}
                     />
                 )}
-                {!ponte && <p className="aviso-web">Prévia da interface. Execute bun run dev para usar o desktop.</p>}
+                {!ponte && (
+                    <p data-ui="aviso-web" className="text-[#b5bdc8] text-[11px] mb-[12px]">
+                        Prévia da interface. Execute bun run dev para usar o desktop.
+                    </p>
+                )}
                 <form
-                    className={`entrada ${arrastando ? 'entrada-arrastando' : ''}`}
+                    data-ui={`entrada ${arrastando ? 'entrada-arrastando' : ''}`}
+                    className={[
+                        [
+                            [
+                                'bg-[#141517] rounded-[22px] pt-[17px] pb-[14px]',
+                                'shadow-[inset_0_1px_0_#ffffff03] px-[16px]',
+                            ].join(' '),
+                            'border border-solid border-[#292b30] [&:focus-within]:border-[#677c70]',
+                            [
+                                '[&_textarea]:block [&_textarea]:w-full [&_textarea]:bg-transparent',
+                                '[&_textarea]:resize-none',
+                            ].join(' '),
+                            '[&_textarea]:min-h-[68px] [&_textarea]:max-h-[200px] [&_textarea]:text-[#e6e7e9]',
+                            '[&_textarea]:leading-[1.7] [&_textarea]:outline-none [&_textarea]:p-0',
+                            '[&_textarea]:border-0 [&_textarea]:border-solid [&_textarea]:border-current',
+                            '[&_textarea::placeholder]:text-[#858990]',
+                        ].join(' '),
+                        arrastando ? '[&&]:[outline:1px_solid_#8d9de0]' : '',
+                    ].join(' ')}
                     onDragOver={(evento) => {
                         if (!evento.dataTransfer.types.includes('Files')) return;
                         evento.preventDefault();
@@ -252,13 +343,23 @@ export function TelaConversa({
                         }}
                     />
                     {!!anexos.imagens.length && (
-                        <div className="anexos-entrada">
+                        <div
+                            data-ui="anexos-entrada"
+                            className="flex flex-wrap gap-[10px] mb-[12px] pt-[14px] pb-0 px-[16px]"
+                        >
                             {anexos.imagens.map((imagem) => (
-                                <div className="anexo-rascunho" key={imagem.id}>
+                                <div data-ui="anexo-rascunho" className="relative" key={imagem.id}>
                                     <ImagemConversa imagem={imagem} previa={imagem.previa} />
                                     <button
                                         type="button"
-                                        className="remover-anexo"
+                                        data-ui="remover-anexo"
+                                        className={[
+                                            [
+                                                'absolute top-[-6px] right-[-6px] grid place-items-center',
+                                                'w-[23px] h-[23px] rounded-full',
+                                            ].join(' '),
+                                            'bg-[#252830] text-[#eee] border border-solid border-[#2b2e34]',
+                                        ].join(' ')}
                                         disabled={ocupado || anexos.importando}
                                         aria-label={`Remover ${imagem.nome}`}
                                         onClick={() => anexos.remover(imagem.id)}
@@ -289,7 +390,14 @@ export function TelaConversa({
                             }
                         }}
                     />
-                    <div className="barra-entrada">
+                    <div
+                        data-ui="barra-entrada"
+                        className={[
+                            'flex items-center gap-[10px] mt-[10px] [@media(width<=760px)]:flex-wrap',
+                            "[@media(width<=760px)]:gap-[8px] [@media(width<=760px)]:[&::after]:[content:'']",
+                            '[@media(width<=760px)]:[&::after]:w-full',
+                        ].join(' ')}
+                    >
                         <CatalogoModelos
                             estado={estado}
                             ponte={ponte}
@@ -347,13 +455,26 @@ export function TelaConversa({
                         )}
                         <div className="flex-1" />
                         {anexos.importando && (
-                            <span className="texto-secundario" role="status">
+                            <span
+                                data-ui="texto-secundario"
+                                className={[
+                                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                                    '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                                ].join(' ')}
+                                role="status"
+                            >
                                 Preparando imagens
                             </span>
                         )}
                         {conversa?.mensagens.at(-1)?.usoContexto && (
                             <span
-                                className="uso-contexto"
+                                data-ui="uso-contexto"
+                                className="[@media(width<=760px)]:hidden whitespace-nowrap text-[11px] text-[#a1a5ad]"
                                 title="Estimativa conservadora do contexto usado, com reserva para imagens"
                             >
                                 {Math.min(
@@ -369,7 +490,19 @@ export function TelaConversa({
                         )}
                         <button
                             type="button"
-                            className="botao-icone botao-anexar"
+                            data-ui="botao-icone botao-anexar"
+                            className={[
+                                '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                                [
+                                    'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                    'rounded-[6px] shrink-0',
+                                ].join(' '),
+                                'p-[8px] border-0 border-solid border-current',
+                                '[&:hover:not(:disabled)]:text-[#e6e7e9] [&:hover:not(:disabled)]:bg-[#24262c]',
+                                '[[data-ui~=rodape-entrada]_&]:p-[0]',
+                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                            ].join(' ')}
                             aria-label="Anexar imagens"
                             title="Anexar imagens"
                             disabled={ocupado || anexos.importando || anexos.imagens.length >= 4}
@@ -379,7 +512,14 @@ export function TelaConversa({
                         </button>
                         {estado.conversaEmExecucao || enviando || motorOcupado ? (
                             <button
-                                className="botao-enviar botao-interromper"
+                                data-ui="botao-enviar botao-interromper"
+                                className={[
+                                    [
+                                        'flex items-center justify-center w-[33px] h-[33px] rounded-full',
+                                        'bg-[#e63747] text-[#fff]',
+                                    ].join(' '),
+                                    'shrink-0 border-0 border-solid border-current',
+                                ].join(' ')}
                                 type="button"
                                 aria-label="Interromper tarefa"
                                 onClick={() => executar(() => ponte!.cancelar())}
@@ -388,7 +528,14 @@ export function TelaConversa({
                             </button>
                         ) : (
                             <button
-                                className="botao-enviar"
+                                data-ui="botao-enviar"
+                                className={[
+                                    [
+                                        'flex items-center justify-center w-[33px] h-[33px] rounded-full',
+                                        'bg-[#d8e5dd] text-[#18241e]',
+                                    ].join(' '),
+                                    'shrink-0 border-0 border-solid border-current',
+                                ].join(' ')}
                                 type="submit"
                                 aria-label="Enviar mensagem"
                                 disabled={

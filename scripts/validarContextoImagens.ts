@@ -111,7 +111,7 @@ try {
     });
     const arquivo = resolve(pasta, 'circulo.png');
     await writeFile(arquivo, Buffer.from(desenho.split(',')[1], 'base64'));
-    await pagina.getByLabel('Selecionar imagens').setInputFiles(arquivo);
+    await pagina.locator('[data-ui~="tela-conversa"]:visible').getByLabel('Selecionar imagens').setInputFiles(arquivo);
     await pagina.getByRole('button', { name: 'Ampliar circulo.png' }).waitFor();
     await pagina.getByRole('button', { name: 'Ampliar circulo.png' }).click();
     await pagina.getByRole('dialog').waitFor();
@@ -126,7 +126,9 @@ try {
                 const transferencia = new DataTransfer();
                 transferencia.items.add(new File([bytes], `${tipo}.png`, { type: 'image/png' }));
                 const alvo =
-                    tipo === 'paste' ? document.querySelector('textarea')! : document.querySelector('form.entrada')!;
+                    tipo === 'paste'
+                        ? document.querySelector('textarea')!
+                        : document.querySelector('form[data-ui~="entrada"]')!;
                 alvo.dispatchEvent(
                     tipo === 'paste'
                         ? new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: transferencia })
@@ -156,6 +158,7 @@ try {
         }, mime);
         const nome = `Formato.${mime.split('/')[1]}`;
         await pagina
+            .locator('[data-ui~="tela-conversa"]:visible')
             .getByLabel('Selecionar imagens')
             .setInputFiles({ name: nome, mimeType: mime, buffer: Buffer.from(formato.split(',')[1], 'base64') });
         const previa = pagina.getByRole('button', { name: `Ampliar ${nome}`, exact: true });

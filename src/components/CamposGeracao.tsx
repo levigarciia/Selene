@@ -11,7 +11,20 @@ export function CamposGeracao({ configuracao, ocupado, alterar }: CamposConfigur
     return (
         <>
             <h2>Geração</h2>
-            <p className="texto-secundario">A resposta usa automaticamente o espaço disponível no contexto.</p>
+            <p
+                data-ui="texto-secundario"
+                className={[
+                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                    '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                ].join(' ')}
+            >
+                A resposta usa automaticamente o espaço disponível no contexto.
+            </p>
             <div className="grid grid-cols-2 gap-5">
                 <label>
                     Temperatura

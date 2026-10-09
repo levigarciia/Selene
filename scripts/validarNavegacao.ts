@@ -8,7 +8,10 @@ export async function validarNavegacao(pagina: Page, aplicativo: ElectronApplica
     const tituloAtivo = await pagina.getByRole('textbox', { name: 'Título da conversa' }).inputValue();
     await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).fill('Rascunho preservado ao navegar');
     await pagina.getByRole('button', { name: 'Recolher sidebar' }).click();
-    assert.equal(await pagina.locator('.sidebar').evaluate((elemento) => elemento.getBoundingClientRect().width), 72);
+    assert.equal(
+        await pagina.locator('[data-ui~="sidebar"]').evaluate((elemento) => elemento.getBoundingClientRect().width),
+        72,
+    );
     await pagina.screenshot({ path: 'artifacts/selene-sidebar-recolhida.png' });
     await pagina.getByRole('button', { name: 'Expandir sidebar' }).click();
     await pagina.getByRole('button', { name: 'Configurações', exact: true }).click();
@@ -28,7 +31,7 @@ export async function validarNavegacao(pagina: Page, aplicativo: ElectronApplica
     const catalogo = pagina.getByRole('region', { name: 'Catálogo de modelos' });
     await catalogo.waitFor();
     await catalogo.getByRole('textbox', { name: 'Buscar modelos' }).fill('9B');
-    assert.equal(await catalogo.locator('.item-catalogo').count(), 1);
+    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), 1);
     await pagina.screenshot({ path: 'artifacts/selene-configuracoes-modelos.png' });
     await secoes.getByRole('button', { name: 'Motor', exact: true }).click();
     await pagina.getByRole('heading', { name: 'Motor local', exact: true }).waitFor();

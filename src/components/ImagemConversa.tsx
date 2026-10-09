@@ -36,7 +36,12 @@ export function ImagemConversa({
         <>
             <button
                 type="button"
-                className="previa-imagem"
+                data-ui="previa-imagem"
+                className={[
+                    'w-[116px] h-[88px] overflow-hidden rounded-[8px] bg-[#191b20] cursor-zoom-in p-0',
+                    'border border-solid border-[#2b2e34] [&_img]:w-full [&_img]:h-full [&_img]:object-cover',
+                    '[&_span]:text-[11px] [&_span]:text-[#a1a5ad]',
+                ].join(' ')}
                 disabled={!url}
                 onClick={() => definirAmpliada(true)}
                 aria-label={`Ampliar ${imagem.nome}`}
@@ -50,7 +55,12 @@ export function ImagemConversa({
             </button>
             {ampliada && (
                 <Modal titulo={imagem.nome} fechar={() => definirAmpliada(false)}>
-                    <img className="imagem-ampliada" src={url} alt={imagem.nome} />
+                    <img
+                        data-ui="imagem-ampliada"
+                        className="block max-w-full max-h-[65vh] object-contain m-auto"
+                        src={url}
+                        alt={imagem.nome}
+                    />
                 </Modal>
             )}
         </>

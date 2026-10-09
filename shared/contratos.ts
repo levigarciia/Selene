@@ -78,6 +78,8 @@ export const esquemaMensagem = z.object({
     id: z.string().uuid(),
     papel: z.enum(['user', 'assistant']),
     texto: z.string(),
+    raciocinio: z.string().optional(),
+    faseGeracao: z.enum(['raciocinando', 'respondendo']).optional(),
     estado: z.enum(['concluida', 'gerando', 'erro', 'interrompida']),
     acoes: z.array(esquemaAcao).default([]),
     criadoEm: z.string(),

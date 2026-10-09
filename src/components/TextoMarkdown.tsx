@@ -6,7 +6,13 @@ export default function TextoMarkdown({ texto }: { texto: string }) {
     return (
         <Markdown
             remarkPlugins={[remarkGfm]}
-            components={{ a: ({ children }) => <span className="texto-link">{children}</span> }}
+            components={{
+                a: ({ children }) => (
+                    <span data-ui="texto-link" className="text-[#94b7a5]">
+                        {children}
+                    </span>
+                ),
+            }}
         >
             {texto}
         </Markdown>

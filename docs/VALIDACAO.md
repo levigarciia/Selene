@@ -1,5 +1,23 @@
 # Validação do primeiro marco
 
+## Atividade e raciocínio em 9 de outubro de 2026
+
+* O brilho acompanha apenas a mensagem da execução atual e cessa ao concluir, falhar ou cancelar.
+* Ações ainda em preparação, aprovação ou execução recebem estado terminal quando a tarefa encerra.
+* O indicador repetitivo Trabalhando foi removido do conteúdo da mensagem.
+* Trechos `reasoning_content` são publicados, persistidos e exibidos separados da resposta final.
+* `bun run verificar`, `bun test`, `bun run build` e `git diff --check`: aprovados, com 82 testes.
+* `bun scripts/testarDesktop.ts scripts/validarAtividadeGeracao.ts`: aprovado no Electron.
+  Verifica abertura durante o raciocínio, recolhimento na resposta e ausência de brilho residual.
+* Motor ROCm ativo `b10327`, com Qwen carregado: pedidos sintéticos de 512 tokens retornaram
+  0, 451, 811 e 1177 caracteres de raciocínio nos níveis desativado, baixo, médio e alto,
+  com orçamentos respectivos de 0, 128, 256 e 384 tokens. Todos atingiram o limite artificial do teste.
+  Essa medição confirma o efeito dos orçamentos, sem avaliar a qualidade das respostas.
+* Um pedido curto em SSE retornou 63 trechos de raciocínio, 191 caracteres de raciocínio e
+  uma resposta de 2 caracteres, com encerramento `stop`, usando o parser real da Selene.
+* Capturas conferidas: `artifacts/selene-raciocinio-ativo.png` e
+  `artifacts/selene-raciocinio-concluido.png`. Nenhuma distribuição foi publicada nesta validação.
+
 ## Sidebar por estado e separação de modos
 
 Referência de 9 de outubro de 2026: código local em `D:/Saas/t3code-main/t3code-main`.

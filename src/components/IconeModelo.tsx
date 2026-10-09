@@ -28,5 +28,21 @@ export function IconeModelo({
         width: tamanho,
         height: tamanho,
     } as CSSProperties;
-    return <span className={`icone-modelo familia-${identificada}`} style={estilo} aria-hidden="true" />;
+    return (
+        <span
+            data-ui={`icone-modelo familia-${identificada}`}
+            className={[
+                'inline-block shrink-0 bg-current [mask:var(--icone-modelo)_center_/_contain_no-repeat]',
+                identificada === 'qwen'
+                    ? '[&&]:text-[#b5a7e8]'
+                    : identificada === 'llama'
+                      ? '[&&]:text-[#97b9ed]'
+                      : identificada === 'gemma'
+                        ? '[&&]:text-[#b9c8df]'
+                        : '[&&]:text-[#a0c5db]',
+            ].join(' ')}
+            style={estilo}
+            aria-hidden="true"
+        />
+    );
 }

@@ -17,23 +17,79 @@ export function ConfiguracaoMotor({
     return (
         <>
             <h2>Motor local</h2>
-            <div className="estado-motor-config">
+            <div
+                data-ui="estado-motor-config"
+                className={[
+                    'flex flex-col gap-[14px] pb-[26px] border-b border-solid',
+                    'border-b-[#272a30] text-[12px] wrap-anywhere',
+                ].join(' ')}
+            >
                 <p role="status">{estado.motor.detalhe}</p>
-                {estado.motor.dispositivo && <p className="texto-secundario">{estado.motor.dispositivo}</p>}
+                {estado.motor.dispositivo && (
+                    <p
+                        data-ui="texto-secundario"
+                        className={[
+                            'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                        ].join(' ')}
+                    >
+                        {estado.motor.dispositivo}
+                    </p>
+                )}
                 {estado.motor.recarregamentoPendente && (
-                    <p className="texto-secundario">
+                    <p
+                        data-ui="texto-secundario"
+                        className={[
+                            'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                        ].join(' ')}
+                    >
                         Os novos parâmetros serão aplicados no próximo envio ou ao recarregar.
                     </p>
                 )}
                 <div className="flex flex-wrap gap-3">
                     {['instalando', 'carregando'].includes(estado.motor.fase) ? (
-                        <button type="button" className="botao" onClick={() => executar(() => ponte!.cancelar())}>
+                        <button
+                            type="button"
+                            data-ui="botao"
+                            className={[
+                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
+                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                [
+                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                ].join(' '),
+                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                            ].join(' ')}
+                            onClick={() => executar(() => ponte!.cancelar())}
+                        >
                             Cancelar
                         </button>
                     ) : (
                         <button
                             type="button"
-                            className="botao"
+                            data-ui="botao"
+                            className={[
+                                'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
+                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
+                                '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                [
+                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                ].join(' '),
+                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                            ].join(' ')}
                             disabled={ocupado || instalado}
                             onClick={() => executar(() => ponte!.instalarMotor(estado.configuracao.backend))}
                         >
@@ -44,7 +100,17 @@ export function ConfiguracaoMotor({
                         <>
                             <button
                                 type="button"
-                                className="botao"
+                                data-ui="botao"
+                                className={[
+                                    'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
+                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
+                                    '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    [
+                                        '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                        '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                    ].join(' '),
+                                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                                ].join(' ')}
                                 disabled={ocupado}
                                 onClick={() => executar(() => ponte!.carregarModelo(estado.motor.modeloId!))}
                             >
@@ -52,7 +118,17 @@ export function ConfiguracaoMotor({
                             </button>
                             <button
                                 type="button"
-                                className="botao"
+                                data-ui="botao"
+                                className={[
+                                    'inline-flex items-center justify-center gap-[9px] bg-[#1b1d22] rounded-[8px]',
+                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-[#2b2e34]',
+                                    '[&:hover:not(:disabled)]:bg-[#272a30] [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
+                                    [
+                                        '[[data-ui~=lista-projetos]_>_&]:justify-start',
+                                        '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
+                                    ].join(' '),
+                                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
+                                ].join(' ')}
                                 disabled={ocupado}
                                 onClick={() => executar(() => ponte!.pararMotor())}
                             >
@@ -62,10 +138,26 @@ export function ConfiguracaoMotor({
                     )}
                 </div>
                 {estado.motor.fase === 'instalando' && (
-                    <progress value={estado.motor.progresso ?? 0} max={100} aria-label="Download do motor" />
+                    <progress
+                        className="accent-[#94b7a5]"
+                        value={estado.motor.progresso ?? 0}
+                        max={100}
+                        aria-label="Download do motor"
+                    />
                 )}
             </div>
-            <p className="texto-secundario">
+            <p
+                data-ui="texto-secundario"
+                className={[
+                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                    '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                ].join(' ')}
+            >
                 Contexto automático
                 {estado.motor.contextoDisponivel
                     ? `: ${estado.motor.contextoDisponivel.toLocaleString('pt-BR')} tokens`

@@ -62,8 +62,9 @@ export async function validarControlesEntrada(): Promise<void> {
         await pagina.getByRole('menuitemradio', { name: 'Alto', exact: true }).click();
         await pagina.waitForFunction(
             () =>
-                document.querySelector('.area-tela:not([hidden]) > .tela-conversa [aria-label="Nível de raciocínio"]')
-                    ?.textContent === 'Alto',
+                document.querySelector(
+                    '[data-ui~="area-tela"]:not([hidden]) > [data-ui~="tela-conversa"] [aria-label="Nível de raciocínio"]',
+                )?.textContent === 'Alto',
         );
         const estado = await pagina.evaluate(() => window.selene!.estado());
         assert.ok(estado.ok);

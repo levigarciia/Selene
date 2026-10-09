@@ -65,20 +65,20 @@ try {
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.getByRole('button', { name: 'Conversa Code 1', exact: true }).click();
     assert.equal(await pagina.getByRole('button', { name: 'Chat pessoal', exact: true }).count(), 0);
-    assert.equal(await pagina.locator('.cabecalho-grupo').count(), 0);
-    assert.equal(await pagina.locator('.ceu-sidebar i').count(), 38);
+    assert.equal(await pagina.locator('[data-ui~="cabecalho-grupo"]').count(), 0);
+    assert.equal(await pagina.locator('[data-ui~="ceu-sidebar"] i').count(), 38);
     assert.equal(await pagina.getByRole('button', { name: 'Trabalhando', exact: true }).count(), 0);
-    assert.equal(await pagina.locator('.linha-separador').count(), 0);
+    assert.equal(await pagina.locator('[data-ui~="linha-separador"]').count(), 0);
     const posicoes = await pagina.evaluate(() => ({
-        atual: document.querySelector('.grupo-atuais')!.getBoundingClientRect().bottom,
-        concluidas: document.querySelector('.grupo-concluidas')!.getBoundingClientRect().top,
-        rodape: document.querySelector('.rodape-sidebar')!.getBoundingClientRect().top,
+        atual: document.querySelector('[data-ui~="grupo-atuais"]')!.getBoundingClientRect().bottom,
+        concluidas: document.querySelector('[data-ui~="grupo-concluidas"]')!.getBoundingClientRect().top,
+        rodape: document.querySelector('[data-ui~="rodape-sidebar"]')!.getBoundingClientRect().top,
     }));
     assert.ok(posicoes.concluidas - posicoes.atual > 200);
-    assert.equal(await pagina.locator('.grupo-projeto').count(), 0);
+    assert.equal(await pagina.locator('[data-ui~="grupo-projeto"]').count(), 0);
     assert.ok(posicoes.rodape - posicoes.concluidas < 80);
-    assert.equal(await pagina.locator('.rodape-sidebar button').count(), 3);
-    assert.equal((await pagina.locator('.rodape-sidebar').innerText()).trim(), '');
+    assert.equal(await pagina.locator('[data-ui~="rodape-sidebar"] button').count(), 3);
+    assert.equal((await pagina.locator('[data-ui~="rodape-sidebar"]').innerText()).trim(), '');
     await pagina.getByRole('button', { name: 'Concluídas', exact: true }).click();
     await pagina.getByRole('button', { name: 'Mostrar mais 2', exact: true }).click();
     await pagina.getByRole('button', { name: 'Conversa Code 9', exact: true }).waitFor();
@@ -91,7 +91,7 @@ try {
     await pagina.getByRole('button', { name: 'Chat pessoal', exact: true }).click();
     await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).fill('Rascunho Chat preservado');
     await pagina.getByRole('textbox', { name: 'Buscar conversas', exact: true }).fill('Conversa Code');
-    assert.equal(await pagina.locator('.item-conversa').count(), 0);
+    assert.equal(await pagina.locator('[data-ui~="item-conversa"]').count(), 0);
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     assert.equal(
         await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).inputValue(),
@@ -103,8 +103,11 @@ try {
     await grupo.getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
     await grupo.getByRole('button', { name: 'Conversa Code 1', exact: true }).click({ button: 'right' });
     await pagina.getByRole('menuitem', { name: 'Retomar conversa', exact: true }).click();
-    await pagina.locator('.historico').getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
-    const linha = pagina.locator('.linha-sidebar').filter({
+    await pagina
+        .locator('[data-ui~="historico"]')
+        .getByRole('button', { name: 'Conversa Code 1', exact: true })
+        .waitFor();
+    const linha = pagina.locator('[data-ui~="linha-sidebar"]').filter({
         has: pagina.getByRole('button', { name: 'Conversa Code 1', exact: true }),
     });
     await linha.hover();
@@ -112,7 +115,10 @@ try {
     await grupo.getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
     await linha.hover();
     await linha.getByRole('button', { name: 'Retomar conversa: Conversa Code 1', exact: true }).click();
-    await pagina.locator('.historico').getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
+    await pagina
+        .locator('[data-ui~="historico"]')
+        .getByRole('button', { name: 'Conversa Code 1', exact: true })
+        .waitFor();
     await pagina.getByRole('button', { name: 'Nova conversa', exact: true }).click();
     const estadoNovo = await pagina.evaluate(() => window.selene!.estado());
     assert.ok(estadoNovo.ok);
@@ -153,16 +159,17 @@ try {
         }, evento);
         await pagina
             .getByRole('button', { name: 'Conversa Code 1', exact: true })
-            .locator('.linha-projeto-conversa')
+            .locator('[data-ui~="linha-projeto-conversa"]')
             .getByText(texto, { exact: true })
             .waitFor();
-        const secaoEsperada = estadoAcao === 'aguardando' ? '.grupo-atuais' : '.grupo-trabalhando';
+        const secaoEsperada =
+            estadoAcao === 'aguardando' ? '[data-ui~="grupo-atuais"]' : '[data-ui~="grupo-trabalhando"]';
         await pagina.locator(secaoEsperada).getByRole('button', { name: 'Conversa Code 1', exact: true }).waitFor();
         if (estadoAcao === 'executando') {
             await pagina.getByRole('img', { name: 'Comando em execução', exact: true }).waitFor();
             const ordem = await pagina.evaluate(() => ({
-                trabalhando: document.querySelector('.grupo-trabalhando')!.getBoundingClientRect().top,
-                concluidas: document.querySelector('.grupo-concluidas')!.getBoundingClientRect().top,
+                trabalhando: document.querySelector('[data-ui~="grupo-trabalhando"]')!.getBoundingClientRect().top,
+                concluidas: document.querySelector('[data-ui~="grupo-concluidas"]')!.getBoundingClientRect().top,
             }));
             assert.ok(ordem.trabalhando < ordem.concluidas);
         }
@@ -184,7 +191,7 @@ try {
         { ...base.valor, conversaEmExecucao: null },
     );
     await pagina
-        .locator('.historico')
+        .locator('[data-ui~="historico"]')
         .getByRole('button', { name: 'Conversa Code 1', exact: true })
         .getByText('Pronto', { exact: true })
         .waitFor();
@@ -196,7 +203,10 @@ try {
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.screenshot({ path: 'artifacts/selene-sidebar-estados.png' });
     await pagina.getByRole('button', { name: 'Recolher sidebar' }).click();
-    assert.equal(await pagina.locator('.sidebar').evaluate((item) => item.getBoundingClientRect().width), 72);
+    assert.equal(
+        await pagina.locator('[data-ui~="sidebar"]').evaluate((item) => item.getBoundingClientRect().width),
+        72,
+    );
     await app.close();
     app = await abrir();
     pagina = await app.firstWindow();
@@ -211,7 +221,7 @@ try {
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.getByRole('button', { name: 'Estatísticas', exact: true }).click();
     const estatisticas = pagina.getByRole('dialog', { name: 'Estatísticas', exact: true });
-    assert.equal(await estatisticas.locator('.total-estatisticas strong').innerText(), '150');
+    assert.equal(await estatisticas.locator('[data-ui~="total-estatisticas"] strong').innerText(), '150');
     await estatisticas.getByRole('button', { name: 'Mês', exact: true }).click();
     await estatisticas.getByRole('button', { name: 'Total', exact: true }).click();
     await pagina.keyboard.press('Escape');
@@ -234,7 +244,7 @@ try {
     assert.ok(restantes.valor.conversas.some((item) => item.titulo === 'Conversa Code 1'));
     assert.equal(restantes.valor.registrosUso.length, 1);
     await pagina.getByRole('button', { name: 'Estatísticas', exact: true }).click();
-    assert.equal(await estatisticas.locator('.total-estatisticas strong').innerText(), '150');
+    assert.equal(await estatisticas.locator('[data-ui~="total-estatisticas"] strong').innerText(), '150');
     await pagina.keyboard.press('Escape');
     await pagina.screenshot({ path: 'artifacts/selene-sidebar-final.png' });
     const dimensoes = pagina.viewportSize();

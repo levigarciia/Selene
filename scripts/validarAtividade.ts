@@ -92,15 +92,15 @@ try {
     await pagina.getByRole('button', { name: 'Validação da atividade Code', exact: true }).click();
     await pagina.getByText('A alteração foi validada.', { exact: true }).waitFor();
     assert.equal(await pagina.getByText('Este parágrafo deve permanecer inteiro.', { exact: true }).isVisible(), false);
-    assert.equal(await pagina.locator('.historico-tarefa').getAttribute('open'), null);
-    await pagina.locator('.tarefas-conversa > summary').click();
-    assert.equal(await pagina.locator('.tarefas-conversa li').count(), 2);
+    assert.equal(await pagina.locator('[data-ui~="historico-tarefa"]').getAttribute('open'), null);
+    await pagina.locator('[data-ui~="tarefas-conversa"] > summary').click();
+    assert.equal(await pagina.locator('[data-ui~="tarefas-conversa"] li').count(), 2);
     await pagina.getByRole('button', { name: 'Ver histórico completo', exact: true }).click();
     await pagina.getByText('Este parágrafo deve permanecer inteiro.', { exact: true }).waitFor();
-    await pagina.locator('.acao').last().locator('summary').click();
+    await pagina.locator('[data-ui~="acao"]').last().locator('summary').click();
     await pagina.getByText('Validação concluída sem erros', { exact: true }).waitFor();
     const estilo = await pagina
-        .locator('.acao')
+        .locator('[data-ui~="acao"]')
         .last()
         .evaluate((elemento) => ({
             borda: getComputedStyle(elemento).borderTopWidth,
@@ -112,8 +112,8 @@ try {
     await pagina.getByRole('button', { name: 'Mostrar tokens por segundo', exact: true }).click();
     await pagina.getByRole('tooltip').getByText('55 tokens/s', { exact: true }).waitFor();
     await pagina.getByRole('button', { name: 'Esconder tokens por segundo', exact: true }).click();
-    await pagina.locator('.historico-tarefa > summary').click();
-    await pagina.locator('.tarefas-conversa > summary').click();
+    await pagina.locator('[data-ui~="historico-tarefa"] > summary').click();
+    await pagina.locator('[data-ui~="tarefas-conversa"] > summary').click();
     await pagina.screenshot({ path: 'artifacts/selene-atividade-concluida.png' });
     await aplicativo.evaluate(({ dialog }, caminho) => {
         dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [caminho] });
@@ -144,23 +144,25 @@ try {
             },
         },
     );
-    await pagina.locator('.acao .texto-em-andamento').waitFor();
-    assert.equal(await pagina.locator('.historico-tarefa').count(), 0);
+    await pagina.locator('[data-ui~="acao"] [data-ui~="texto-em-andamento"]').waitFor();
+    assert.equal(await pagina.locator('[data-ui~="historico-tarefa"]').count(), 0);
     const animacao = await pagina
-        .locator('.acao .texto-em-andamento')
+        .locator('[data-ui~="acao"] [data-ui~="texto-em-andamento"]')
         .evaluate((elemento) => getComputedStyle(elemento).animationName);
     assert.equal(animacao, 'brilho-atividade');
     await pagina.screenshot({ path: 'artifacts/selene-atividade-executando.png' });
     await pagina.setViewportSize({ width: 420, height: 760 });
-    await pagina.locator('.tarefas-conversa > summary').click();
+    await pagina.locator('[data-ui~="tarefas-conversa"] > summary').click();
     assert.ok(
-        await pagina.locator('.area-entrada').evaluate((elemento) => elemento.scrollWidth <= elemento.clientWidth),
+        await pagina
+            .locator('[data-ui~="area-entrada"]')
+            .evaluate((elemento) => elemento.scrollWidth <= elemento.clientWidth),
     );
     await pagina.screenshot({ path: 'artifacts/selene-atividade-estreita.png' });
     await pagina.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(
         await pagina
-            .locator('.acao .texto-em-andamento')
+            .locator('[data-ui~="acao"] [data-ui~="texto-em-andamento"]')
             .evaluate((elemento) => getComputedStyle(elemento).animationName),
         'none',
     );
@@ -171,8 +173,8 @@ try {
         { tipo: 'estado', estado: estado.valor },
     );
     await pagina.getByText('A alteração foi validada.', { exact: true }).waitFor();
-    assert.equal(await pagina.locator('.tarefas-conversa').getAttribute('open'), null);
-    assert.equal(await pagina.locator('.historico-tarefa').getAttribute('open'), null);
+    assert.equal(await pagina.locator('[data-ui~="tarefas-conversa"]').getAttribute('open'), null);
+    assert.equal(await pagina.locator('[data-ui~="historico-tarefa"]').getAttribute('open'), null);
     assert.equal(erros.length, 0, erros.join('\n'));
     console.log(
         'Atividade Code: histórico, tarefas, ações, brilho, movimento reduzido, janela estreita e permissão validados.',

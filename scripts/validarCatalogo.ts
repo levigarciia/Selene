@@ -27,20 +27,23 @@ export async function validarCatalogo(pagina: Page): Promise<void> {
     await pagina.getByRole('button', { name: 'Explorar modelos', exact: true }).click();
     const catalogo = pagina.getByRole('dialog', { name: 'Catálogo de modelos' });
     await catalogo.waitFor();
-    assert.equal(await catalogo.locator('.item-catalogo').count(), catalogoModelos.length);
+    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), catalogoModelos.length);
     await pagina.getByRole('button', { name: 'Família Qwen', exact: true }).click();
-    assert.equal(await catalogo.locator('.item-catalogo').count(), 4);
+    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), 4);
     await pagina.getByRole('textbox', { name: 'Buscar modelos' }).fill('9B');
-    assert.equal(await catalogo.locator('.item-catalogo').count(), 1);
+    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), 1);
     await pagina.getByRole('button', { name: 'Favoritar Qwen3.5 9B', exact: true }).click();
     await aguardarEstado(pagina, (estado) => estado.favoritosCatalogo.includes('qwen3.5-9b-q4'));
     await pagina.getByRole('textbox', { name: 'Buscar modelos' }).fill('');
     await pagina.getByRole('button', { name: 'Modelos favoritos', exact: true }).click();
-    await catalogo.locator('.item-catalogo').first().waitFor();
-    assert.equal(await catalogo.locator('.item-catalogo').count(), 1);
+    await catalogo.locator('[data-ui~="item-catalogo"]').first().waitFor();
+    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), 1);
     await pagina.getByRole('button', { name: 'Todos os modelos', exact: true }).click();
-    assert.equal(await catalogo.locator('.item-catalogo').first().locator('strong').innerText(), 'Qwen3.5 9B');
-    const icones = catalogo.locator('.item-catalogo .icone-modelo');
+    assert.equal(
+        await catalogo.locator('[data-ui~="item-catalogo"]').first().locator('strong').innerText(),
+        'Qwen3.5 9B',
+    );
+    const icones = catalogo.locator('[data-ui~="item-catalogo"] [data-ui~="icone-modelo"]');
     assert.equal(await icones.count(), catalogoModelos.length);
     assert.ok(await icones.first().evaluate((elemento) => getComputedStyle(elemento).maskImage !== 'none'));
     await pagina.screenshot({ path: 'artifacts/selene-catalogo.png' });

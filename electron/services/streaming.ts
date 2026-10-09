@@ -14,6 +14,7 @@ const esquemaTrecho = z.object({
         z.object({
             delta: z.object({
                 content: z.string().nullable().optional(),
+                reasoning_content: z.string().nullable().optional(),
                 tool_calls: z
                     .array(
                         z.object({
@@ -82,6 +83,7 @@ export async function receberResposta(
     sinal: AbortSignal,
     adicionarTexto: (texto: string) => void,
     adicionarChamada?: (chamada: Chamada) => void,
+    adicionarRaciocinio?: (texto: string) => void,
 ): Promise<{ texto: string; chamadas: Chamada[]; motivo: string | null; desempenho?: Desempenho }> {
     let texto = '';
     let motivo: string | null = null;
@@ -108,6 +110,7 @@ export async function receberResposta(
             const escolha = evento.choices[0];
             if (!escolha) return;
             if (escolha.finish_reason) motivo = escolha.finish_reason;
+            if (escolha.delta.reasoning_content) adicionarRaciocinio?.(escolha.delta.reasoning_content);
             if (escolha.delta.content) {
                 texto += escolha.delta.content;
                 adicionarTexto(escolha.delta.content);

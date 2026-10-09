@@ -2,7 +2,6 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowClockwiseIcon, CheckIcon, DownloadSimpleIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import { descreverAtualizacao, type EstadoAtualizacao } from '../../shared/atualizacoes';
-import '../styles/atualizacoes.css';
 
 /** Mostra o estado e as notas das releases ao passar o mouse ou navegar pelo teclado na sidebar. */
 export function AtualizacaoSidebar({
@@ -79,10 +78,33 @@ export function AtualizacaoSidebar({
 
     return (
         <>
-            <div className="botao-atualizar-sidebar" onMouseEnter={abrir} onMouseLeave={agendarFechamento}>
+            <div
+                data-ui="botao-atualizar-sidebar"
+                className="ml-auto [[data-ui~=sidebar-recolhida]_&]:ml-0"
+                onMouseEnter={abrir}
+                onMouseLeave={agendarFechamento}
+            >
                 <button
                     ref={gatilho}
-                    className={`botao-icone indicador-atualizacao ${estado?.fase === 'pronta' ? 'atualizacao-pronta' : ''}`}
+                    data-ui={[
+                        'botao-icone indicador-atualizacao',
+                        estado?.fase === 'pronta' ? 'atualizacao-pronta' : '',
+                    ].join(' ')}
+                    className={[
+                        [
+                            '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                            [
+                                'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                'rounded-[6px] relative',
+                            ].join(' '),
+                            'p-[8px] border-0 border-solid border-current',
+                            '[&:hover:not(:disabled)]:text-[#e6e7e9] [&:hover:not(:disabled)]:bg-[#24262c]',
+                            '[[data-ui~=rodape-entrada]_&]:p-[0]',
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                        ].join(' '),
+                        estado?.fase === 'pronta' ? '[&&]:text-[#94b7a5]' : '',
+                    ].join(' ')}
                     aria-label="Procurar atualizações"
                     aria-haspopup="dialog"
                     aria-expanded={aberto}
@@ -102,8 +124,23 @@ export function AtualizacaoSidebar({
                         }
                     }}
                 >
-                    <Icone size={19} className={estado?.fase === 'verificando' ? 'girando' : ''} />
-                    {estado?.fase === 'baixando' && <span className="ponto-atualizacao" />}
+                    <Icone
+                        size={19}
+                        data-ui={estado?.fase === 'verificando' ? 'girando' : ''}
+                        className={
+                            estado?.fase === 'verificando'
+                                ? ['[&&]:animate-[spin_1.2s_linear_infinite]', 'motion-reduce:[&&]:animate-none'].join(
+                                      ' ',
+                                  )
+                                : ''
+                        }
+                    />
+                    {estado?.fase === 'baixando' && (
+                        <span
+                            data-ui="ponto-atualizacao"
+                            className="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full bg-[#94b7a5]"
+                        />
+                    )}
                 </button>
             </div>
             {aberto &&
@@ -113,7 +150,15 @@ export function AtualizacaoSidebar({
                         ref={painel}
                         role="dialog"
                         aria-label="Detalhes da atualização"
-                        className="painel-atualizacao"
+                        data-ui="painel-atualizacao"
+                        className={[
+                            'fixed z-[100] flex flex-col gap-[12px] w-[min(360px,_calc(100vw_-_16px))]',
+                            'max-h-[min(440px,_calc(100vh_-_80px))] rounded-[12px] text-[#e4e6e9] bg-[#17191def]',
+                            'shadow-[0_12px_40px_#0007] [backdrop-filter:blur(16px)] text-[12px] leading-[1.6]',
+                            'wrap-anywhere p-[16px] border border-solid border-[#34373d] [&_header]:flex',
+                            '[&_header]:flex-col [&_header]:gap-[5px] [&_progress]:w-full [&_progress]:h-[4px]',
+                            '[&_progress]:accent-[#94b7a5]',
+                        ].join(' ')}
                         onMouseEnter={abrir}
                         onMouseLeave={agendarFechamento}
                         onFocus={abrir}
@@ -153,13 +198,45 @@ export function AtualizacaoSidebar({
                             <strong>
                                 {estado ? descreverAtualizacao(estado) : 'Abra o aplicativo para buscar atualizações.'}
                             </strong>
-                            {estado && <span className="texto-secundario">Versão instalada: {estado.versaoAtual}</span>}
+                            {estado && (
+                                <span
+                                    data-ui="texto-secundario"
+                                    className={[
+                                        'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                                        '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                        '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                                        '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                                    ].join(' ')}
+                                >
+                                    Versão instalada: {estado.versaoAtual}
+                                </span>
+                            )}
                             {emAndamento && estado?.progresso !== undefined && (
-                                <progress aria-label="Download da atualização" value={estado.progresso} max={100} />
+                                <progress
+                                    className="accent-[#94b7a5]"
+                                    aria-label="Download da atualização"
+                                    value={estado.progresso}
+                                    max={100}
+                                />
                             )}
                         </header>
                         {notas.length > 0 && (
-                            <div className="notas-atualizacao">
+                            <div
+                                data-ui="notas-atualizacao"
+                                className={[
+                                    [
+                                        'min-h-0 overflow-y-auto [overscroll-behavior:contain]',
+                                        '[&_section_+_section]:mt-[12px]',
+                                    ].join(' '),
+                                    '[&_section_+_section]:pt-[12px] [&_section_+_section]:border-t',
+                                    '[&_section_+_section]:border-solid [&_section_+_section]:border-t-[#303339]',
+                                    '[&_h3]:mb-[7px] [&_h3]:text-[12px] [&_h3]:font-semibold [&_ul]:pl-[17px]',
+                                    '[&_ul]:list-disc [&_li_+_li]:mt-[5px]',
+                                ].join(' ')}
+                            >
                                 {notas.map((nota, indice) => (
                                     <section key={nota.versao}>
                                         <h3>
@@ -172,7 +249,18 @@ export function AtualizacaoSidebar({
                                                 <li key={numero}>{item}</li>
                                             ))}
                                         </ul>
-                                        <button className="link-release" onClick={() => abrirRelease(nota.versao)}>
+                                        <button
+                                            data-ui="link-release"
+                                            className={[
+                                                [
+                                                    'self-start mt-[8px] text-[#a5abb5]',
+                                                    '[text-decoration:underline_dotted]',
+                                                    'underline-offset-[3px]',
+                                                ].join(' '),
+                                                '[&:hover]:text-[#e4e6e9] [&:focus-visible]:text-[#e4e6e9]',
+                                            ].join(' ')}
+                                            onClick={() => abrirRelease(nota.versao)}
+                                        >
                                             {nota.total > nota.itens.length
                                                 ? `Ver mais ${nota.total - nota.itens.length} alterações no GitHub`
                                                 : 'Ver release no GitHub'}
@@ -182,11 +270,31 @@ export function AtualizacaoSidebar({
                             </div>
                         )}
                         {notas.length === 0 && estado?.versaoNova && (
-                            <p className="texto-secundario">Notas desta versão não foram fornecidas.</p>
+                            <p
+                                data-ui="texto-secundario"
+                                className={[
+                                    'text-[#a1a5ad] text-[12px] leading-[1.7]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                                    '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                                    '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                                ].join(' ')}
+                            >
+                                Notas desta versão não foram fornecidas.
+                            </p>
                         )}
                         {(notas.length === 0 || !!estado?.releasesOmitidas) && (
                             <button
-                                className="link-release"
+                                data-ui="link-release"
+                                className={[
+                                    [
+                                        'self-start mt-[8px] text-[#a5abb5]',
+                                        '[text-decoration:underline_dotted] underline-offset-[3px]',
+                                    ].join(' '),
+                                    '[&:hover]:text-[#e4e6e9] [&:focus-visible]:text-[#e4e6e9]',
+                                ].join(' ')}
                                 onClick={() => abrirRelease(estado?.releasesOmitidas ? undefined : estado?.versaoNova)}
                             >
                                 {estado?.releasesOmitidas

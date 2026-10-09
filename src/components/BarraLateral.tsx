@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     ChatCircleIcon,
     CodeIcon,
@@ -137,12 +137,29 @@ export function BarraLateral({
         return (
             <section
                 key={grupo.chave}
-                className={'grupo-historico grupo-' + grupo.chave}
+                data-ui={`grupo-historico grupo-${grupo.chave}`}
+                className={[
+                    'mb-[14px] shrink-0',
+                    grupo.chave === 'atuais'
+                        ? '[&&]:mb-[30px]'
+                        : grupo.chave === 'concluidas'
+                          ? '[&&]:mb-[6px]'
+                          : 'grupo-trabalhando',
+                ].join(' ')}
                 aria-label={grupo.nome || 'Conversas atuais'}
             >
                 {!recolhida && grupo.nome && (
                     <button
-                        className="rotulo-grupo separador-historico"
+                        data-ui="rotulo-grupo separador-historico"
+                        className={[
+                            'text-[11px] text-[#8f949d] flex items-center gap-[7px] flex-1 min-w-0 bg-transparent',
+                            'text-left w-full p-[8px] mx-0 my-[8px] border-0 border-solid border-current',
+                            [
+                                '[&_.truncate]:flex-1 [&_small]:text-[#666d76] [&_small]:text-[10px]',
+                                '[&:hover]:text-[#e6e7e9]',
+                            ].join(' '),
+                            '[&_>_svg]:ml-auto',
+                        ].join(' ')}
                         aria-label={grupo.nome}
                         onClick={() => alternarGrupo(grupo.chave)}
                         aria-expanded={aberta}
@@ -170,13 +187,21 @@ export function BarraLateral({
                             {grupo.nome}
                             {grupo.itens.length > 0 && ` (${grupo.itens.length})`}
                         </span>
-                        <CaretDownIcon size={12} className={!aberta ? 'grupo-fechado' : ''} />
+                        <CaretDownIcon
+                            size={12}
+                            data-ui={!aberta ? 'grupo-fechado' : ''}
+                            className={!aberta ? '[&&]:[transform:rotate(-90deg)]' : ''}
+                        />
                     </button>
                 )}
                 {visiveis.map(renderizarConversa)}
                 {aberta && !recolhida && !todos && grupo.itens.length > itens.length && (
                     <button
-                        className="mostrar-conversas"
+                        data-ui="mostrar-conversas"
+                        className={[
+                            'flex items-center gap-[8px] text-[#8f949d] bg-transparent text-[11px] px-[10px] py-[9px]',
+                            'border-0 border-solid border-current [&:hover]:text-[#e6e7e9]',
+                        ].join(' ')}
                         onClick={() => definirExpandidos((anteriores) => new Set(anteriores).add(grupo.chave))}
                     >
                         <PlusIcon size={13} /> Mostrar mais {grupo.itens.length - itens.length}
@@ -187,8 +212,54 @@ export function BarraLateral({
     }
 
     return (
-        <aside className={`sidebar ${recolhida ? 'sidebar-recolhida' : ''}`} aria-label="Navegação principal">
-            <div className="ceu-sidebar" aria-hidden="true">
+        <aside
+            data-ui={`sidebar ${recolhida ? 'sidebar-recolhida' : ''}`}
+            className={[
+                [
+                    'bg-[#0c0d0f] border-r border-solid border-r-[#222429] flex flex-col',
+                    'pt-[16px] pb-[12px] relative isolate min-h-0 px-[10px] [@media(width<=760px)]:flex',
+                    '[@media(width<=760px)]:flex-row [@media(width<=760px)]:items-center',
+                    '[@media(width<=760px)]:gap-[8px] [@media(width<=760px)]:border-r-0',
+                    '[@media(width<=760px)]:[border-right-style:solid]',
+                    '[@media(width<=760px)]:border-r-[currentColor] [@media(width<=760px)]:border-b',
+                    '[@media(width<=760px)]:[border-bottom-style:solid]',
+                    '[@media(width<=760px)]:border-b-[#222429] [@media(width<=760px)]:p-[10px]',
+                ].join(' '),
+                recolhida
+                    ? [
+                          ' ',
+                          '[&&]:px-[10px]',
+                          '[@media(width<=760px)]:[&&]:flex',
+                          '[@media(width<=760px)]:[&&]:flex-row',
+                          '[@media(width<=760px)]:[&&]:items-center',
+                          '[@media(width<=760px)]:[&&]:gap-[8px]',
+                          '[@media(width<=760px)]:[&&]:border-r-[0px]',
+                          '[@media(width<=760px)]:[&&]:[border-right-style:solid]',
+                          '[@media(width<=760px)]:[&&]:border-r-[currentColor]',
+                          '[@media(width<=760px)]:[&&]:border-b-[1px]',
+                          '[@media(width<=760px)]:[&&]:[border-bottom-style:solid]',
+                          '[@media(width<=760px)]:[&&]:border-b-[#222429]',
+                          '[@media(width<=760px)]:[&&]:p-[10px]',
+                      ].join(' ')
+                    : '',
+            ].join(' ')}
+            aria-label="Navegação principal"
+        >
+            <div
+                data-ui="ceu-sidebar"
+                className={[
+                    'absolute z-[-1] top-0 right-0 bottom-[auto] left-0 h-[100px] overflow-hidden',
+                    'pointer-events-none',
+                    'bg-[linear-gradient(160deg,#172b36,#251931_50%,#0c0d0f)]',
+                    '[mask-image:linear-gradient(#000_35%,_transparent)] [&_i]:absolute [&_i]:w-[1.5px]',
+                    '[&_i]:h-[1.5px] [&_i]:rounded-full [&_i]:bg-[#e3eaf9] [&_i]:shadow-[0_0_3px_#c0d6ff55]',
+                    '[&_i:nth-of-type(9n)]:w-[3px] [&_i:nth-of-type(9n)]:h-[3px] [&_i:nth-of-type(9n)]:bg-[#f5f7ff]',
+                    '[&_i:nth-of-type(9n)]:shadow-[0_0_6px_#dae7ffa0]',
+                ].join(' ')}
+                aria-hidden="true"
+            >
+                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_10%_50%,#335c7955,transparent_50%)]" />
+                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_77%_0%,#4c316655,transparent_70%)]" />
                 {Array.from({ length: 38 }, (_, indice) => (
                     <i
                         key={indice}
@@ -200,11 +271,33 @@ export function BarraLateral({
                     />
                 ))}
             </div>
-            <div className="marca">
+            <div
+                data-ui="marca"
+                className={[
+                    'flex items-center gap-[11px] mt-0 mb-[18px] [-webkit-app-region:drag] mx-[8px]',
+                    '[&_span]:text-[17px] [&_span]:font-semibold [&_span]:tracking-[-0.4px]',
+                    '[[data-ui~=sidebar-recolhida]_&]:flex-col [[data-ui~=sidebar-recolhida]_&]:mt-0',
+                    '[[data-ui~=sidebar-recolhida]_&]:mb-[20px] [[data-ui~=sidebar-recolhida]_&]:gap-[14px]',
+                    '[[data-ui~=sidebar-recolhida]_&]:mx-0 [&_svg]:text-[#94b7a5]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:m-[0]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&_span]:hidden',
+                ].join(' ')}
+            >
                 <MoonIcon size={21} weight="duotone" />
                 {!recolhida && <span>selene</span>}
                 <button
-                    className="botao-icone"
+                    data-ui="botao-icone"
+                    className={[
+                        '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                        'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
+                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                    ].join(' ')}
                     onClick={alternar}
                     aria-expanded={!recolhida}
                     aria-label={recolhida ? 'Expandir sidebar' : 'Recolher sidebar'}
@@ -213,7 +306,25 @@ export function BarraLateral({
                     <SidebarSimpleIcon size={18} />
                 </button>
             </div>
-            <div className="seletor-modo seletor-modo-sidebar" aria-label="Modo da Selene">
+            <div
+                data-ui="seletor-modo seletor-modo-sidebar"
+                className={[
+                    'flex rounded-[8px] mt-0 mb-[12px] p-[3px] mx-[6px] border border-solid',
+                    'border-[#2b2e34] [&_button]:flex [&_button]:items-center [&_button]:gap-[7px]',
+                    '[&_button]:text-[12px] [&_button]:text-[#a1a5ad] [&_button]:bg-transparent',
+                    '[&_button]:rounded-[5px] [&_button]:flex-1 [&_button]:justify-center [&_button]:px-[13px]',
+                    '[&_button]:py-[7px] [&_button]:border-0 [&_button]:border-solid',
+                    "[&_button]:border-current [&_button[aria-pressed='true']]:bg-[#292c32]",
+                    "[&_button[aria-pressed='true']]:text-[#eff0f2] [[data-ui~=sidebar-recolhida]_&]:flex-col",
+                    '[[data-ui~=sidebar-recolhida]_&]:ml-0 [[data-ui~=sidebar-recolhida]_&]:mr-0',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-1',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:m-[0]',
+                ].join(' ')}
+                aria-label="Modo da Selene"
+            >
                 {(['chat', 'code'] as const).map((opcao) => (
                     <button
                         key={opcao}
@@ -231,9 +342,24 @@ export function BarraLateral({
                     </button>
                 ))}
             </div>
-            <div className="acoes-sidebar">
+            <div
+                data-ui="acoes-sidebar"
+                className={[
+                    'flex items-center gap-[2px] mb-[14px] [[data-ui~=sidebar-recolhida]_&]:flex-col',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
+                ].join(' ')}
+            >
                 {!recolhida && (
-                    <label className="busca">
+                    <label
+                        data-ui="busca"
+                        className={[
+                            'flex items-center gap-[9px] text-[#a1a5ad] flex-1 min-w-0 p-[8px] [&_input]:min-w-0',
+                            '[&_input]:w-full [&_input]:bg-transparent [&_input]:text-[12px] [&_input]:border-0',
+                            '[&_input]:border-solid [&_input]:border-current [&_input::placeholder]:text-[#a1a5ad]',
+                            '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:hidden',
+                        ].join(' ')}
+                    >
                         <MagnifyingGlassIcon size={16} />
                         <input
                             aria-label="Buscar conversas"
@@ -245,7 +371,18 @@ export function BarraLateral({
                 )}
                 {modo === 'code' && (
                     <button
-                        className="botao-icone"
+                        data-ui="botao-icone"
+                        className={[
+                            '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                            [
+                                'inline-flex items-center justify-center bg-transparent text-[#a1a5ad]',
+                                'rounded-[6px] p-[8px]',
+                            ].join(' '),
+                            'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                            '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                        ].join(' ')}
                         aria-label="Projetos"
                         title="Gerenciar projetos"
                         onClick={gerenciarProjetos}
@@ -254,7 +391,18 @@ export function BarraLateral({
                     </button>
                 )}
                 <button
-                    className="botao-icone nova-conversa"
+                    data-ui="botao-icone nova-conversa"
+                    className={[
+                        '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                        '[[data-ui~=sidebar-recolhida]_&]:justify-center [[data-ui~=sidebar-recolhida]_&]:px-[8px]',
+                        '[[data-ui~=sidebar-recolhida]_&]:py-[11px] inline-flex items-center justify-start',
+                        'bg-[#17191d] text-[#a1a5ad] rounded-[6px] w-full px-[14px] py-[12px] border-0',
+                        'border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        '[[data-ui~=sidebar]_&]:w-auto [[data-ui~=sidebar]_&]:bg-transparent',
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                    ].join(' ')}
                     onClick={() => criar()}
                     aria-label="Nova conversa"
                     title="Nova conversa"
@@ -262,22 +410,75 @@ export function BarraLateral({
                     <PlusIcon size={18} />
                 </button>
             </div>
-            <nav className="historico" aria-label="Conversas">
+            <nav
+                data-ui="historico"
+                className={[
+                    '[[data-ui~=sidebar-recolhida]_&]:mt-[20px] flex-1 min-h-0 overflow-y-auto mt-[8px] flex',
+                    'flex-col [scrollbar-width:thin] [scrollbar-color:#303339_transparent]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:hidden',
+                ].join(' ')}
+                aria-label="Conversas"
+            >
                 {grupos.filter((grupo) => grupo.chave === 'atuais').map(renderizarGrupo)}
                 {conversas.length === 0 && !recolhida && (
-                    <p className="historico-vazio texto-secundario">
+                    <p
+                        data-ui="historico-vazio texto-secundario"
+                        className={[
+                            'text-[12px] leading-[1.7] text-[#a1a5ad] p-[12px]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
+                            '[[data-ui~=usuario-direita]_&]:text-[#a1a5ad]',
+                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
+                        ].join(' ')}
+                    >
                         {busca ? 'Nenhuma conversa encontrada.' : 'Seu histórico aparecerá aqui.'}
                     </p>
                 )}
                 {modo === 'code' && (
-                    <div className="prateleiras-historico">
+                    <div data-ui="prateleiras-historico" className="mt-auto shrink-0">
                         {grupos.filter((grupo) => grupo.chave !== 'atuais').map(renderizarGrupo)}
                     </div>
                 )}
             </nav>
-            <footer className="rodape-sidebar">
+            <footer
+                data-ui="rodape-sidebar"
+                className={[
+                    '[[data-ui~=sidebar-recolhida]_&]:justify-center [[data-ui~=sidebar-recolhida]_&]:flex-col',
+                    '[[data-ui~=sidebar-recolhida]_&]:px-[8px] [[data-ui~=sidebar-recolhida]_&]:py-[11px]',
+                    "[&[aria-current='page']]:text-[#94b7a5] [&[aria-current='page']]:bg-[#202723] flex",
+                    'items-center gap-[2px] pt-[6px] pb-0 text-left bg-transparent border-t',
+                    'border-t-[#222429] border-r-0 border-r-[currentColor] border-b-0',
+                    'border-b-[currentColor] border-l-0 border-l-[currentColor] rounded-[0] text-[#9298a2]',
+                    'px-[2px] border-solid [&_span]:text-[12px] [&_small]:block [&_small]:text-[#a1a5ad]',
+                    '[&_small]:text-[11px] [&_small]:mt-[4px]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:gap-[0]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:p-[0]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-[0px]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-solid',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-[currentColor]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:gap-[0]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:p-[0]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:border-[0px]',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:border-solid',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:border-[currentColor]',
+                ].join(' ')}
+            >
                 <button
-                    className="botao-icone"
+                    data-ui="botao-icone"
+                    className={[
+                        '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                        'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
+                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                    ].join(' ')}
                     onClick={configurar}
                     aria-label="Configurações"
                     title="Configurações"
@@ -285,7 +486,20 @@ export function BarraLateral({
                 >
                     <GearSixIcon size={19} />
                 </button>
-                <button className="botao-icone" onClick={estatisticas} aria-label="Estatísticas" title="Estatísticas">
+                <button
+                    data-ui="botao-icone"
+                    className={[
+                        '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                        'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
+                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
+                        '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                    ].join(' ')}
+                    onClick={estatisticas}
+                    aria-label="Estatísticas"
+                    title="Estatísticas"
+                >
                     <ChartBarIcon size={19} />
                 </button>
                 <AtualizacaoSidebar estado={estado.atualizacao} verificar={atualizar} abrirRelease={abrirRelease} />
@@ -304,7 +518,14 @@ export function BarraLateral({
                 <MenuContexto posicao={menuConcluidas} fechar={fecharMenus} titulo="Ações das conversas concluídas">
                     <button
                         role="menuitem"
-                        className="texto-erro"
+                        data-ui="texto-erro"
+                        className={[
+                            'text-[#e9aaa7] text-[12px]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#e9aaa7]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
+                            '[[data-ui~=usuario-direita]_&]:text-[#e9aaa7]',
+                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
+                        ].join(' ')}
                         disabled={quantidadeConcluidas === 0}
                         onClick={() => {
                             fecharMenus();

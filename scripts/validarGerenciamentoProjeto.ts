@@ -69,7 +69,7 @@ try {
     await pagina.getByRole('button', { name: 'Gerenciar projeto Aplicativo', exact: true }).click();
     await pagina.getByRole('heading', { name: 'Projetos', exact: true }).waitFor();
     assert.equal(
-        await pagina.locator('.tela-projetos').evaluate((elemento) => getComputedStyle(elemento).display),
+        await pagina.locator('[data-ui~="tela-projetos"]').evaluate((elemento) => getComputedStyle(elemento).display),
         'grid',
     );
     await pagina.getByRole('button', { name: 'Ícone Cubo', exact: true }).click();
@@ -96,12 +96,15 @@ try {
         await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).inputValue(),
         'Texto pendente preservado',
     );
-    assert.equal(await pagina.locator('.breadcrumb-projeto .icone-projeto').getAttribute('fill'), '#8aaddc');
-    assert.equal(await pagina.locator('.barra-contexto .gatilho-projeto').count(), 0);
+    assert.equal(
+        await pagina.locator('[data-ui~="breadcrumb-projeto"] [data-ui~="icone-projeto"]').getAttribute('fill'),
+        '#8aaddc',
+    );
+    assert.equal(await pagina.locator('[data-ui~="barra-contexto"] [data-ui~="gatilho-projeto"]').count(), 0);
     assert.equal(
         await pagina
             .getByRole('button', { name: 'Chat do projeto', exact: true })
-            .locator('.icone-projeto')
+            .locator('[data-ui~="icone-projeto"]')
             .getAttribute('fill'),
         '#8aaddc',
     );
@@ -109,7 +112,7 @@ try {
     assert.equal(
         await pagina
             .getByRole('button', { name: 'Chat concluído', exact: true })
-            .locator('.icone-projeto')
+            .locator('[data-ui~="icone-projeto"]')
             .getAttribute('fill'),
         '#8aaddc',
     );
@@ -147,11 +150,11 @@ try {
     await pagina.getByRole('button', { name: 'Voltar à conversa', exact: true }).click();
     const iconeSalvo = (await obter()).icone;
     assert.ok(iconeSalvo?.tipo === 'imagem');
-    assert.equal(await pagina.locator('.breadcrumb-projeto img').getAttribute('src'), iconeSalvo.dados);
+    assert.equal(await pagina.locator('[data-ui~="breadcrumb-projeto"] img').getAttribute('src'), iconeSalvo.dados);
     assert.equal(
         await pagina
             .getByRole('button', { name: 'Chat do projeto', exact: true })
-            .locator('img.icone-projeto')
+            .locator('img[data-ui~="icone-projeto"]')
             .getAttribute('src'),
         iconeSalvo.dados,
     );
@@ -171,7 +174,7 @@ try {
     pagina.setDefaultTimeout(10000);
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.getByRole('button', { name: 'Chat do projeto', exact: true }).click();
-    assert.equal(await pagina.locator('.breadcrumb-projeto img').getAttribute('src'), iconeSalvo.dados);
+    assert.equal(await pagina.locator('[data-ui~="breadcrumb-projeto"] img').getAttribute('src'), iconeSalvo.dados);
     assert.equal(
         await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).inputValue(),
         'Texto pendente preservado',
