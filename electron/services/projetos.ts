@@ -89,7 +89,9 @@ export async function criarProjetoGerenciado(
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-zA-Z0-9]+/g, '_')
             .slice(0, 60) || 'projeto';
-    const pasta = await mkdtemp(join(raiz, `${identificador}_`));
+    const conteiner = join(raiz, `${identificador}_`);
+    await mkdir(conteiner, { recursive: true });
+    const pasta = await mkdtemp(conteiner);
     try {
         let aviso: string | undefined;
         if (url) {
