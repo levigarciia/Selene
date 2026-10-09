@@ -1,11 +1,12 @@
 import { TextoAtividade } from './TextoAtividade';
-import { CaretRightIcon, InfoIcon } from '@phosphor-icons/react';
+import { ArrowsClockwiseIcon, CaretRightIcon, InfoIcon, PencilSimpleIcon } from '@phosphor-icons/react';
 import { lazy, memo, Suspense, useState } from 'react';
 import type { Mensagem, PonteSelene } from '../../shared/contratos';
 import { montarAtividade } from '../../shared/atividade';
 import type { Executar } from './Configuracoes';
 import { AcaoConversa } from './AcaoConversa';
 import { ImagemConversa } from './ImagemConversa';
+import { EditorMensagem } from './EditorMensagem';
 
 const TextoMarkdown = lazy(() => import('./TextoMarkdown'));
 
@@ -35,6 +36,7 @@ function Texto({ texto }: { texto: string }) {
                 '[&_th]:border-solid [&_th]:border-[#35383f] [&_td]:text-left [&_td]:p-[7px]',
                 '[&_td]:border [&_td]:border-solid [&_td]:border-[#35383f]',
                 '[[data-ui~=atividade-tarefa]_>_&]:mx-0 [[data-ui~=atividade-tarefa]_>_&]:my-[14px]',
+                '[[data-ui~=usuario-direita]_[data-ui~=atividade-tarefa]_>_&]:my-0',
                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:bg-selecionado',
                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:rounded-[12px]',
                 '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-principal',
@@ -59,14 +61,21 @@ export const MensagemConversa = memo(function MensagemConversa({
     emExecucao = false,
     ponte,
     executar,
+    reenviar,
+    regerar,
+    edicaoDesativada = false,
 }: {
     mensagem: Mensagem;
     modo?: 'chat' | 'code';
     emExecucao?: boolean;
     ponte?: PonteSelene;
     executar: Executar;
+    reenviar?: (mensagemId: string, texto: string) => Promise<boolean>;
+    regerar?: (mensagemId: string) => Promise<void>;
+    edicaoDesativada?: boolean;
 }) {
     const [mostrarTokens, definirMostrarTokens] = useState(false);
+    const [editando, definirEditando] = useState(false);
     const tokens = mensagem.desempenho?.tokensPorSegundo;
     const gerando = emExecucao && mensagem.estado === 'gerando' && !mensagem.concluidoEm;
     const recolher =
@@ -117,6 +126,7 @@ export const MensagemConversa = memo(function MensagemConversa({
             <div
                 data-ui="conteudo"
                 className={[
+                    'relative group/mensagem',
                     '[[data-ui~=usuario-direita]_&]:flex',
                     '[[data-ui~=usuario-direita]_&]:flex-col',
                     '[[data-ui~=usuario-direita]_&]:gap-[12px]',
@@ -165,7 +175,15 @@ export const MensagemConversa = memo(function MensagemConversa({
                         <Texto texto={mensagem.raciocinio} />
                     </details>
                 )}
-                {recolher ? (
+                {editando && reenviar && modo === 'chat' && mensagem.papel === 'user' ? (
+                    <EditorMensagem
+                        texto={mensagem.texto}
+                        possuiImagens={!!mensagem.imagens?.length}
+                        ocupado={edicaoDesativada}
+                        cancelar={() => definirEditando(false)}
+                        reenviar={(texto) => reenviar(mensagem.id, texto)}
+                    />
+                ) : recolher ? (
                     <>
                         <details
                             data-ui="historico-tarefa"
@@ -194,6 +212,24 @@ export const MensagemConversa = memo(function MensagemConversa({
                         {atividade}
                     </div>
                 )}
+                {modo === 'chat' && mensagem.papel === 'user' && reenviar && !editando && (
+                    <button
+                        type="button"
+                        data-ui="editar-mensagem"
+                        aria-label="Editar e reenviar mensagem"
+                        title="Editar e reenviar mensagem"
+                        disabled={edicaoDesativada}
+                        onClick={() => definirEditando(true)}
+                        className={[
+                            'absolute top-full right-0 grid place-items-center rounded-[6px] size-[24px]',
+                            'opacity-0 pointer-events-none group-hover/mensagem:opacity-100',
+                            'group-hover/mensagem:pointer-events-auto focus-visible:opacity-100',
+                            'focus-visible:pointer-events-auto text-secundario hover:text-principal hover:bg-hover',
+                        ].join(' ')}
+                    >
+                        <PencilSimpleIcon size={14} />
+                    </button>
+                )}
                 {gerando && mensagem.faseContexto === 'compactando' && (
                     <span
                         data-ui="texto-secundario indicador-geracao"
@@ -214,6 +250,11 @@ export const MensagemConversa = memo(function MensagemConversa({
                     >
                         Compactando contexto
                     </span>
+                )}
+                {gerando && mensagem.faseGeracao === 'ligandoModelo' && (
+                    <div role="status" data-ui="ligando-modelo" className="text-[13px] pt-[8px]">
+                        <TextoAtividade ativo>Ligando modelo</TextoAtividade>
+                    </div>
                 )}
                 {gerando && mensagem.acoes.at(-1)?.estado === 'aguardando' && (
                     <span
@@ -240,6 +281,7 @@ export const MensagemConversa = memo(function MensagemConversa({
                     !mensagem.texto.trim() &&
                     !mensagem.raciocinio &&
                     !mensagem.acoes.length &&
+                    mensagem.faseGeracao !== 'ligandoModelo' &&
                     !mensagem.faseContexto && (
                         <span
                             data-ui="texto-secundario indicador-geracao"
@@ -292,35 +334,61 @@ export const MensagemConversa = memo(function MensagemConversa({
                         A tarefa não foi concluída
                     </span>
                 )}
-                {mensagem.papel === 'assistant' && !!tokens && (
-                    <div data-ui="velocidade-mensagem" className="flex items-center gap-[8px] mt-[8px] text-[11px]">
-                        <button
-                            data-ui="botao-icone botao-icone-tokens"
-                            className={[
-                                '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                                [
-                                    'inline-flex items-center justify-center bg-transparent text-secundario',
-                                    'rounded-[6px] p-[8px]',
-                                ].join(' '),
-                                'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
-                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
-                                '[[data-ui~=velocidade-mensagem]_&]:inline-flex',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:border-borda',
-                                '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&:hover:not(:disabled)]:bg-hover',
-                                '[[data-ui~=usuario-direita]_&]:text-secundario',
-                                '[[data-ui~=usuario-direita]_&]:border-borda',
-                                '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:text-principal',
-                                '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:bg-hover',
-                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                                '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
-                            ].join(' ')}
-                            onClick={() => definirMostrarTokens(!mostrarTokens)}
-                            aria-label={mostrarTokens ? 'Esconder tokens por segundo' : 'Mostrar tokens por segundo'}
-                        >
-                            <InfoIcon size={14} />
-                        </button>
-                        {mostrarTokens && (
+                {mensagem.papel === 'assistant' && (!!tokens || (modo === 'chat' && regerar && !gerando)) && (
+                    <div
+                        data-ui="velocidade-mensagem"
+                        className={[
+                            'flex items-center gap-[8px] mt-[8px] text-[11px] opacity-0 pointer-events-none',
+                            'group-hover/mensagem:opacity-100 group-hover/mensagem:pointer-events-auto',
+                            'focus-within:opacity-100 focus-within:pointer-events-auto',
+                        ].join(' ')}
+                    >
+                        {!!tokens && (
+                            <button
+                                data-ui="botao-icone botao-icone-tokens"
+                                className={[
+                                    '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                                    [
+                                        'inline-flex items-center justify-center bg-transparent text-secundario',
+                                        'rounded-[6px] p-[8px]',
+                                    ].join(' '),
+                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
+                                    '[[data-ui~=velocidade-mensagem]_&]:inline-flex',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:border-borda',
+                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&:hover:not(:disabled)]:bg-hover',
+                                    '[[data-ui~=usuario-direita]_&]:text-secundario',
+                                    '[[data-ui~=usuario-direita]_&]:border-borda',
+                                    '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:text-principal',
+                                    '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:bg-hover',
+                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
+                                    '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                                ].join(' ')}
+                                onClick={() => definirMostrarTokens(!mostrarTokens)}
+                                aria-label={
+                                    mostrarTokens ? 'Esconder tokens por segundo' : 'Mostrar tokens por segundo'
+                                }
+                            >
+                                <InfoIcon size={14} />
+                            </button>
+                        )}
+                        {modo === 'chat' && regerar && !gerando && (
+                            <button
+                                type="button"
+                                aria-label="Regerar mensagem"
+                                title="Regerar mensagem"
+                                disabled={edicaoDesativada}
+                                onClick={() => void regerar(mensagem.id)}
+                                className={[
+                                    'inline-flex items-center justify-center rounded-[6px] p-[8px] text-secundario',
+                                    'hover:text-principal hover:bg-hover disabled:opacity-40',
+                                ].join(' ')}
+                            >
+                                <ArrowsClockwiseIcon size={14} />
+                            </button>
+                        )}
+                        {mostrarTokens && !!tokens && (
                             <span role="tooltip">
                                 {tokens.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tokens/s
                             </span>

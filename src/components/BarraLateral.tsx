@@ -233,7 +233,7 @@ export function BarraLateral({
             className={[
                 [
                     'bg-sidebar border-r border-solid border-r-borda flex flex-col',
-                    'pt-[16px] pb-[12px] relative isolate min-h-0 px-[10px] [@media(width<=760px)]:flex',
+                    'pt-0 pb-[12px] relative isolate min-h-0 px-[10px] [@media(width<=760px)]:flex',
                     '[@media(width<=760px)]:flex-row [@media(width<=760px)]:items-center',
                     '[@media(width<=760px)]:gap-[8px] [@media(width<=760px)]:border-r-0',
                     '[@media(width<=760px)]:[border-right-style:solid]',
@@ -245,6 +245,7 @@ export function BarraLateral({
                     ? [
                           ' ',
                           '[&&]:px-[10px]',
+                          '[&&]:pt-[16px]',
                           '[@media(width<=760px)]:[&&]:flex',
                           '[@media(width<=760px)]:[&&]:flex-row',
                           '[@media(width<=760px)]:[&&]:items-center',
@@ -290,12 +291,16 @@ export function BarraLateral({
             <div
                 data-ui="marca"
                 className={[
-                    'flex items-center gap-[11px] mt-0 mb-[18px] [-webkit-app-region:drag] mx-[8px]',
+                    'flex h-[56px] shrink-0 items-center gap-[11px] mt-0 mb-[12px] [-webkit-app-region:drag] mx-[8px]',
+                    'border-b border-transparent [[data-ui~=sidebar-recolhida]_&]:border-0',
                     '[&_span]:text-[17px] [&_span]:font-semibold [&_span]:tracking-[-0.4px] [&_span]:text-white',
                     '[[data-ui~=sidebar-recolhida]_&]:flex-col [[data-ui~=sidebar-recolhida]_&]:mt-0',
+                    '[[data-ui~=sidebar-recolhida]_&]:h-auto',
                     '[[data-ui~=sidebar-recolhida]_&]:mb-[20px] [[data-ui~=sidebar-recolhida]_&]:gap-[14px]',
                     '[[data-ui~=sidebar-recolhida]_&]:mx-0 [&_button_svg]:text-[#b5a2dc]',
                     '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:h-auto',
+                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-0',
                     '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
                     '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
                     '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:m-[0]',

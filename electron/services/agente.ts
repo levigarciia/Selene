@@ -5,6 +5,7 @@ import { interpretarArgumentos, tentarInterpretarArgumentos } from './argumentos
 import { ferramentas, lerInstrucoes, prepararFerramenta } from './ferramentas';
 import { receberResposta } from './streaming';
 import { CompactadorContexto, estimarTokens, type MensagemModelo } from './contexto';
+import { prepararReenvioChat } from './reenvioChat';
 type Dependencias = {
     contextoProjetoChat?: (conversa: Conversa) => { instrucao: string; referencias: string } | null;
     completar: (corpo: unknown, sinal: AbortSignal) => Promise<Response>;
@@ -37,8 +38,16 @@ export class Agente {
         configuracao: Configuracao,
         imagens: ImagemAnexada[] = [],
         modelo?: Modelo,
+        mensagemId?: string,
+        preparacao?: {
+            ligandoModelo: boolean;
+            executar: (sinal: AbortSignal) => Promise<Configuracao>;
+        },
     ): Promise<void> {
         if (this.controle) throw new Error('Aguarde ou interrompa a tarefa atual.');
+        const preparada = mensagemId ? prepararReenvioChat(conversa, mensagemId, texto) : undefined;
+        const original = preparada ? structuredClone(conversa) : undefined;
+        if (preparada) imagens = preparada.mensagens.at(-1)?.imagens ?? [];
         if (!texto.trim() && !imagens.length) throw new Error('Escreva uma mensagem ou anexe uma imagem.');
         const controle = new AbortController();
         this.controle = controle;
@@ -51,11 +60,16 @@ export class Agente {
             acoes: [],
             criadoEm: new Date().toISOString(),
             inicioTextoFinal: 0,
+            ...(preparacao?.ligandoModelo ? { faseGeracao: 'ligandoModelo' as const } : {}),
         };
-        const anteriores = [...conversa.mensagens];
+        if (preparada) {
+            conversa.mensagens = preparada.mensagens;
+            delete conversa.contextoCompactado;
+        }
+        const anteriores = preparada ? conversa.mensagens.slice(0, -1) : [...conversa.mensagens];
         let ultimaPublicacao = Number.NEGATIVE_INFINITY;
-        conversa.mensagens.push(
-            {
+        if (!preparada) {
+            conversa.mensagens.push({
                 id: randomUUID(),
                 papel: 'user',
                 texto,
@@ -63,15 +77,24 @@ export class Agente {
                 acoes: [],
                 criadoEm: new Date().toISOString(),
                 ...(imagens.length ? { imagens } : {}),
-            },
-            resposta,
-        );
+            });
+        }
+        conversa.mensagens.push(resposta);
         if (anteriores.length === 0) conversa.titulo = texto.slice(0, 70) || imagens[0].nome.slice(0, 70);
         conversa.atualizadoEm = new Date().toISOString();
         conversa.concluida = false;
         delete conversa.encerradaEm;
+        let envioSalvo = false;
         try {
             await this.dependencias.salvar();
+            envioSalvo = true;
+            controle.signal.throwIfAborted();
+            if (preparacao) {
+                configuracao = await preparacao.executar(controle.signal);
+                controle.signal.throwIfAborted();
+                delete resposta.faseGeracao;
+                this.dependencias.publicar(resposta);
+            }
             const origens = new Map<MensagemModelo, string>();
             const mensagens = await this.montarContexto(conversa, anteriores, configuracao, origens);
             mensagens.push(await this.mensagemUsuario(texto, imagens));
@@ -234,6 +257,11 @@ export class Agente {
                 resposta.texto += resposta.texto.endsWith('\n') || !resposta.texto ? '' : '\n\n';
             }
         } catch (erro) {
+            if (original && !envioSalvo) {
+                Object.assign(conversa, original);
+                if (original.concluida === undefined) delete conversa.concluida;
+                throw erro;
+            }
             resposta.estado = controle.signal.aborted ? 'interrompida' : 'erro';
             const detalhe = erro instanceof Error ? erro.message : 'Não foi possível concluir a tarefa.';
             resposta.texto += `${resposta.texto ? '\n\n' : ''}${detalhe}`;
@@ -248,8 +276,9 @@ export class Agente {
                 }
             }
             resposta.concluidoEm = new Date().toISOString();
+            const restaurado = original && !envioSalvo;
             try {
-                await this.dependencias.salvar();
+                if (!restaurado) await this.dependencias.salvar();
             } catch (erro) {
                 resposta.estado = 'erro';
                 resposta.texto += '\n\nNão foi possível salvar o resultado no histórico local.';
@@ -257,7 +286,7 @@ export class Agente {
             } finally {
                 this.controle = null;
                 this.conversaId = null;
-                this.dependencias.publicar(resposta);
+                if (!restaurado) this.dependencias.publicar(resposta);
             }
         }
     }

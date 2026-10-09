@@ -22,6 +22,7 @@ import {
 import { Persistencia } from './services/persistencia';
 import { MotorLocal } from './services/motor';
 import { Agente } from './services/agente';
+import { obterPedidoParaRegerarChat, prepararReenvioChat } from './services/reenvioChat';
 import { catalogoModelos, encontrarModeloLocal, type ModeloCatalogo } from '../shared/catalogo';
 import { DownloadsModelos } from './services/downloadModelos';
 import { AnexosImagens } from './services/anexosImagens';
@@ -481,62 +482,71 @@ function registrarOperacoes(): void {
         await salvar();
         motor.aplicarConfiguracao(configuracao);
     });
-    registrar(
-        'enviar',
-        z.tuple([uuid, z.string().trim().max(30000), z.array(uuid).max(4)]),
-        async ([id, texto, ids]) => {
-            exigirLivre();
-            if (!texto && !ids.length) throw new Error('Escreva uma mensagem ou anexe uma imagem.');
-            const imagens = anexos.obter(ids);
-            if (['carregando', 'instalando'].includes(motor.estado.fase)) throw new Error('Aguarde o motor local.');
-            const conversa = conversaPorId(id);
-            if (!conversa.modeloId) throw new Error('Selecione um modelo GGUF.');
-            if (conversa.modo === 'code' && !conversa.projeto) {
-                await prepararPastaTrabalho(conversa, app.getPath('userData'));
-                await salvar();
-            }
-            const modelo = persistencia.dados.modelos.find((item) => item.id === conversa.modeloId);
-            if (!modelo) throw new Error('Modelo não encontrado.');
-            if (
-                motor.estado.fase !== 'pronto' ||
-                motor.estado.modeloId !== modelo.id ||
-                motor.precisaRecarregar(persistencia.dados.configuracao, modelo)
-            ) {
-                await carregarModelo(modelo.id);
-            }
-            const indiceResumo = conversa.contextoCompactado
-                ? conversa.mensagens.findIndex((mensagem) => mensagem.id === conversa.contextoCompactado!.ateMensagemId)
-                : -1;
-            const possuiImagens =
-                imagens.length ||
-                conversa.mensagens.slice(indiceResumo + 1).some((mensagem) => mensagem.imagens?.length);
-            if (possuiImagens && !motor.estado.suportaImagens) {
-                throw new Error(
-                    'O motor está carregado sem suporte visual ativo. ' +
-                        'Para modelos importados, vincule o projetor visual compatível nas configurações de Modelos.',
-                );
-            }
-            tarefa = agente
-                .executar(
-                    conversa,
-                    texto,
-                    {
+    async function enviarMensagem(id: string, texto: string, ids: string[], mensagemId?: string): Promise<void> {
+        exigirLivre();
+        if (['carregando', 'instalando'].includes(motor.estado.fase)) throw new Error('Aguarde o motor local.');
+        const conversa = conversaPorId(id);
+        const preparada = mensagemId ? prepararReenvioChat(conversa, mensagemId, texto) : conversa;
+        const imagens = mensagemId ? (preparada.mensagens.at(-1)?.imagens ?? []) : anexos.obter(ids);
+        if (!texto && !imagens.length) throw new Error('Escreva uma mensagem ou anexe uma imagem.');
+        if (!conversa.modeloId) throw new Error('Selecione um modelo GGUF.');
+        if (conversa.modo === 'code' && !conversa.projeto) {
+            await prepararPastaTrabalho(conversa, app.getPath('userData'));
+            await salvar();
+        }
+        const modelo = persistencia.dados.modelos.find((item) => item.id === conversa.modeloId);
+        if (!modelo) throw new Error('Modelo não encontrado.');
+        const precisaLigar =
+            motor.estado.fase !== 'pronto' ||
+            motor.estado.modeloId !== modelo.id ||
+            motor.precisaRecarregar(persistencia.dados.configuracao, modelo);
+        const indiceResumo = preparada.contextoCompactado
+            ? preparada.mensagens.findIndex((mensagem) => mensagem.id === preparada.contextoCompactado!.ateMensagemId)
+            : -1;
+        const possuiImagens =
+            imagens.length || preparada.mensagens.slice(indiceResumo + 1).some((mensagem) => mensagem.imagens?.length);
+        tarefa = agente
+            .executar(conversa, texto, persistencia.dados.configuracao, imagens, modelo, mensagemId, {
+                ligandoModelo: precisaLigar,
+                executar: async (sinal) => {
+                    sinal.throwIfAborted();
+                    if (precisaLigar) await carregarModelo(modelo.id);
+                    sinal.throwIfAborted();
+                    if (possuiImagens && !motor.estado.suportaImagens) {
+                        throw new Error(
+                            'O motor está carregado sem suporte visual ativo. ' +
+                                'Para modelos importados, vincule o projetor visual compatível nas configurações de Modelos.',
+                        );
+                    }
+                    if (!motor.estado.contextoDisponivel)
+                        throw new Error('O motor não informou o contexto disponível.');
+                    return {
                         ...persistencia.dados.configuracao,
-                        contexto: motor.estado.contextoDisponivel!,
-                    },
-                    imagens,
-                    modelo,
-                )
-                .catch((erro: Error) => {
-                    publicar({ tipo: 'erro', erro: `Falha ao persistir a conversa: ${erro.message}` });
-                })
-                .finally(() => {
-                    tarefa = null;
-                });
-            publicarEstado();
-            await anexos.descartar(ids);
-        },
+                        contexto: motor.estado.contextoDisponivel,
+                    };
+                },
+            })
+            .catch((erro: Error) => {
+                publicar({ tipo: 'erro', erro: `Falha ao persistir a conversa: ${erro.message}` });
+            })
+            .finally(() => {
+                tarefa = null;
+                publicarEstado();
+            });
+        publicarEstado();
+        await anexos.descartar(ids);
+    }
+    registrar('enviar', z.tuple([uuid, z.string().trim().max(30000), z.array(uuid).max(4)]), ([id, texto, ids]) =>
+        enviarMensagem(id, texto, ids),
     );
+    registrar('editarEReenviar', z.tuple([uuid, uuid, z.string().trim().max(30000)]), ([id, mensagemId, texto]) =>
+        enviarMensagem(id, texto, [], mensagemId),
+    );
+    registrar('regerar', z.tuple([uuid, uuid]), ([id, mensagemId]) => {
+        exigirLivre();
+        const pedido = obterPedidoParaRegerarChat(conversaPorId(id), mensagemId);
+        return enviarMensagem(id, pedido.texto, [], pedido.id);
+    });
     registrar('cancelar', vazio, () => {
         agente.cancelar();
         if (['instalando', 'carregando'].includes(motor.estado.fase)) motor.parar();

@@ -80,7 +80,7 @@ export const esquemaMensagem = z.object({
     papel: z.enum(['user', 'assistant']),
     texto: z.string(),
     raciocinio: z.string().optional(),
-    faseGeracao: z.enum(['raciocinando', 'respondendo']).optional(),
+    faseGeracao: z.enum(['ligandoModelo', 'raciocinando', 'respondendo']).optional(),
     estado: z.enum(['concluida', 'gerando', 'erro', 'interrompida']),
     acoes: z.array(esquemaAcao).default([]),
     criadoEm: z.string(),
@@ -244,6 +244,8 @@ export interface PonteSelene {
     pararMotor(): Promise<Resultado<void>>;
     configurar(configuracao: Configuracao): Promise<Resultado<void>>;
     enviar(id: string, texto: string, imagens?: string[]): Promise<Resultado<void>>;
+    editarEReenviar(id: string, mensagemId: string, texto: string): Promise<Resultado<void>>;
+    regerar(id: string, mensagemId: string): Promise<Resultado<void>>;
     cancelar(): Promise<Resultado<void>>;
     aprovar(acaoId: string, aprovada: boolean): Promise<Resultado<void>>;
     exportarConversa(id: string): Promise<Resultado<void>>;

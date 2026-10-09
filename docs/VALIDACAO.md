@@ -47,6 +47,21 @@ e `docs/user/thread-sidebar.md`.
 
 ## Imagens e compactação automática
 
+A edição de mensagens do usuário no modo chat oferece cancelamento e reenvio, preservando anexos e rascunhos.
+O reenvio substitui o histórico posterior e descarta o resumo anterior para evitar contexto desatualizado.
+Testes automatizados cobrem validação, geração com histórico corrigido e restauração após falha ao salvar.
+`bun scripts/testarDesktop.ts scripts/validarEdicaoChat.ts` valida os controles no Electron em perfil isolado.
+O teste desktop verifica abertura, cancelamento, mensagem vazia e falha por ausência de modelo sem alterar o histórico.
+O reenvio com resposta do modelo foi validado com inferência simulada, sem executar o GGUF real.
+
+A regeneração no chat reutiliza o pedido original e seus anexos, sem duplicar a mensagem do usuário.
+O botão aparece ao lado das informações da resposta, fora de gerações ativas; não aparece no modo code.
+O status superior do modelo foi removido. O envio persiste o pedido antes de carregar o modelo e apresenta
+`Ligando modelo` com brilho no local da resposta. Cancelamento e falha encerram o brilho e preservam o pedido.
+Testes simulados cobrem ordem de persistência, contexto após a carga, falha de inicialização e cancelamento.
+O Electron validou posição do botão, ausência no modo code e indicação de carga por eventos simulados.
+Essa alteração ainda não foi validada com carga e inferência reais do GGUF.
+
 Implementação de 9 de outubro de 2026, validada em perfil desktop isolado.
 
 * Contratos antigos continuam compatíveis. Anexos usam identificadores gerados no processo principal.

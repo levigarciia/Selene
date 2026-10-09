@@ -37,6 +37,8 @@ const ponte: PonteSelene = {
     pararMotor: () => ipcRenderer.invoke('selene:pararMotor'),
     configurar: (configuracao) => ipcRenderer.invoke('selene:configurar', configuracao),
     enviar: (id, texto, imagens = []) => ipcRenderer.invoke('selene:enviar', id, texto, imagens),
+    editarEReenviar: (id, mensagemId, texto) => ipcRenderer.invoke('selene:editarEReenviar', id, mensagemId, texto),
+    regerar: (id, mensagemId) => ipcRenderer.invoke('selene:regerar', id, mensagemId),
     cancelar: () => ipcRenderer.invoke('selene:cancelar'),
     aprovar: (id, aprovada) => ipcRenderer.invoke('selene:aprovar', id, aprovada),
     exportarConversa: (id) => ipcRenderer.invoke('selene:exportar', id),

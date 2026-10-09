@@ -214,7 +214,10 @@ Essa referência de experiência não amplia o catálogo de paridade com o Odyss
 1. Agente code: navegação de código, plano revisável, aprovações com escopo, registros de execução
    e verificação de resultados. A Selene já tem projeto, ferramentas básicas e aprovação individual;
    esses recursos adicionais continuam pendentes.
-2. Conversas: edição, regeneração, variantes, ramificações, grupos e continuidade com os escopos descritos acima.
+2. Conversas: edição, reenvio e regeneração de respostas disponíveis no modo chat por solicitação explícita.
+   O reenvio e a regeneração preservam os anexos, substituem as mensagens seguintes e invalidam o resumo anterior.
+   O pedido aparece no histórico antes da carga automática do modelo, com indicação de atividade durante a espera.
+   Variantes, ramificações, grupos e demais funções seguem os escopos descritos acima.
 3. Modelos: compatibilidade com hardware, diagnóstico de GPU, catálogo ampliado, provedores e assinaturas.
 4. Pesquisa, biblioteca, documentos, memória, skills e MCP, seguindo as fontes do catálogo.
 5. Organização pessoal, mídia, operação, integrações externas e acesso por navegador ou Companion.

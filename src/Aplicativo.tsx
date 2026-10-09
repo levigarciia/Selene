@@ -222,7 +222,7 @@ export function Aplicativo() {
                             </button>
                             <h1
                                 data-ui="titulo-tela"
-                                className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] mt-0 mb-[13px] mx-0"
+                                className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] m-0"
                             >
                                 {projetoChatAbertoId !== null ? 'Projeto de Chat' : 'Projetos'}
                             </h1>
@@ -252,7 +252,7 @@ export function Aplicativo() {
                             </button>
                             <h1
                                 data-ui="titulo-tela"
-                                className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] mt-0 mb-[13px] mx-0"
+                                className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] m-0"
                             >
                                 Configurações
                             </h1>
@@ -419,7 +419,6 @@ export function Aplicativo() {
                                 modoInicial={modo}
                                 ativa={ativas[modo]}
                                 selecionar={selecionar}
-                                configurar={configurar}
                                 visivel={
                                     !configurando &&
                                     !gerenciandoProjetos &&

@@ -26,7 +26,6 @@ export function TelaConversa({
     dados,
     ativa,
     selecionar,
-    configurar,
     visivel,
     modoInicial,
     adicionarProjeto,
@@ -34,7 +33,6 @@ export function TelaConversa({
     dados: ReturnType<typeof useSelene>;
     ativa: string | null;
     selecionar: (id: string) => void;
-    configurar: () => void;
     visivel: boolean;
     modoInicial: 'chat' | 'code';
     adicionarProjeto: () => void;
@@ -137,6 +135,32 @@ export function TelaConversa({
         }
     }
 
+    async function reenviar(mensagemId: string, texto: string): Promise<boolean> {
+        if (!conversa || modo !== 'chat' || ocupado || motorOcupado || anexos.importando) return false;
+        definirEnviando(true);
+        try {
+            return !!(await executar(async () => {
+                const resultado = await ponte!.editarEReenviar(conversa.id, mensagemId, texto);
+                if (!resultado.ok) return resultado;
+                acompanhar.current = true;
+                return { ok: true, valor: true };
+            }));
+        } finally {
+            definirEnviando(false);
+        }
+    }
+
+    async function regerar(mensagemId: string): Promise<void> {
+        if (!conversa || modo !== 'chat' || ocupado || motorOcupado || anexos.importando) return;
+        definirEnviando(true);
+        try {
+            acompanhar.current = true;
+            await executar(() => ponte!.regerar(conversa.id, mensagemId));
+        } finally {
+            definirEnviando(false);
+        }
+    }
+
     async function alterarOpcoes(alteracao: Partial<Conversa>) {
         const atual = conversa ?? dados.criarRascunho(modo);
         if (dados.estadoPersistido.conversas.some((item) => item.id === atual.id)) {
@@ -171,31 +195,6 @@ export function TelaConversa({
                     : '',
             ].join(' ')}
         >
-            <div
-                data-ui="barra-contexto"
-                className={[
-                    '[[data-ui~=tela-inicial]_&]:row-[1] flex items-center gap-[17px] min-h-[76px] px-[30px]',
-                    'py-[20px] [@media(width<=760px)]:gap-[10px] [@media(width<=760px)]:p-[16px]',
-                ].join(' ')}
-            >
-                <button
-                    data-ui={`estado-motor ${estado.motor.fase === 'pronto' ? 'motor-pronto' : ''}`}
-                    className={[
-                        [
-                            'ml-auto bg-transparent text-[11px] text-secundario border-0 border-solid',
-                            'border-[currentColor]',
-                        ].join(' '),
-                        estado.motor.fase === 'pronto' ? '[&&]:text-[#b5a2dc]' : '',
-                    ].join(' ')}
-                    onClick={configurar}
-                >
-                    {estado.motor.fase === 'pronto'
-                        ? 'Modelo carregado'
-                        : motorOcupado
-                          ? 'Preparando modelo'
-                          : 'Configurar modelo'}
-                </button>
-            </div>
             <div
                 data-ui="conteudo-conversa"
                 className={[
@@ -251,7 +250,7 @@ export function TelaConversa({
                     </div>
                 ) : (
                     <div data-ui="lista-mensagens" className="max-w-[730px] pt-[20px] pb-[40px] px-0 mx-auto my-0">
-                        {conversa.mensagens.map((mensagem) => (
+                        {conversa.mensagens.map((mensagem, indice) => (
                             <MensagemConversa
                                 key={mensagem.id}
                                 mensagem={mensagem}
@@ -259,6 +258,15 @@ export function TelaConversa({
                                 modo={modo}
                                 ponte={ponte}
                                 executar={executar}
+                                reenviar={modo === 'chat' && ponte ? reenviar : undefined}
+                                edicaoDesativada={ocupado || motorOcupado || anexos.importando}
+                                regerar={
+                                    modo === 'chat' &&
+                                    ponte &&
+                                    conversa.mensagens.slice(0, indice).some((item) => item.papel === 'user')
+                                        ? regerar
+                                        : undefined
+                                }
                             />
                         ))}
                     </div>

@@ -8,7 +8,7 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
         <header
             data-ui="barra-superior"
             className={[
-                'flex items-center justify-between min-h-[56px] pr-[16px] pl-[30px] border-b',
+                'flex h-[56px] shrink-0 items-center justify-between pr-[16px] pl-[30px] border-b',
                 'border-solid border-b-borda text-[12px] [-webkit-app-region:drag] py-0',
             ].join(' ')}
         >
