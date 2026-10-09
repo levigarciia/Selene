@@ -160,7 +160,7 @@ export function LinhaConversaSidebar({
                                     'flex items-center gap-[6px] w-full min-w-0 text-[#818792] text-[10px]',
                                     '[&_>_.truncate]:flex-1',
                                 ].join(' '),
-                                '[&_>_svg]:text-[#94b7a5]',
+                                '[&_>_svg]:text-[#b5a2dc]',
                             ].join(' ')}
                         >
                             {conversa.modo === 'code' ? (
@@ -193,9 +193,9 @@ export function LinhaConversaSidebar({
                                           : atividade.fase === 'ferramenta'
                                             ? '[&&]:text-[#78adf5]'
                                             : atividade.fase === 'comando'
-                                              ? '[&&]:text-[#8dc8b1]'
+                                              ? '[&&]:text-[#bca3e5]'
                                               : atividade.fase === 'concluida'
-                                                ? '[&&]:text-[#2dcea0]'
+                                                ? '[&&]:text-[#b48cf2]'
                                                 : atividade.fase === 'aprovacao'
                                                   ? '[&&]:text-[#deb76c]'
                                                   : atividade.fase === 'erro'
@@ -203,7 +203,7 @@ export function LinhaConversaSidebar({
                                                     : atividade.fase === 'interrompida'
                                                       ? '[&&]:text-[#baaaa0]'
                                                       : atividade.fase === 'rascunho'
-                                                        ? '[&&]:text-[#94b7a5]'
+                                                        ? '[&&]:text-[#b5a2dc]'
                                                         : '',
                                 ].join(' ')}
                             >
@@ -259,7 +259,7 @@ export function LinhaConversaSidebar({
                                 {comando && (
                                     <span
                                         data-ui="indicador-terminal"
-                                        className="inline-flex ml-auto text-[#66c6ae]"
+                                        className="inline-flex ml-auto text-[#b194db]"
                                         role="img"
                                         aria-label="Comando em execução"
                                         title={
@@ -281,7 +281,7 @@ export function LinhaConversaSidebar({
                     data-ui="botao-icone acao-hover-conversa"
                     className={[
                         '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                        'inline-flex items-center justify-center bg-transparent text-[#a0b5ac] rounded-[6px] absolute',
+                        'inline-flex items-center justify-center bg-transparent text-[#b4a6c9] rounded-[6px] absolute',
                         'right-[4px] top-[5px] opacity-[0] pointer-events-none p-[8px] border-0 border-solid',
                         'border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
@@ -289,7 +289,7 @@ export function LinhaConversaSidebar({
                         '[[data-ui~=linha-sidebar-acoes]:hover_&]:pointer-events-auto',
                         '[[data-ui~=linha-sidebar-acoes]:focus-within_&]:opacity-[1]',
                         '[[data-ui~=linha-sidebar-acoes]:focus-within_&]:pointer-events-auto',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     disabled={atividade.ocupada}

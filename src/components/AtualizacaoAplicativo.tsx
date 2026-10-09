@@ -13,7 +13,7 @@ export function AtualizacaoAplicativo({
     executar: Executar;
 }) {
     if (!estado) return null;
-    const ocupado = ['desativada', 'verificando', 'baixando', 'pronta'].includes(estado.fase);
+    const ocupado = ['desativada', 'verificando', 'baixando', 'reiniciando'].includes(estado.fase);
     return (
         <div className="flex items-center justify-between gap-4">
             <div className="flex flex-col gap-1">
@@ -45,9 +45,13 @@ export function AtualizacaoAplicativo({
                     '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
                 ].join(' ')}
                 disabled={!ponte || ocupado}
-                onClick={() => void executar(() => ponte!.verificarAtualizacao())}
+                onClick={() =>
+                    void executar(() =>
+                        estado.fase === 'pronta' ? ponte!.reiniciarAtualizacao() : ponte!.verificarAtualizacao(),
+                    )
+                }
             >
-                Buscar atualização
+                {estado.fase === 'pronta' ? 'Reiniciar e atualizar' : 'Buscar atualização'}
             </button>
         </div>
     );

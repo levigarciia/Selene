@@ -94,8 +94,8 @@ export function EscolherIconeProjeto({
                         data-ui="opcao-icone-projeto"
                         className={[
                             'flex items-center justify-center w-[42px] h-[42px] rounded-[8px] bg-[#141517] border',
-                            "border-solid border-[#292b30] [&[aria-pressed='true']]:bg-[#252d29]",
-                            "[&[aria-pressed='true']]:border-[#94b7a5]",
+                            "border-solid border-[#292b30] [&[aria-pressed='true']]:bg-[#302739]",
+                            "[&[aria-pressed='true']]:border-[#b5a2dc]",
                         ].join(' ')}
                         aria-label={`Ícone ${nomesSimbolos[nome]}`}
                         title={nomesSimbolos[nome]}

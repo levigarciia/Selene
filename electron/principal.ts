@@ -168,6 +168,7 @@ function registrarOperacoes(): void {
     const vazio = z.tuple([]);
     registrar('estado', vazio, estado);
     registrar('verificarAtualizacao', vazio, () => atualizacoes.verificar());
+    registrar('reiniciarAtualizacao', vazio, () => atualizacoes.reiniciar());
     registrar('abrirRelease', z.tuple([z.string().max(80).optional()]), async ([versao]) => {
         await shell.openExternal(urlRelease(versao));
     });
@@ -615,6 +616,7 @@ app.whenReady()
             app.isPackaged && process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_DIR,
             app.getVersion(),
             publicarEstado,
+            prepararEncerramento,
         );
         await criarJanela();
         atualizacoes.iniciar();
@@ -624,17 +626,19 @@ app.whenReady()
         app.quit();
     });
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', (evento) => {
+async function prepararEncerramento(): Promise<void> {
     atualizacoes?.encerrar();
     agente?.cancelar();
     motor?.parar();
+    await downloads?.encerrar();
+    await tarefa;
+    await persistencia.salvar();
+}
+
+app.on('before-quit', (evento) => {
     if (encerramentoAutorizado || !persistencia) return;
     evento.preventDefault();
-    void (async () => {
-        await downloads?.encerrar();
-        await tarefa;
-        await persistencia.salvar();
-    })()
+    void prepararEncerramento()
         .catch((erro: Error) => dialog.showErrorBox('Erro ao salvar dados', erro.message))
         .finally(() => {
             encerramentoAutorizado = true;

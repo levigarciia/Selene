@@ -33,6 +33,7 @@ export function BarraLateral({
     gerenciarProjetos,
     estatisticas,
     atualizar,
+    reiniciarAtualizacao,
     abrirRelease,
     excluirConcluidas,
     recolhida,
@@ -52,6 +53,7 @@ export function BarraLateral({
     gerenciarProjetos: () => void;
     estatisticas: () => void;
     atualizar: () => void;
+    reiniciarAtualizacao: () => void;
     abrirRelease: (versao?: string) => void;
     excluirConcluidas: () => void;
     recolhida: boolean;
@@ -250,23 +252,23 @@ export function BarraLateral({
                 className={[
                     'absolute z-[-1] top-0 right-0 bottom-[auto] left-0 h-[100px] overflow-hidden',
                     'pointer-events-none',
-                    'bg-[linear-gradient(160deg,#172b36,#251931_50%,#0c0d0f)]',
+                    'bg-[linear-gradient(135deg,#101a30,#20142e_65%,#0c0d0f)]',
                     '[mask-image:linear-gradient(#000_35%,_transparent)] [&_i]:absolute [&_i]:w-[1.5px]',
-                    '[&_i]:h-[1.5px] [&_i]:rounded-full [&_i]:bg-[#e3eaf9] [&_i]:shadow-[0_0_3px_#c0d6ff55]',
+                    '[&_i]:h-[1.5px] [&_i]:rounded-full [&_i]:bg-[#c9d3eb] [&_i]:shadow-[0_0_2px_#c0d6ff22]',
                     '[&_i:nth-of-type(9n)]:w-[3px] [&_i:nth-of-type(9n)]:h-[3px] [&_i:nth-of-type(9n)]:bg-[#f5f7ff]',
-                    '[&_i:nth-of-type(9n)]:shadow-[0_0_6px_#dae7ffa0]',
+                    '[&_i:nth-of-type(9n)]:shadow-[0_0_3px_#dae7ff44]',
                 ].join(' ')}
                 aria-hidden="true"
             >
-                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_10%_50%,#335c7955,transparent_50%)]" />
-                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_77%_0%,#4c316655,transparent_70%)]" />
+                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_10%_0%,#23365a33,transparent_50%)]" />
+                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_85%_0%,#43295633,transparent_70%)]" />
                 {Array.from({ length: 38 }, (_, indice) => (
                     <i
                         key={indice}
                         style={{
                             left: ((indice * 37 + 7) % 100) + '%',
                             top: ((indice * indice * 17 + 8) % 65) + '%',
-                            opacity: 0.25 + (indice % 5) * 0.13,
+                            opacity: 0.12 + (indice % 5) * 0.07,
                         }}
                     />
                 ))}
@@ -275,10 +277,10 @@ export function BarraLateral({
                 data-ui="marca"
                 className={[
                     'flex items-center gap-[11px] mt-0 mb-[18px] [-webkit-app-region:drag] mx-[8px]',
-                    '[&_span]:text-[17px] [&_span]:font-semibold [&_span]:tracking-[-0.4px]',
+                    '[&_span]:text-[17px] [&_span]:font-semibold [&_span]:tracking-[-0.4px] [&_span]:text-white',
                     '[[data-ui~=sidebar-recolhida]_&]:flex-col [[data-ui~=sidebar-recolhida]_&]:mt-0',
                     '[[data-ui~=sidebar-recolhida]_&]:mb-[20px] [[data-ui~=sidebar-recolhida]_&]:gap-[14px]',
-                    '[[data-ui~=sidebar-recolhida]_&]:mx-0 [&_svg]:text-[#94b7a5]',
+                    '[[data-ui~=sidebar-recolhida]_&]:mx-0 [&_button_svg]:text-[#b5a2dc]',
                     '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
                     '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
                     '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
@@ -286,8 +288,8 @@ export function BarraLateral({
                     '[@media(width<=760px)]:[[data-ui~=sidebar]_&_span]:hidden',
                 ].join(' ')}
             >
-                <MoonIcon size={21} weight="duotone" />
-                {!recolhida && <span>selene</span>}
+                <MoonIcon size={21} weight="fill" className="text-white" />
+                {!recolhida && <span>Selene</span>}
                 <button
                     data-ui="botao-icone"
                     className={[
@@ -295,7 +297,7 @@ export function BarraLateral({
                         'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={alternar}
@@ -380,7 +382,7 @@ export function BarraLateral({
                             ].join(' '),
                             'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                             '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' ')}
                         aria-label="Projetos"
@@ -400,7 +402,7 @@ export function BarraLateral({
                         'border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
                         '[[data-ui~=sidebar]_&]:w-auto [[data-ui~=sidebar]_&]:bg-transparent',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={() => criar()}
@@ -447,7 +449,7 @@ export function BarraLateral({
                 className={[
                     '[[data-ui~=sidebar-recolhida]_&]:justify-center [[data-ui~=sidebar-recolhida]_&]:flex-col',
                     '[[data-ui~=sidebar-recolhida]_&]:px-[8px] [[data-ui~=sidebar-recolhida]_&]:py-[11px]',
-                    "[&[aria-current='page']]:text-[#94b7a5] [&[aria-current='page']]:bg-[#202723] flex",
+                    "[&[aria-current='page']]:text-[#b5a2dc] [&[aria-current='page']]:bg-[#272130] flex",
                     'items-center gap-[2px] pt-[6px] pb-0 text-left bg-transparent border-t',
                     'border-t-[#222429] border-r-0 border-r-[currentColor] border-b-0',
                     'border-b-[currentColor] border-l-0 border-l-[currentColor] rounded-[0] text-[#9298a2]',
@@ -476,7 +478,7 @@ export function BarraLateral({
                         'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={configurar}
@@ -493,7 +495,7 @@ export function BarraLateral({
                         'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={estatisticas}
@@ -502,7 +504,12 @@ export function BarraLateral({
                 >
                     <ChartBarIcon size={19} />
                 </button>
-                <AtualizacaoSidebar estado={estado.atualizacao} verificar={atualizar} abrirRelease={abrirRelease} />
+                <AtualizacaoSidebar
+                    estado={estado.atualizacao}
+                    verificar={atualizar}
+                    reiniciar={reiniciarAtualizacao}
+                    abrirRelease={abrirRelease}
+                />
             </footer>
             {menu && (
                 <MenuConversa

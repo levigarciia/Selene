@@ -23,7 +23,7 @@ export function TarefasConversa({ mensagem, abrirHistorico }: { mensagem?: Mensa
                 '[&_progress]:[appearance:none] [&_progress]:rounded-[3px] [&_progress]:overflow-hidden',
                 '[&_progress]:border-0 [&_progress]:border-solid [&_progress]:border-current',
                 '[&_progress::-webkit-progress-bar]:bg-[#30333a]',
-                '[&_progress::-webkit-progress-value]:bg-[#8aab98] [&_ol]:list-none',
+                '[&_progress::-webkit-progress-value]:bg-[#a48cc8] [&_ol]:list-none',
                 '[&_ol]:max-h-[180px] [&_ol]:overflow-auto [&_ol]:px-[14px] [&_ol]:py-0 [&_ol]:m-0',
                 '[&_li]:flex [&_li]:items-center [&_li]:gap-[10px] [&_li]:text-[#a1a5ad] [&_li]:px-0',
                 '[&_li]:py-[7px] [&_li_svg]:shrink-0 [&_li_>_span:first-of-type]:flex-1',
@@ -66,7 +66,7 @@ export function TarefasConversa({ mensagem, abrirHistorico }: { mensagem?: Mensa
                     {concluidas}/{etapas.length}
                 </span>
                 <progress
-                    className="accent-[#94b7a5]"
+                    className="accent-[#b5a2dc]"
                     value={concluidas}
                     max={etapas.length}
                     aria-label="Progresso das tarefas"

@@ -11,6 +11,11 @@ class AtualizadorTeste extends EventEmitter {
     fullChangelog = false;
     consultas = 0;
     falhar = false;
+    instalacoes: [boolean | undefined, boolean | undefined][] = [];
+
+    quitAndInstall(silenciosa?: boolean, reabrir?: boolean) {
+        this.instalacoes.push([silenciosa, reabrir]);
+    }
 
     async checkForUpdates() {
         this.consultas++;
@@ -20,18 +25,64 @@ class AtualizadorTeste extends EventEmitter {
     }
 }
 
-function preparar(habilitada = true) {
+function preparar(habilitada = true, prepararReinicio = async () => {}) {
     const atualizador = new AtualizadorTeste();
     const servico = new Atualizacoes(
         atualizador as unknown as ConstructorParameters<typeof Atualizacoes>[0],
         habilitada,
         '1.0.1',
         () => {},
+        prepararReinicio,
     );
     return { atualizador, servico };
 }
 
 describe('Distribuição automática', () => {
+    test('reinício exige download pronto e aguarda salvar antes de instalar, sem duplicar cliques', async () => {
+        let concluirSalvamento!: () => void;
+        const salvamento = new Promise<void>((resolver) => {
+            concluirSalvamento = resolver;
+        });
+        const { atualizador, servico } = preparar(true, () => salvamento);
+        try {
+            servico.iniciar();
+            await expect(servico.reiniciar()).rejects.toThrow('ainda não está pronta');
+            atualizador.emit('update-available', { version: '1.0.2' });
+            await expect(servico.reiniciar()).rejects.toThrow('ainda não está pronta');
+            atualizador.emit('update-downloaded', { version: '1.0.2' });
+            const reinicio = servico.reiniciar();
+            await servico.reiniciar();
+            await servico.verificar();
+            expect(servico.estado.fase).toBe('reiniciando');
+            expect(atualizador.instalacoes).toEqual([]);
+            concluirSalvamento();
+            await reinicio;
+            expect(atualizador.instalacoes).toEqual([[true, true]]);
+            expect(atualizador.consultas).toBe(1);
+        } finally {
+            servico.encerrar();
+        }
+    });
+
+    test('falha ao salvar impede instalar e permite repetir o reinício', async () => {
+        let falhar = true;
+        const { atualizador, servico } = preparar(true, async () => {
+            if (falhar) throw new Error('Falha ao salvar');
+        });
+        try {
+            servico.iniciar();
+            atualizador.emit('update-downloaded', { version: '1.0.2' });
+            await expect(servico.reiniciar()).rejects.toThrow('Falha ao salvar');
+            expect(servico.estado.fase).toBe('pronta');
+            expect(atualizador.instalacoes).toEqual([]);
+            falhar = false;
+            await servico.reiniciar();
+            expect(atualizador.instalacoes).toEqual([[true, true]]);
+        } finally {
+            servico.encerrar();
+        }
+    });
+
     test('desenvolvimento e portátil não consultam releases', () => {
         const { atualizador, servico } = preparar(false);
         servico.iniciar();

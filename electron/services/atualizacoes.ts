@@ -11,9 +11,10 @@ type Atualizador = Pick<
     | 'fullChangelog'
     | 'on'
     | 'checkForUpdates'
+    | 'quitAndInstall'
 >;
 
-/** Use após criar a janela para baixar releases oficiais e instalar somente ao encerrar o aplicativo. */
+/** Use após criar a janela para baixar releases oficiais e instalar ao encerrar ou reiniciar por escolha do usuário. */
 export class Atualizacoes {
     estado: EstadoAtualizacao = {
         versaoAtual: '',
@@ -27,6 +28,7 @@ export class Atualizacoes {
         private readonly habilitada: boolean,
         private readonly versaoAtual: string,
         private readonly publicar: () => void,
+        private readonly prepararReinicio: () => Promise<void>,
     ) {
         this.estado.versaoAtual = versaoAtual;
     }
@@ -68,11 +70,27 @@ export class Atualizacoes {
 
     /** Permite repetir uma consulta após falha sem duplicar downloads ou descartar uma atualização pronta. */
     async verificar(): Promise<void> {
-        if (!this.iniciada || ['verificando', 'baixando', 'pronta'].includes(this.estado.fase)) return;
+        if (!this.iniciada || ['verificando', 'baixando', 'pronta', 'reiniciando'].includes(this.estado.fase)) return;
         try {
             await this.atualizador.checkForUpdates();
         } catch (erro) {
             this.alterar({ fase: 'erro', erro: erro instanceof Error ? erro.message : 'Falha na atualização.' });
+        }
+    }
+
+    /** Reinicia com a release baixada depois de encerrar operações e salvar os dados do aplicativo. */
+    async reiniciar(): Promise<void> {
+        if (this.estado.fase === 'reiniciando') return;
+        if (!this.iniciada || this.estado.fase !== 'pronta') {
+            throw new Error('A atualização ainda não está pronta para instalar.');
+        }
+        this.alterar({ fase: 'reiniciando' });
+        try {
+            await this.prepararReinicio();
+            this.atualizador.quitAndInstall(true, true);
+        } catch (erro) {
+            this.alterar({ fase: 'pronta', erro: erro instanceof Error ? erro.message : 'Falha ao reiniciar.' });
+            throw erro;
         }
     }
 

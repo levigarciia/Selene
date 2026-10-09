@@ -12,11 +12,12 @@ const ambiente: Record<string, string> = Object.fromEntries(
     ),
 );
 delete ambiente.ELECTRON_RUN_AS_NODE;
+delete ambiente.SELENE_VITE_URL;
 const aplicativo = await electron.launch({ args: ['.'], env: ambiente });
 try {
     const pagina = await aplicativo.firstWindow();
     await pagina.getByRole('button', { name: 'Procurar atualizações' }).waitFor();
-    const botao = pagina.getByRole('button', { name: 'Procurar atualizações' });
+    const botao = pagina.locator('[data-ui~="indicador-atualizacao"]');
     const painel = pagina.getByRole('dialog', { name: 'Detalhes da atualização' });
     await botao.hover();
     await painel.getByText('Versão instalada: 1.0.0').waitFor();
@@ -50,6 +51,8 @@ try {
     await pagina.screenshot({ path: 'artifacts/selene-atualizacao-download.png' });
 
     await publicar({ versaoAtual: '1.0.21', fase: 'pronta', versaoNova: '1.0.22', notas });
+    assert.equal(await botao.getAttribute('aria-label'), 'Reiniciar e atualizar');
+    assert.equal(await botao.getAttribute('aria-disabled'), 'false');
     await painel.getByText('Versão 1.0.22 pronta.', { exact: false }).waitFor();
     await botao.focus();
     await botao.press('Tab');
@@ -121,6 +124,27 @@ try {
     );
     const invalida = await pagina.evaluate(() => window.selene!.abrirRelease('../../outro'));
     assert.equal(invalida.ok, false);
+    await aplicativo.evaluate(({ ipcMain }) => {
+        ipcMain.removeHandler('selene:reiniciarAtualizacao');
+        ipcMain.handle('selene:reiniciarAtualizacao', () => {
+            const estado = globalThis as typeof globalThis & { reiniciosTeste?: number };
+            estado.reiniciosTeste = (estado.reiniciosTeste ?? 0) + 1;
+            return { ok: true, valor: undefined };
+        });
+    });
+    await botao.click();
+    assert.equal(
+        await aplicativo.evaluate(() => (globalThis as typeof globalThis & { reiniciosTeste?: number }).reiniciosTeste),
+        1,
+    );
+    await publicar({ versaoAtual: '1.0.21', fase: 'reiniciando', versaoNova: '1.0.27' });
+    await painel.getByText('Salvando dados e reiniciando para atualizar.').waitFor();
+    assert.equal(await botao.getAttribute('aria-disabled'), 'true');
+    await botao.click({ force: true });
+    assert.equal(
+        await aplicativo.evaluate(() => (globalThis as typeof globalThis & { reiniciosTeste?: number }).reiniciosTeste),
+        1,
+    );
     console.log('Atualizações: hover, notas, progresso, teclado, link oficial e sidebar recolhida validados.');
 } finally {
     await aplicativo.close();

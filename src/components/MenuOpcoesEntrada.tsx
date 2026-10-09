@@ -111,7 +111,7 @@ export function MenuOpcoesEntrada({
                         '[&_button]:text-left [&_button]:text-[12px] [&_button]:p-[10px] [&_button]:border-0',
                         '[&_button]:border-solid [&_button]:border-current [&_button:hover]:bg-[#262930]',
                         '[&_button:focus-visible]:bg-[#262930] [&_button_>_svg]:shrink-0',
-                        '[&_button_>_svg]:text-[#94b7a5] [&_small]:block [&_small]:mt-[5px] [&_small]:text-[#a1a5ad]',
+                        '[&_button_>_svg]:text-[#b5a2dc] [&_small]:block [&_small]:mt-[5px] [&_small]:text-[#a1a5ad]',
                         '[&_small]:text-[11px] [&_small]:leading-[1.5]',
                     ].join(' ')}
                     ref={menu}

@@ -241,7 +241,7 @@ export function TelaProjetos({
                                     ].join(' '),
                                     [
                                         'border-solid [&:hover]:text-[#e6e7e9] [&_.truncate]:min-w-0',
-                                        '[&_small]:text-[#94b7a5]',
+                                        '[&_small]:text-[#b5a2dc]',
                                     ].join(' '),
                                 ].join(' ')}
                                 key={conversa.id}

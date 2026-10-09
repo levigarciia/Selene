@@ -139,7 +139,7 @@ export function ConfiguracaoMotor({
                 </div>
                 {estado.motor.fase === 'instalando' && (
                     <progress
-                        className="accent-[#94b7a5]"
+                        className="accent-[#b5a2dc]"
                         value={estado.motor.progresso ?? 0}
                         max={100}
                         aria-label="Download do motor"

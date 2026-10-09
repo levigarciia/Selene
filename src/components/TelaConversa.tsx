@@ -185,7 +185,7 @@ export function TelaConversa({
                             'ml-auto bg-transparent text-[11px] text-[#a1a5ad] border-0 border-solid',
                             'border-[currentColor]',
                         ].join(' '),
-                        estado.motor.fase === 'pronto' ? '[&&]:text-[#94b7a5]' : '',
+                        estado.motor.fase === 'pronto' ? '[&&]:text-[#b5a2dc]' : '',
                     ].join(' ')}
                     onClick={configurar}
                 >
@@ -224,7 +224,7 @@ export function TelaConversa({
                             size={38}
                             weight="thin"
                             data-ui="simbolo-selene"
-                            className="text-[#94b7a5] mb-[24px]"
+                            className="text-[#b5a2dc] mb-[24px]"
                         />
                         <h1 className="text-[29px] leading-[1.3] font-[450] tracking-[-0.7px] mt-0 mb-[13px] mx-0">
                             {modo === 'chat' ? 'O que vamos explorar?' : 'Em que vamos trabalhar?'}
@@ -300,7 +300,7 @@ export function TelaConversa({
                                 'bg-[#141517] rounded-[22px] pt-[17px] pb-[14px]',
                                 'shadow-[inset_0_1px_0_#ffffff03] px-[16px]',
                             ].join(' '),
-                            'border border-solid border-[#292b30] [&:focus-within]:border-[#677c70]',
+                            'border border-solid border-[#292b30] [&:focus-within]:border-[#8974a8]',
                             [
                                 '[&_textarea]:block [&_textarea]:w-full [&_textarea]:bg-transparent',
                                 '[&_textarea]:resize-none',
@@ -500,7 +500,7 @@ export function TelaConversa({
                                 'p-[8px] border-0 border-solid border-current',
                                 '[&:hover:not(:disabled)]:text-[#e6e7e9] [&:hover:not(:disabled)]:bg-[#24262c]',
                                 '[[data-ui~=rodape-entrada]_&]:p-[0]',
-                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}
                             aria-label="Anexar imagens"
@@ -532,7 +532,7 @@ export function TelaConversa({
                                 className={[
                                     [
                                         'flex items-center justify-center w-[33px] h-[33px] rounded-full',
-                                        'bg-[#d8e5dd] text-[#18241e]',
+                                        'bg-[#e0d8ef] text-[#251b38]',
                                     ].join(' '),
                                     'shrink-0 border-0 border-solid border-current',
                                 ].join(' ')}

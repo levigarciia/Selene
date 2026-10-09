@@ -134,7 +134,7 @@ export function CatalogoModelos({
                     {baixando && (
                         <span
                             data-ui="indicador-download"
-                            className="w-[6px] h-[6px] shrink-0 rounded-full bg-[#94b7a5]"
+                            className="w-[6px] h-[6px] shrink-0 rounded-full bg-[#b5a2dc]"
                             title="Download em andamento"
                         />
                     )}
@@ -218,7 +218,7 @@ export function CatalogoModelos({
                                 ].join(' '),
                                 '[&_input]:py-[5px] [&_input]:border-0 [&_input]:border-solid',
                                 '[&_input]:border-current [&_input::placeholder]:text-[#939ba8] [&_button]:p-[5px]',
-                                "[&_button[aria-pressed='true']]:text-[#94b7a5]",
+                                "[&_button[aria-pressed='true']]:text-[#b5a2dc]",
                             ].join(' ')}
                         >
                             <MagnifyingGlassIcon size={17} />
@@ -243,7 +243,7 @@ export function CatalogoModelos({
                                     ].join(' '),
                                     'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                                     '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                     '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                 ].join(' ')}
                                 aria-label="Mostrar somente disponíveis"

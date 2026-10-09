@@ -23,6 +23,7 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
 * Distribuição Windows por instalador NSIS e releases automáticas em envios para `main`.
   A instalação verifica e baixa atualizações, mostra estado em Geral e aplica a atualização ao encerrar.
   O botão da sidebar mostra progresso, versão instalada e notas por release em painel aberto por mouse ou teclado.
+  Após baixar a release, um novo clique permite reiniciar e atualizar, salvando os dados antes da instalação.
   As notas da distribuição são geradas a partir dos commits posteriores à release publicada.
   Decisão própria da Selene, solicitada pelo usuário, sem ampliar a paridade com o Odysseus.
 

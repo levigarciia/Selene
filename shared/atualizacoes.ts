@@ -1,6 +1,6 @@
 export type EstadoAtualizacao = {
     versaoAtual: string;
-    fase: 'desativada' | 'aguardando' | 'verificando' | 'atualizada' | 'baixando' | 'pronta' | 'erro';
+    fase: 'desativada' | 'aguardando' | 'verificando' | 'atualizada' | 'baixando' | 'pronta' | 'reiniciando' | 'erro';
     versaoNova?: string;
     progresso?: number;
     erro?: string;
@@ -98,7 +98,9 @@ export function descreverAtualizacao(estado: EstadoAtualizacao): string {
         case 'baixando':
             return `Baixando versão ${estado.versaoNova}: ${Math.round(estado.progresso ?? 0)}%.`;
         case 'pronta':
-            return `Versão ${estado.versaoNova} pronta. Será instalada ao fechar a Selene.`;
+            return `Versão ${estado.versaoNova} pronta. Clique para reiniciar e atualizar.`;
+        case 'reiniciando':
+            return 'Salvando dados e reiniciando para atualizar.';
         case 'erro':
             return `Não foi possível atualizar: ${estado.erro}`;
     }

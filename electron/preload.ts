@@ -9,6 +9,7 @@ const ponte: PonteSelene = {
     removerProjeto: (id) => ipcRenderer.invoke('selene:removerProjeto', id),
     promoverRascunho: (entrada) => ipcRenderer.invoke('selene:promoverRascunho', entrada),
     verificarAtualizacao: () => ipcRenderer.invoke('selene:verificarAtualizacao'),
+    reiniciarAtualizacao: () => ipcRenderer.invoke('selene:reiniciarAtualizacao'),
     abrirRelease: (versao) => ipcRenderer.invoke('selene:abrirRelease', versao),
     estado: () => ipcRenderer.invoke('selene:estado'),
     novaConversa: (modo, origemId) => ipcRenderer.invoke('selene:nova', modo, origemId),

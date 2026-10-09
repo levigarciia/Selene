@@ -109,7 +109,7 @@ export function AcaoConversa({
                     '[[data-ui~=usuario-direita]_&_pre]:p-[14px]',
                     '[[data-ui~=usuario-direita]_&_pre]:mx-[12px]',
                 ].join(' '),
-                acao.estado === 'aguardando' ? '[&&]:border-[#718f7d]' : '',
+                acao.estado === 'aguardando' ? '[&&]:border-[#8c75ad]' : '',
             ].join(' ')}
         >
             <details open={acao.estado === 'aguardando' ? true : undefined}>
@@ -144,9 +144,9 @@ export function AcaoConversa({
                     <pre
                         data-ui="resultado-acao"
                         className={[
-                            'text-[#b5c5bc]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#b5c5bc]',
-                            '[[data-ui~=usuario-direita]_&]:text-[#b5c5bc]',
+                            'text-[#c4b8d6]',
+                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[#c4b8d6]',
+                            '[[data-ui~=usuario-direita]_&]:text-[#c4b8d6]',
                         ].join(' ')}
                     >
                         {acao.resultado}
@@ -193,9 +193,9 @@ export function AcaoConversa({
                     <button
                         data-ui="botao botao-primario"
                         className={[
-                            'inline-flex items-center justify-center gap-[9px] bg-[#d8e5dd] rounded-[8px]',
-                            'whitespace-nowrap text-[#18241e] px-[14px] py-[9px] border border-solid',
-                            'border-transparent [&:hover:not(:disabled)]:bg-[#c0d5c8]',
+                            'inline-flex items-center justify-center gap-[9px] bg-[#e0d8ef] rounded-[8px]',
+                            'whitespace-nowrap text-[#251b38] px-[14px] py-[9px] border border-solid',
+                            'border-transparent [&:hover:not(:disabled)]:bg-[#cec0e5]',
                             '[[data-ui~=lista-projetos]_>_&]:mb-[12px] [[data-ui~=lista-projetos]_>_&]:justify-start',
                             '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
                             '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',

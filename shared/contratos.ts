@@ -212,6 +212,7 @@ export interface PonteSelene {
     removerProjeto(id: string): Promise<Resultado<void>>;
     promoverRascunho(entrada: z.infer<typeof esquemaRascunho>): Promise<Resultado<Conversa>>;
     verificarAtualizacao(): Promise<Resultado<void>>;
+    reiniciarAtualizacao(): Promise<Resultado<void>>;
     abrirRelease(versao?: string): Promise<Resultado<void>>;
     estado(): Promise<Resultado<Estado>>;
     novaConversa(modo: 'chat' | 'code', origemId?: string): Promise<Resultado<Conversa>>;

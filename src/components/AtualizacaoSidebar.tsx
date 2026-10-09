@@ -7,10 +7,12 @@ import { descreverAtualizacao, type EstadoAtualizacao } from '../../shared/atual
 export function AtualizacaoSidebar({
     estado,
     verificar,
+    reiniciar,
     abrirRelease,
 }: {
     estado?: EstadoAtualizacao;
     verificar: () => void;
+    reiniciar: () => void;
     abrirRelease: (versao?: string) => void;
 }) {
     const [aberto, definirAberto] = useState(false);
@@ -18,7 +20,7 @@ export function AtualizacaoSidebar({
     const painel = useRef<HTMLDivElement>(null);
     const fechamento = useRef<ReturnType<typeof setTimeout>>(undefined);
     const id = useId();
-    const ocupado = !estado || ['desativada', 'verificando', 'baixando', 'pronta'].includes(estado.fase);
+    const ocupado = !estado || ['desativada', 'verificando', 'baixando', 'reiniciando'].includes(estado.fase);
     const notas = estado?.notas ?? [];
     const emAndamento = estado?.fase === 'verificando' || estado?.fase === 'baixando';
     const Icone =
@@ -100,12 +102,12 @@ export function AtualizacaoSidebar({
                             'p-[8px] border-0 border-solid border-current',
                             '[&:hover:not(:disabled)]:text-[#e6e7e9] [&:hover:not(:disabled)]:bg-[#24262c]',
                             '[[data-ui~=rodape-entrada]_&]:p-[0]',
-                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' '),
-                        estado?.fase === 'pronta' ? '[&&]:text-[#94b7a5]' : '',
+                        estado?.fase === 'pronta' ? '[&&]:text-[#b5a2dc]' : '',
                     ].join(' ')}
-                    aria-label="Procurar atualizações"
+                    aria-label={estado?.fase === 'pronta' ? 'Reiniciar e atualizar' : 'Procurar atualizações'}
                     aria-haspopup="dialog"
                     aria-expanded={aberto}
                     aria-controls={aberto ? id : undefined}
@@ -114,7 +116,9 @@ export function AtualizacaoSidebar({
                     onBlur={agendarFechamento}
                     onClick={() => {
                         abrir();
-                        if (!ocupado) verificar();
+                        if (ocupado) return;
+                        if (estado?.fase === 'pronta') reiniciar();
+                        else verificar();
                     }}
                     onKeyDown={(evento) => {
                         if (evento.key === 'Escape') definirAberto(false);
@@ -138,7 +142,7 @@ export function AtualizacaoSidebar({
                     {estado?.fase === 'baixando' && (
                         <span
                             data-ui="ponto-atualizacao"
-                            className="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full bg-[#94b7a5]"
+                            className="absolute top-[5px] right-[5px] w-[5px] h-[5px] rounded-full bg-[#b5a2dc]"
                         />
                     )}
                 </button>
@@ -157,7 +161,7 @@ export function AtualizacaoSidebar({
                             'shadow-[0_12px_40px_#0007] [backdrop-filter:blur(16px)] text-[12px] leading-[1.6]',
                             'wrap-anywhere p-[16px] border border-solid border-[#34373d] [&_header]:flex',
                             '[&_header]:flex-col [&_header]:gap-[5px] [&_progress]:w-full [&_progress]:h-[4px]',
-                            '[&_progress]:accent-[#94b7a5]',
+                            '[&_progress]:accent-[#b5a2dc]',
                         ].join(' ')}
                         onMouseEnter={abrir}
                         onMouseLeave={agendarFechamento}
@@ -216,7 +220,7 @@ export function AtualizacaoSidebar({
                             )}
                             {emAndamento && estado?.progresso !== undefined && (
                                 <progress
-                                    className="accent-[#94b7a5]"
+                                    className="accent-[#b5a2dc]"
                                     aria-label="Download da atualização"
                                     value={estado.progresso}
                                     max={100}

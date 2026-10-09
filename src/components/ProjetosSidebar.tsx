@@ -78,7 +78,7 @@ export function ProjetosSidebar({
                                 ].join(' '),
                                 'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                                 '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}
                             aria-label={`Novo chat em ${projeto.nome}`}

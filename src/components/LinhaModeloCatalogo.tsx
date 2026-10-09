@@ -57,7 +57,7 @@ export function LinhaModeloCatalogo({
                         'border-current [&:disabled]:opacity-[1] [&_>_span:first-child]:flex',
                         '[&_>_span:first-child]:items-center [&_>_span:first-child]:gap-[7px]',
                         '[&_>_span:first-child]:whitespace-nowrap [&_strong]:text-[13px] [&_strong]:font-semibold',
-                        '[&_small]:text-[10px] [&_small]:text-[#8abc9f]',
+                        '[&_small]:text-[10px] [&_small]:text-[#b19bd6]',
                     ].join(' ')}
                     disabled={!local || ocupado}
                     onClick={() => local && selecionar(local.id)}
@@ -91,7 +91,7 @@ export function LinhaModeloCatalogo({
                             ].join(' '),
                             'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                             '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' '),
                         favorito ? '[&&]:text-[#d6c38f]' : '',
@@ -136,7 +136,7 @@ export function LinhaModeloCatalogo({
                             ].join(' '),
                             'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                             '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' ')}
                         aria-label={`Cancelar download de ${item.nome}`}
@@ -156,8 +156,8 @@ export function LinhaModeloCatalogo({
                             ].join(' '),
                             'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                             '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                            '[[data-ui~=modelo-selecionado]_&]:text-[#94b7a5]',
-                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            '[[data-ui~=modelo-selecionado]_&]:text-[#b5a2dc]',
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' ')}
                         disabled={ocupado}
@@ -179,7 +179,7 @@ export function LinhaModeloCatalogo({
                             ].join(' '),
                             'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                             '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                            "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                             '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' ')}
                         disabled={baixando}
@@ -206,7 +206,7 @@ export function LinhaModeloCatalogo({
                         {formatarTamanho(download.recebido)} de {formatarTamanho(download.total)}
                     </span>
                     <progress
-                        className="accent-[#94b7a5]"
+                        className="accent-[#b5a2dc]"
                         value={download.recebido}
                         max={download.total}
                         aria-label={`Download de ${item.nome}`}

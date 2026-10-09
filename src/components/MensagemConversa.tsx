@@ -23,13 +23,13 @@ function Texto({ texto }: { texto: string }) {
                 '[&_pre]:bg-[#090a0c] [&_pre]:rounded-[9px] [&_pre]:overflow-auto [&_pre]:text-[12px]',
                 '[&_pre]:p-[16px] [&_pre]:mx-0 [&_pre]:my-[14px] [&_pre]:border [&_pre]:border-solid',
                 '[&_pre]:border-[#2a2d33] [&_code]:font-mono',
-                '[&_code]:text-[#d5ded8] [&_:not(pre)_>_code]:bg-[#25282e] [&_:not(pre)_>_code]:rounded-[4px]',
+                '[&_code]:text-[#ddd5e6] [&_:not(pre)_>_code]:bg-[#25282e] [&_:not(pre)_>_code]:rounded-[4px]',
                 '[&_:not(pre)_>_code]:px-[5px] [&_:not(pre)_>_code]:py-[2px] [&_h1]:text-[18px]',
                 '[&_h1]:font-semibold [&_h1]:mt-[20px] [&_h1]:mb-[10px] [&_h1]:mx-0 [&_h2]:text-[18px]',
                 '[&_h2]:font-semibold [&_h2]:mt-[20px] [&_h2]:mb-[10px] [&_h2]:mx-0 [&_h3]:text-[18px]',
                 '[&_h3]:font-semibold [&_h3]:mt-[20px] [&_h3]:mb-[10px] [&_h3]:mx-0',
                 '[&_blockquote]:border-l-[2px] [&_blockquote]:border-solid',
-                '[&_blockquote]:border-l-[#526e5f] [&_blockquote]:pl-[16px] [&_blockquote]:text-[#b0b7c0]',
+                '[&_blockquote]:border-l-[#6a557f] [&_blockquote]:pl-[16px] [&_blockquote]:text-[#b0b7c0]',
                 '[&_blockquote]:mx-0 [&_blockquote]:my-[15px] [&_table]:border-collapse',
                 '[&_table]:text-[12px] [&_table]:w-full [&_th]:text-left [&_th]:p-[7px] [&_th]:border',
                 '[&_th]:border-solid [&_th]:border-[#35383f] [&_td]:text-left [&_td]:p-[7px]',
@@ -108,7 +108,7 @@ export const MensagemConversa = memo(function MensagemConversa({
                 className={[
                     'text-[#a1a5ad] text-[11px] mb-[9px]',
                     '[[data-ui~=usuario-direita]_&]:text-right',
-                    '[[data-ui~=usuario-direita]_&]:text-[#94b7a5]',
+                    '[[data-ui~=usuario-direita]_&]:text-[#b5a2dc]',
                     '[[data-ui~=usuario-direita]_&]:mb-[4px]',
                 ].join(' ')}
             >
@@ -312,7 +312,7 @@ export const MensagemConversa = memo(function MensagemConversa({
                                 '[[data-ui~=usuario-direita]_&]:border-[#2b2e34]',
                                 '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:text-[#e6e7e9]',
                                 '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:bg-[#24262c]',
-                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}
                             onClick={() => definirMostrarTokens(!mostrarTokens)}

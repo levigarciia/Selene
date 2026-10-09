@@ -8,7 +8,7 @@ export default function TextoMarkdown({ texto }: { texto: string }) {
             remarkPlugins={[remarkGfm]}
             components={{
                 a: ({ children }) => (
-                    <span data-ui="texto-link" className="text-[#94b7a5]">
+                    <span data-ui="texto-link" className="text-[#b5a2dc]">
                         {children}
                     </span>
                 ),

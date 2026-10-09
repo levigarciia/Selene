@@ -21,7 +21,7 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
                         'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={() => ponte?.janela('minimizar')}
@@ -36,7 +36,7 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
                         'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={() => ponte?.janela('maximizar')}
@@ -51,7 +51,7 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
                         'inline-flex items-center justify-center bg-transparent text-[#a1a5ad] rounded-[6px] p-[8px]',
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                         '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                         '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={() => ponte?.janela('fechar')}

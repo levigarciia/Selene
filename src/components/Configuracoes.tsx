@@ -55,8 +55,8 @@ export function Configuracoes({
                     '[&_button]:rounded-[7px] [&_button]:bg-transparent [&_button]:text-[#a1a5ad]',
                     '[&_button]:text-left [&_button]:text-[13px] [&_button]:px-[14px] [&_button]:py-[12px]',
                     '[&_button]:border-0 [&_button]:border-solid [&_button]:border-current',
-                    '[&_button:hover]:bg-[#202328] [&_button:hover]:text-[#e5e9e7]',
-                    "[&_button[aria-current='page']]:bg-[#202328] [&_button[aria-current='page']]:text-[#e5e9e7]",
+                    '[&_button:hover]:bg-[#202328] [&_button:hover]:text-[#e9e5ef]',
+                    "[&_button[aria-current='page']]:bg-[#202328] [&_button[aria-current='page']]:text-[#e9e5ef]",
                 ].join(' ')}
                 aria-label="Seções das configurações"
             >
@@ -149,9 +149,9 @@ export function Configuracoes({
                                 type="submit"
                                 data-ui="botao botao-primario"
                                 className={[
-                                    'inline-flex items-center justify-center gap-[9px] bg-[#d8e5dd] rounded-[8px]',
-                                    'whitespace-nowrap text-[#18241e] px-[14px] py-[9px] border border-solid',
-                                    'border-transparent [&:hover:not(:disabled)]:bg-[#c0d5c8]',
+                                    'inline-flex items-center justify-center gap-[9px] bg-[#e0d8ef] rounded-[8px]',
+                                    'whitespace-nowrap text-[#251b38] px-[14px] py-[9px] border border-solid',
+                                    'border-transparent [&:hover:not(:disabled)]:bg-[#cec0e5]',
                                     [
                                         '[[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                         '[[data-ui~=lista-projetos]_>_&]:justify-start',

@@ -116,6 +116,7 @@ export function Aplicativo() {
                 gerenciarProjetos={() => abrirProjetos()}
                 estatisticas={() => definirEstatisticasAbertas(true)}
                 atualizar={() => void executar(() => ponte!.verificarAtualizacao())}
+                reiniciarAtualizacao={() => void executar(() => ponte!.reiniciarAtualizacao())}
                 abrirRelease={(versao) => void executar(() => ponte!.abrirRelease(versao))}
                 excluirConcluidas={() => definirExcluindoConcluidas(true)}
                 configurando={configurando || gerenciandoProjetos}
@@ -157,7 +158,7 @@ export function Aplicativo() {
                                     ].join(' '),
                                     'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                                     '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                     '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                 ].join(' ')}
                                 aria-label="Voltar à conversa"
@@ -187,7 +188,7 @@ export function Aplicativo() {
                                     ].join(' '),
                                     'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                                     '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                     '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                                 ].join(' ')}
                                 aria-label="Voltar à conversa"
@@ -326,7 +327,7 @@ export function Aplicativo() {
                                 ].join(' '),
                                 'border-0 border-solid border-current [&:hover:not(:disabled)]:text-[#e6e7e9]',
                                 '[&:hover:not(:disabled)]:bg-[#24262c] [[data-ui~=rodape-entrada]_&]:p-0',
-                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#94b7a5]",
+                                "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}
                             aria-label="Fechar aviso"
@@ -430,9 +431,9 @@ export function Aplicativo() {
                         <button
                             data-ui="botao botao-primario"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#d8e5dd] rounded-[8px]',
-                                'whitespace-nowrap text-[#18241e] px-[14px] py-[9px] border border-solid',
-                                'border-transparent [&:hover:not(:disabled)]:bg-[#c0d5c8]',
+                                'inline-flex items-center justify-center gap-[9px] bg-[#e0d8ef] rounded-[8px]',
+                                'whitespace-nowrap text-[#251b38] px-[14px] py-[9px] border border-solid',
+                                'border-transparent [&:hover:not(:disabled)]:bg-[#cec0e5]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
@@ -500,9 +501,9 @@ export function Aplicativo() {
                         <button
                             data-ui="botao botao-primario"
                             className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-[#d8e5dd] rounded-[8px]',
-                                'whitespace-nowrap text-[#18241e] px-[14px] py-[9px] border border-solid',
-                                'border-transparent [&:hover:not(:disabled)]:bg-[#c0d5c8]',
+                                'inline-flex items-center justify-center gap-[9px] bg-[#e0d8ef] rounded-[8px]',
+                                'whitespace-nowrap text-[#251b38] px-[14px] py-[9px] border border-solid',
+                                'border-transparent [&:hover:not(:disabled)]:bg-[#cec0e5]',
                                 [
                                     '[[data-ui~=lista-projetos]_>_&]:mb-[12px]',
                                     '[[data-ui~=lista-projetos]_>_&]:justify-start',
