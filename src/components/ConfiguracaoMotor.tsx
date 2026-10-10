@@ -1,9 +1,14 @@
-import { DownloadSimpleIcon, PlayIcon, StopIcon } from '@phosphor-icons/react';
-import type { Estado, PonteSelene } from '../../shared/contratos';
+﻿import type { Estado, PonteSelene } from '../../shared/contratos';
+import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
+import { diagnosticarMotor } from '../../shared/diagnosticoMotor';
 import type { Executar } from './Configuracoes';
 import type { CamposConfiguracao } from './CamposGeracao';
+import { CamposPerfilMotor } from './CamposPerfilMotor';
 
-/** Separa o estado do motor dos parâmetros que serão aplicados na próxima carga. */
+const botao = 'rounded-md border border-borda px-3 py-2 text-xs hover:bg-hover disabled:opacity-40';
+const gigabytes = (valor: number) => `${(valor / 1024 ** 3).toFixed(1)} GB`;
+
+/** Apresenta hardware, operação e recuperação sem expor a saída técnica como estado principal. */
 export function ConfiguracaoMotor({
     estado,
     ponte,
@@ -11,186 +16,139 @@ export function ConfiguracaoMotor({
     configuracao,
     ocupado,
     alterar,
-}: CamposConfiguracao & { estado: Estado; ponte?: PonteSelene; executar: Executar }) {
+    hardware,
+    consultando,
+    consultar,
+    erroHardware,
+}: CamposConfiguracao & {
+    estado: Estado;
+    ponte?: PonteSelene;
+    executar: Executar;
+    hardware?: HardwareLocal;
+    consultando: boolean;
+    consultar: () => Promise<void>;
+    erroHardware: string;
+}) {
     const backend = estado.configuracao.backend === 'auto' ? estado.motor.backendAtivo : estado.configuracao.backend;
     const instalado = backend ? estado.motor.instalado[backend] : false;
+    const erro = estado.motor.fase === 'erro';
+    const diagnostico = erro ? diagnosticarMotor(estado.motor.detalhe) : undefined;
+    const modelo = estado.modelos.find((item) => item.id === estado.motor.modeloId);
+    const alterado = JSON.stringify(configuracao) !== JSON.stringify(estado.configuracao);
     return (
         <>
-            <h2>Motor local</h2>
-            <div
-                data-ui="estado-motor-config"
-                className={[
-                    'flex flex-col gap-[14px] pb-[26px] border-b border-solid',
-                    'border-b-hover text-[12px] wrap-anywhere',
-                ].join(' ')}
-            >
-                <p role="status">{estado.motor.detalhe}</p>
-                {estado.motor.dispositivo && (
-                    <p
-                        data-ui="texto-secundario"
-                        className={[
-                            'text-secundario text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-secundario',
-                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                            '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                        ].join(' ')}
-                    >
-                        {estado.motor.dispositivo}
-                    </p>
+            <div className="flex justify-between items-center gap-4">
+                <h2 className="[&&]:mb-0">Motor</h2>
+                <button
+                    type="button"
+                    className="text-xs text-secundario hover:text-principal"
+                    disabled={consultando}
+                    onClick={() => void consultar()}
+                >
+                    {consultando ? 'Consultando hardware' : 'Atualizar hardware'}
+                </button>
+            </div>
+            {hardware && (
+                <div className="text-xs flex flex-col gap-2 text-secundario" aria-label="Hardware detectado">
+                    <span>{hardware.gpu?.nome ?? hardware.processador}</span>
+                    <span>
+                        {hardware.gpu ? `${gigabytes(hardware.gpu.memoria)} de VRAM total. ` : ''}
+                        {gigabytes(hardware.ramLivre)} de RAM livre, {gigabytes(hardware.ramTotal)} no total
+                    </span>
+                    {hardware.aviso && <span>{hardware.aviso}</span>}
+                </div>
+            )}
+            {erroHardware && (
+                <p role="alert" className="text-xs text-[#eab1aa]">
+                    {erroHardware}
+                </p>
+            )}
+            <div data-ui="estado-motor-config" className="flex flex-col gap-3 border-y border-borda py-4 text-xs">
+                <p role={erro ? 'alert' : 'status'}>{diagnostico?.causa ?? estado.motor.detalhe}</p>
+                {diagnostico && (
+                    <>
+                        <p className="text-secundario">{diagnostico.sugestao}</p>
+                        <details>
+                            <summary className="cursor-pointer text-secundario">Detalhes técnicos</summary>
+                            <pre className="mt-3 whitespace-pre-wrap break-all text-xs text-secundario">
+                                {estado.motor.detalhe}
+                            </pre>
+                        </details>
+                    </>
+                )}
+                {estado.motor.contextoDisponivel && (
+                    <span className="text-secundario">
+                        {estado.motor.contextoDisponivel.toLocaleString('pt-BR')} tokens de contexto
+                        {estado.motor.dispositivo ? `. ${estado.motor.dispositivo}` : ''}
+                    </span>
                 )}
                 {estado.motor.recarregamentoPendente && (
-                    <p
-                        data-ui="texto-secundario"
-                        className={[
-                            'text-secundario text-[12px] leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                            '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                            '[[data-ui~=usuario-direita]_&]:text-secundario',
-                            '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                            '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                        ].join(' ')}
-                    >
-                        Os novos parâmetros serão aplicados no próximo envio ou ao recarregar.
-                    </p>
+                    <p className="text-secundario">As alterações serão aplicadas na próxima carga ou envio.</p>
                 )}
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-2">
                     {['instalando', 'carregando'].includes(estado.motor.fase) ? (
-                        <button
-                            type="button"
-                            data-ui="botao"
-                            className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
-                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                                [
-                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
-                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                                ].join(' '),
-                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                            ].join(' ')}
-                            onClick={() => executar(() => ponte!.cancelar())}
-                        >
+                        <button type="button" className={botao} onClick={() => executar(() => ponte!.cancelar())}>
                             Cancelar
                         </button>
                     ) : (
-                        <button
-                            type="button"
-                            data-ui="botao"
-                            className={[
-                                'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
-                                'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
-                                '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                                [
-                                    '[[data-ui~=lista-projetos]_>_&]:justify-start',
-                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                                ].join(' '),
-                                '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                            ].join(' ')}
-                            disabled={ocupado || instalado}
-                            onClick={() => executar(() => ponte!.instalarMotor(estado.configuracao.backend))}
-                        >
-                            <DownloadSimpleIcon size={16} /> {instalado ? 'Motor instalado' : 'Instalar motor'}
-                        </button>
-                    )}
-                    {estado.motor.fase === 'pronto' && (
                         <>
-                            <button
-                                type="button"
-                                data-ui="botao"
-                                className={[
-                                    'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
-                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
-                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                                    [
-                                        '[[data-ui~=lista-projetos]_>_&]:justify-start',
-                                        '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                                    ].join(' '),
-                                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                                ].join(' ')}
-                                disabled={ocupado}
-                                onClick={() => executar(() => ponte!.carregarModelo(estado.motor.modeloId!))}
-                            >
-                                <PlayIcon size={16} /> Recarregar modelo
-                            </button>
-                            <button
-                                type="button"
-                                data-ui="botao"
-                                className={[
-                                    'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
-                                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
-                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                                    [
-                                        '[[data-ui~=lista-projetos]_>_&]:justify-start',
-                                        '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                                    ].join(' '),
-                                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                                ].join(' ')}
-                                disabled={ocupado}
-                                onClick={() => executar(() => ponte!.pararMotor())}
-                            >
-                                <StopIcon size={16} /> Descarregar modelo
-                            </button>
+                            {!instalado && (
+                                <button
+                                    type="button"
+                                    className={botao}
+                                    disabled={ocupado || alterado}
+                                    onClick={() => executar(() => ponte!.instalarMotor(estado.configuracao.backend))}
+                                >
+                                    Instalar motor
+                                </button>
+                            )}
+                            {modelo && (
+                                <button
+                                    type="button"
+                                    className={botao}
+                                    disabled={ocupado || alterado}
+                                    onClick={() => executar(() => ponte!.carregarModelo(modelo.id))}
+                                >
+                                    {erro ? 'Tentar novamente' : 'Recarregar modelo'}
+                                </button>
+                            )}
+                            {estado.motor.fase === 'pronto' && (
+                                <button
+                                    type="button"
+                                    className={botao}
+                                    disabled={ocupado}
+                                    onClick={() => executar(() => ponte!.pararMotor())}
+                                >
+                                    Descarregar modelo
+                                </button>
+                            )}
                         </>
                     )}
                 </div>
-                {estado.motor.fase === 'instalando' && (
+                {estado.motor.progresso !== undefined && ['instalando', 'carregando'].includes(estado.motor.fase) && (
                     <progress
-                        className="accent-[#b5a2dc]"
-                        value={estado.motor.progresso ?? 0}
+                        className="w-full accent-[#b5a2dc]"
+                        value={estado.motor.progresso}
                         max={100}
-                        aria-label="Download do motor"
+                        aria-label="Progresso do motor"
                     />
                 )}
             </div>
-            <p
-                data-ui="texto-secundario"
-                className={[
-                    'text-secundario text-[12px] leading-[1.7]',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                    '[[data-ui~=usuario-direita]_&]:text-secundario',
-                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                    '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                ].join(' ')}
-            >
-                Contexto automático
-                {estado.motor.contextoDisponivel
-                    ? `: ${estado.motor.contextoDisponivel.toLocaleString('pt-BR')} tokens`
-                    : ': definido ao carregar o modelo'}
-                .
-            </p>
-            <div className="grid grid-cols-2 gap-5">
-                <label>
-                    Processamento
-                    <select
-                        aria-label="Processamento"
-                        value={configuracao.backend}
-                        disabled={ocupado}
-                        onChange={(evento) => alterar('backend', evento.target.value as typeof configuracao.backend)}
-                    >
-                        <option value="auto">Automático</option>
-                        <option value="rocm">GPU AMD com ROCm</option>
-                        <option value="vulkan">GPU com Vulkan</option>
-                        <option value="cpu">CPU</option>
-                    </select>
-                </label>
-                <label>
-                    Camadas na GPU
-                    <input
-                        type={configuracao.limitesAutomaticos ? 'text' : 'number'}
-                        min="0"
-                        max="999"
-                        value={configuracao.limitesAutomaticos ? 'Automáticas' : configuracao.camadasGpu}
-                        disabled={ocupado || configuracao.limitesAutomaticos}
-                        onChange={(evento) => alterar('camadasGpu', Number(evento.target.value))}
-                    />
-                </label>
-            </div>
+            {modelo?.perfil && (
+                <p className="text-xs text-secundario">
+                    {modelo.nome} usa um perfil próprio. Edite esse perfil na área Modelos.
+                </p>
+            )}
+            <CamposPerfilMotor
+                perfil={configuracao}
+                ocupado={ocupado}
+                alterar={(perfil) => {
+                    alterar('backend', perfil.backend);
+                    alterar('limitesAutomaticos', perfil.limitesAutomaticos);
+                    alterar('contexto', perfil.contexto);
+                    alterar('camadasGpu', perfil.camadasGpu);
+                }}
+            />
         </>
     );
 }

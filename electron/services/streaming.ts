@@ -6,8 +6,12 @@ const esquemaTempos = z.object({
     predicted_ms: z.number().nonnegative(),
     predicted_per_second: z.number().nonnegative(),
     prompt_n: z.number().int().nonnegative().optional(),
+    cache_n: z.number().int().nonnegative().optional(),
 });
-const esquemaUso = z.object({ prompt_tokens: z.number().int().nonnegative() });
+const esquemaUso = z.object({
+    prompt_tokens: z.number().int().nonnegative(),
+    prompt_tokens_details: z.object({ cached_tokens: z.number().int().nonnegative() }).nullish(),
+});
 
 const esquemaTrecho = z.object({
     choices: z.array(
@@ -90,6 +94,7 @@ export async function receberResposta(
     const chamadas = new Map<number, Chamada>();
     let desempenho: Desempenho | undefined;
     let tokensEntrada: number | undefined;
+    let tokensCacheUso: number | undefined;
     await lerEventos(
         resposta,
         (dados) => {
@@ -97,14 +102,20 @@ export async function receberResposta(
             if (bruto.error) throw new Error(bruto.error.message ?? 'O modelo retornou um erro.');
             const evento = esquemaTrecho.parse(bruto);
             const uso = esquemaUso.safeParse(bruto.usage);
-            if (uso.success) tokensEntrada = uso.data.prompt_tokens;
+            if (uso.success) {
+                tokensEntrada = uso.data.prompt_tokens;
+                tokensCacheUso = uso.data.prompt_tokens_details?.cached_tokens;
+            }
             const tempos = esquemaTempos.safeParse(bruto.timings);
             if (tempos.success) {
                 desempenho = {
                     tokensGerados: tempos.data.predicted_n,
                     tempoGeracaoMs: tempos.data.predicted_ms,
                     tokensPorSegundo: tempos.data.predicted_per_second,
-                    ...(tempos.data.prompt_n !== undefined ? { tokensEntrada: tempos.data.prompt_n } : {}),
+                    ...(tempos.data.prompt_n !== undefined
+                        ? { tokensEntrada: tempos.data.prompt_n + (tempos.data.cache_n ?? 0) }
+                        : {}),
+                    ...(tempos.data.cache_n !== undefined ? { tokensEntradaCache: tempos.data.cache_n } : {}),
                 };
             }
             const escolha = evento.choices[0];
@@ -134,5 +145,12 @@ export async function receberResposta(
     );
     if (!motivo) throw new Error('O fluxo do modelo encerrou antes de confirmar a conclusão da resposta.');
     if (desempenho && tokensEntrada !== undefined) desempenho.tokensEntrada = tokensEntrada;
+    if (desempenho && tokensCacheUso !== undefined) desempenho.tokensEntradaCache = tokensCacheUso;
+    if (
+        desempenho?.tokensEntradaCache !== undefined &&
+        (desempenho.tokensEntrada === undefined || desempenho.tokensEntradaCache > desempenho.tokensEntrada)
+    ) {
+        delete desempenho.tokensEntradaCache;
+    }
     return { texto, chamadas: [...chamadas.values()], motivo, desempenho };
 }

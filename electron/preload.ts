@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { Evento, PonteSelene } from '../shared/contratos';
 
 const ponte: PonteSelene = {
+    previasNavegador: () => ipcRenderer.invoke('selene:previasNavegador'),
+    atualizarNavegador: (id) => ipcRenderer.invoke('selene:atualizarNavegador', id),
     criarProjetoChat: (nome) => ipcRenderer.invoke('selene:criarProjetoChat', nome),
     editarProjetoChat: (id, edicao) => ipcRenderer.invoke('selene:editarProjetoChat', id, edicao),
     removerProjetoChat: (id) => ipcRenderer.invoke('selene:removerProjetoChat', id),
@@ -18,6 +20,8 @@ const ponte: PonteSelene = {
     reiniciarAtualizacao: () => ipcRenderer.invoke('selene:reiniciarAtualizacao'),
     abrirRelease: (versao) => ipcRenderer.invoke('selene:abrirRelease', versao),
     estado: () => ipcRenderer.invoke('selene:estado'),
+    consultarHardware: () => ipcRenderer.invoke('selene:consultarHardware'),
+    configurarModelo: (id, perfil) => ipcRenderer.invoke('selene:configurarModelo', id, perfil),
     novaConversa: (modo, origemId) => ipcRenderer.invoke('selene:nova', modo, origemId),
     alterarConversa: (id, alteracao) => ipcRenderer.invoke('selene:alterar', id, alteracao),
     excluirConversa: (id) => ipcRenderer.invoke('selene:excluir', id),

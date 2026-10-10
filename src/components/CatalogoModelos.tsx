@@ -13,6 +13,8 @@ import type { Estado, PonteSelene } from '../../shared/contratos';
 import type { Executar } from './Configuracoes';
 import { LinhaModeloCatalogo } from './LinhaModeloCatalogo';
 import { IconeModelo } from './IconeModelo';
+import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
+import { configuracaoParaModelo } from '../../shared/configuracaoMotor';
 
 const familias: { id: FamiliaModelo; nome: string }[] = [
     { id: 'qwen', nome: 'Qwen' },
@@ -30,6 +32,7 @@ export function CatalogoModelos({
     aberto,
     definirAberto,
     embutido = false,
+    hardware,
 }: {
     estado: Estado;
     ponte?: PonteSelene;
@@ -39,6 +42,7 @@ export function CatalogoModelos({
     aberto: boolean;
     definirAberto: (valor: boolean) => void;
     embutido?: boolean;
+    hardware?: HardwareLocal;
 }) {
     const idCatalogo = useId();
     const [busca, definirBusca] = useState('');
@@ -146,13 +150,13 @@ export function CatalogoModelos({
                     data-ui="catalogo-modelos"
                     className={[
                         '[[data-ui~=catalogo-embutido]_&]:static [[data-ui~=catalogo-embutido]_&]:w-full',
-                        '[[data-ui~=catalogo-embutido]_&]:h-[min(540px,_calc(100dvh_-_245px))]',
-                        '[[data-ui~=catalogo-embutido]_&]:min-h-[320px]',
+                        '[[data-ui~=catalogo-embutido]_&]:h-auto [[data-ui~=catalogo-embutido]_&]:min-h-0',
                         '[[data-ui~=catalogo-embutido]_&]:shadow-[none]',
                         '[[data-ui~=catalogo-embutido]_&]:rounded-[10px] absolute bottom-[calc(100%_+_16px)]',
                         'left-0 w-[min(480px,_calc(100vw_-_48px))] h-[min(480px,_calc(100dvh_-_190px))]',
                         'min-h-[270px] grid grid-cols-[55px_minmax(0,_1fr)] z-[20] bg-superficie rounded-[15px]',
                         'shadow-[0_18px_60px_#0007] overflow-hidden border border-solid border-[#2d3036]',
+                        '[[data-ui~=catalogo-embutido]_&]:border-0 [[data-ui~=catalogo-embutido]_&]:rounded-none',
                     ].join(' ')}
                     id={idCatalogo}
                     role={embutido ? 'region' : 'dialog'}
@@ -266,10 +270,17 @@ export function CatalogoModelos({
                         >
                             {itens.map((item) => {
                                 const local = encontrarModeloLocal(item, estado.modelos);
+                                const configuracao = configuracaoParaModelo(estado.configuracao, local);
                                 return (
                                     <LinhaModeloCatalogo
                                         key={item.id}
                                         item={item}
+                                        hardware={hardware}
+                                        contexto={configuracao.limitesAutomaticos ? 2048 : configuracao.contexto}
+                                        somenteCpu={configuracao.backend === 'cpu'}
+                                        camadasGpu={
+                                            configuracao.limitesAutomaticos ? undefined : configuracao.camadasGpu
+                                        }
                                         local={local}
                                         download={estado.downloads.find((download) => download.catalogoId === item.id)}
                                         selecionado={local?.id === modeloId}

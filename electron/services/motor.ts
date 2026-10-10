@@ -166,7 +166,7 @@ export class MotorLocal {
                 falha = new Error(`O motor encerrou com código ${codigo}. ${registro}`);
                 if (this.processo === processo) {
                     this.processo = null;
-                    this.atualizar({ fase: 'erro', detalhe: falha.message, modeloId: undefined });
+                    this.atualizar({ fase: 'erro', detalhe: falha.message, modeloId: modelo.id });
                 }
             });
             const inicio = Date.now();

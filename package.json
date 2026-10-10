@@ -21,10 +21,14 @@
         "start": "bun scripts/abrir.ts",
         "test:desktop": "bun scripts/testarDesktop.ts",
         "test:sidebar": "bun scripts/testarDesktop.ts scripts/validarSidebar.ts",
+        "test:estatisticas": "bun scripts/testarDesktop.ts scripts/validarEstatisticas.ts",
+        "test:icones": "bun scripts/testarDesktop.ts scripts/validarIconesAcoes.ts",
         "test:projetos": "bun scripts/testarDesktop.ts scripts/validarProjetosRascunhos.ts",
         "test:gerenciamento": "bun scripts/testarDesktop.ts scripts/validarGerenciamentoProjeto.ts",
         "test:projetos-chat": "bun scripts/testarDesktop.ts scripts/validarProjetosChat.ts",
         "test:contexto": "bun scripts/testarDesktop.ts scripts/validarContextoImagens.ts",
+        "test:web": "bun build scripts/fixtures/navegador.ts --target=node --external=electron --format=cjs --outfile=artifacts/navegador.cjs && bun scripts/testarDesktop.ts scripts/validarWeb.ts",
+        "test:navegador-inline": "bun build scripts/fixtures/navegador.ts --target=node --external=electron --format=cjs --outfile=artifacts/navegador.cjs && bun scripts/testarDesktop.ts scripts/validarNavegadorInline.ts",
         "formatar": "prettier --write .",
         "dist:win": "bun run build && electron-builder --win nsis --x64 --publish never",
         "dist:portable": "bun run build && electron-builder --win portable --x64 --publish never"
@@ -42,6 +46,7 @@
         "files": [
             "dist/**/*",
             "dist-electron/**/*",
+            "docs/licenses/**/*",
             "package.json"
         ],
         "extraResources": [
@@ -85,6 +90,7 @@
     "dependencies": {
         "@phosphor-icons/react": "^2.1.10",
         "electron-updater": "^6.6.2",
+        "lucide-react": "0.564.0",
         "react": "^19.3.0",
         "react-dom": "^19.3.0",
         "react-markdown": "^10.1.0",

@@ -64,6 +64,12 @@ export function TelaConversa({
         .slice()
         .reverse()
         .find((mensagem) => mensagem.papel === 'assistant');
+    const ultimaMensagemNavegador = conversa?.mensagens
+        .slice()
+        .reverse()
+        .find((mensagem) =>
+            mensagem.acoes.some((acao) => acao.nome === 'controlar_navegador'),
+        );
 
     useEffect(() => {
         definirCatalogoAberto(false);
@@ -254,6 +260,11 @@ export function TelaConversa({
                             <MensagemConversa
                                 key={mensagem.id}
                                 mensagem={mensagem}
+                                previaNavegador={
+                                    mensagem === ultimaMensagemNavegador
+                                        ? dados.previasNavegador[conversa.id]
+                                        : undefined
+                                }
                                 emExecucao={estado.conversaEmExecucao === conversa.id && mensagem === ultimaResposta}
                                 modo={modo}
                                 ponte={ponte}

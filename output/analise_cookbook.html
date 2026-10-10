@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { margin: 0; color: var(--foreground); font-family: var(--font-sans); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; vertical-align: top; padding: 12px 8px; border-bottom: 1px solid var(--border); }
+        th { font-weight: 500; }
+        td:first-child { width: 22%; font-weight: 500; }
+        td:nth-child(2) { width: 45%; }
+        caption { text-align: left; padding: 0 0 14px; font-weight: 500; }
+        small { color: var(--muted-foreground); display: block; padding-top: 5px; }
+        @media (max-width: 520px) {
+            thead { display: none; }
+            tr { display: block; padding: 12px 0; border-bottom: 1px solid var(--border); }
+            td, td:first-child, td:nth-child(2) { display: block; width: auto; padding: 4px 0; border: 0; }
+            td:last-child::before { content: 'Selene: '; font-weight: 500; }
+        }
+    </style>
+</head>
+<body>
+    <table>
+        <caption>Cookbook: capacidades e proposta para a Selene</caption>
+        <thead><tr><th>Área</th><th>Odysseus</th><th>Proposta</th></tr></thead>
+        <tbody>
+            <tr><td>Modelos</td><td>Busca online, quantizações, biblioteca e favoritos.</td>
+                <td>Simplificar o fluxo atual.<small>Instalados e catálogo na mesma área.</small></td></tr>
+            <tr><td>Compatibilidade</td><td>Detecta hardware e estima memória, velocidade e contexto.</td>
+                <td>Trazer primeiro.<small>Uma indicação antes de baixar. Detalhes sob demanda.</small></td></tr>
+            <tr><td>Execução</td><td>Vários motores, comandos e parâmetros específicos.</td>
+                <td>Manter llama.cpp inicialmente.<small>Automático com opções avançadas recolhidas.</small></td></tr>
+            <tr><td>Perfis</td><td>Salva e restaura configurações de lançamento por modelo e máquina.</td>
+                <td>Trazer primeiro.<small>Configurações por modelo, sem editor de comandos.</small></td></tr>
+            <tr><td>Atividades</td><td>Downloads, filas, instalações, logs e servidores em segundo plano.</td>
+                <td>Unificar estados e progresso.<small>Resumo visível somente quando houver atividade.</small></td></tr>
+            <tr><td>Diagnóstico</td><td>Interpreta falhas e oferece correções e novas tentativas.</td>
+                <td>Trazer primeiro.<small>Causa clara, ação principal e detalhes recolhidos.</small></td></tr>
+            <tr><td>Dependências</td><td>Instala pacotes, executa receitas e reconstrói motores.</td>
+                <td>Manter instalação nativa.<small>Python, Docker e compilação ficam para outra etapa.</small></td></tr>
+            <tr><td>Pastas e acesso</td><td>Várias pastas de modelos e token protegido do Hugging Face.</td>
+                <td>Segunda etapa.<small>Útil para ampliar a biblioteca e modelos restritos.</small></td></tr>
+            <tr><td>Máquinas</td><td>SSH, chaves, ambientes e servidores remotos.</td>
+                <td>Decidir separadamente.<small>Amplia bastante o gerenciamento atual.</small></td></tr>
+            <tr><td>Integrações</td><td>Calendário, horários, endpoints, ferramentas do agente e CLI.</td>
+                <td>Decidir separadamente.<small>Vai além de uma tela mínima de configurações.</small></td></tr>
+        </tbody>
+    </table>
+</body>
+</html>

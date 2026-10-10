@@ -298,6 +298,7 @@ try {
                 .getByRole('navigation', { name: 'Seções das configurações' })
                 .getByRole('button', { name: 'Modelos', exact: true })
                 .click();
+            await pagina.getByText('Opções de ' + modelo.nome, { exact: true }).click();
             await pagina.getByRole('button', { name: 'Excluir download de ' + modelo.nome, exact: true }).click();
             await pagina.getByRole('heading', { name: 'Excluir ' + modelo.nome + '?' }).waitFor();
             await pagina.getByRole('button', { name: 'Excluir download', exact: true }).click();

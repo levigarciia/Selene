@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { ChatCircleIcon, CpuIcon, StackIcon } from '@phosphor-icons/react';
 import type { Configuracao, Estado, PonteSelene, Resultado } from '../../shared/contratos';
+import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
 import { CamposGeracao } from './CamposGeracao';
 import { ConfiguracaoMotor } from './ConfiguracaoMotor';
 import { ModelosConfiguracoes } from './ModelosConfiguracoes';
@@ -9,7 +10,7 @@ import { AtualizacaoAplicativo } from './AtualizacaoAplicativo';
 export type Executar = <T>(operacao: () => Promise<Resultado<T>>) => Promise<T | undefined>;
 type Secao = 'geral' | 'modelos' | 'motor';
 
-/** Mantém configurações em uma tela com áreas independentes para geração, modelos e motor. */
+/** Reúne modelos, motor e preferências com detalhes disponíveis sob demanda. */
 export function Configuracoes({
     estado,
     ponte,
@@ -19,9 +20,14 @@ export function Configuracoes({
     ponte?: PonteSelene;
     executar: Executar;
 }) {
-    const [secao, definirSecao] = useState<Secao>('geral');
+    const [secao, definirSecao] = useState<Secao>('modelos');
     const [configuracao, definirConfiguracao] = useState<Configuracao>(estado.configuracao);
     const ultimaSalva = useRef(estado.configuracao);
+    const [hardware, definirHardware] = useState<HardwareLocal>();
+    const [consultando, definirConsultando] = useState(false);
+    const [erroHardware, definirErroHardware] = useState('');
+    const [salvando, definirSalvando] = useState(false);
+    const [salvou, definirSalvou] = useState(false);
     useEffect(() => {
         const anteriorSalva = ultimaSalva.current;
         definirConfiguracao((anterior) =>
@@ -29,8 +35,29 @@ export function Configuracoes({
         );
         ultimaSalva.current = estado.configuracao;
     }, [estado.configuracao]);
-    const [salvando, definirSalvando] = useState(false);
-    const [salvou, definirSalvou] = useState(false);
+    useEffect(() => {
+        let ativo = true;
+        if (!ponte) return;
+        definirConsultando(true);
+        definirHardware(undefined);
+        definirErroHardware('');
+        ponte
+            ?.consultarHardware()
+            .then((resultado) => {
+                if (!ativo) return;
+                if (resultado.ok) definirHardware(resultado.valor);
+                else definirErroHardware(resultado.erro);
+            })
+            .catch(() => {
+                if (ativo) definirErroHardware('Não foi possível consultar o hardware.');
+            })
+            .finally(() => {
+                if (ativo) definirConsultando(false);
+            });
+        return () => {
+            ativo = false;
+        };
+    }, [ponte, estado.configuracao.backend]);
     const ocupado = salvando || !!estado.conversaEmExecucao || ['instalando', 'carregando'].includes(estado.motor.fase);
     const alterado = JSON.stringify(configuracao) !== JSON.stringify(estado.configuracao);
     const alterar = <K extends keyof Configuracao>(chave: K, valor: Configuracao[K]) => {
@@ -38,69 +65,80 @@ export function Configuracoes({
         definirSalvou(false);
     };
     const campos = { configuracao, ocupado, alterar };
+    const atividades = estado.downloads.filter((item) => ['baixando', 'verificando'].includes(item.fase));
     return (
         <div
             data-ui="tela-configuracoes"
-            className={[
-                'grid grid-cols-[160px_minmax(0,_1fr)] gap-[44px] w-full min-h-0 px-[40px] py-[38px]',
-                '[@media(width<=1000px)]:grid-cols-[122px_minmax(0,_1fr)]',
-                '[@media(width<=1000px)]:gap-[20px] [@media(width<=1000px)]:px-[20px]',
-                '[@media(width<=1000px)]:py-[28px]',
-            ].join(' ')}
+            className="w-full min-h-0 max-w-[1060px] mx-auto px-8 py-7 flex flex-col gap-6 max-sm:px-4"
         >
             <nav
                 data-ui="navegacao-configuracoes"
-                className={[
-                    'flex flex-col gap-[6px] [&_button]:flex [&_button]:items-center [&_button]:gap-[11px]',
-                    '[&_button]:rounded-[7px] [&_button]:bg-transparent [&_button]:text-secundario',
-                    '[&_button]:text-left [&_button]:text-[13px] [&_button]:px-[14px] [&_button]:py-[12px]',
-                    '[&_button]:border-0 [&_button]:border-solid [&_button]:border-current',
-                    '[&_button:hover]:bg-[#202328] [&_button:hover]:text-[#e9e5ef]',
-                    "[&_button[aria-current='page']]:bg-[#202328] [&_button[aria-current='page']]:text-[#e9e5ef]",
-                ].join(' ')}
                 aria-label="Seções das configurações"
+                className="flex gap-1 border-b border-borda pb-3"
             >
                 {(
                     [
-                        { id: 'geral', nome: 'Geral', Icone: ChatCircleIcon },
                         { id: 'modelos', nome: 'Modelos', Icone: StackIcon },
                         { id: 'motor', nome: 'Motor', Icone: CpuIcon },
+                        { id: 'geral', nome: 'Geral', Icone: ChatCircleIcon },
                     ] as const
                 ).map(({ id, nome, Icone }) => (
-                    <button key={id} aria-current={secao === id ? 'page' : undefined} onClick={() => definirSecao(id)}>
-                        <Icone size={18} />
+                    <button
+                        key={id}
+                        aria-current={secao === id ? 'page' : undefined}
+                        onClick={() => definirSecao(id)}
+                        className="flex items-center gap-2 rounded-md px-3 py-2 text-xs text-secundario
+                            hover:bg-hover hover:text-principal aria-[current=page]:bg-hover
+                            aria-[current=page]:text-principal"
+                    >
+                        <Icone size={16} />
                         {nome}
                     </button>
                 ))}
             </nav>
+            {atividades.length > 0 && (
+                <div aria-label="Atividades" className="flex flex-col gap-2 text-xs">
+                    {atividades.map((item) => (
+                        <div key={item.catalogoId} className="flex flex-wrap items-center gap-3">
+                            <span>{item.catalogoId}</span>
+                            <span role="status" className="text-secundario">
+                                {item.fase === 'verificando'
+                                    ? 'Verificando'
+                                    : `${Math.floor((item.recebido / Math.max(1, item.total)) * 100)}%`}
+                            </span>
+                            <button
+                                className="text-secundario hover:text-principal"
+                                type="button"
+                                onClick={() => executar(() => ponte!.cancelarDownload(item.catalogoId))}
+                            >
+                                Cancelar download
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+            {secao !== 'motor' && estado.motor.fase === 'erro' && (
+                <button className="text-left text-xs text-[#eab1aa]" onClick={() => definirSecao('motor')}>
+                    O motor precisa de atenção. Ver diagnóstico
+                </button>
+            )}
             <section
                 data-ui="conteudo-configuracoes"
-                className={[
-                    'overflow-y-auto min-w-0 max-w-[800px] pt-0 pb-[24px] px-[6px] [&_h2]:text-[19px]',
-                    '[&_h2]:font-medium [&_h2]:mt-0 [&_h2]:mb-[28px] [&_h2]:mx-0 [&_textarea]:resize-y',
-                    '[&_textarea]:leading-[1.7]',
-                ].join(' ')}
                 aria-label="Configurações"
+                className="overflow-y-auto min-w-0 pb-5 [&_h2]:text-base [&_h2]:font-medium [&_h2]:mb-4"
             >
                 {secao === 'modelos' ? (
-                    <ModelosConfiguracoes estado={estado} ponte={ponte} executar={executar} />
+                    <ModelosConfiguracoes estado={estado} ponte={ponte} executar={executar} hardware={hardware} />
                 ) : (
                     <form
                         data-ui="formulario-config"
-                        className={[
-                            '[[data-ui~=conteudo-configuracoes]_&]:mt-[0]',
-                            '[[data-ui~=conteudo-configuracoes]_&]:gap-[28px]',
-                            '[[data-ui~=conteudo-configuracoes]_&_h2]:mb-0 flex flex-col gap-[17px] mt-[25px]',
-                            '[&_label]:flex [&_label]:flex-col [&_label]:gap-[7px] [&_label]:text-[12px]',
-                            '[&_label]:text-[#b9bec6] [&_input]:bg-[#0d0f12] [&_input]:text-principal',
-                            '[&_input]:rounded-[7px] [&_input]:w-full [&_input]:p-[9px] [&_input]:border',
-                            '[&_input]:border-solid [&_input]:border-[#363a42] [&_select]:bg-[#0d0f12]',
-                            '[&_select]:text-principal [&_select]:rounded-[7px] [&_select]:w-full [&_select]:p-[9px]',
-                            '[&_select]:border [&_select]:border-solid [&_select]:border-[#363a42]',
-                            '[&_textarea]:bg-[#0d0f12] [&_textarea]:text-principal [&_textarea]:rounded-[7px]',
-                            '[&_textarea]:w-full [&_textarea]:p-[9px] [&_textarea]:border [&_textarea]:border-solid',
-                            '[&_textarea]:border-[#363a42]',
-                        ].join(' ')}
+                        className="flex max-w-[680px] flex-col gap-5
+                        [&_label]:flex [&_label]:flex-col [&_label]:gap-2 [&_label]:text-xs
+                        [&_input:not([type=checkbox])]:bg-[#0d0f12] [&_input:not([type=checkbox])]:p-2
+                        [&_input:not([type=checkbox])]:border [&_input:not([type=checkbox])]:border-borda
+                        [&_input]:rounded-md [&_select]:bg-[#0d0f12] [&_select]:p-2 [&_select]:rounded-md
+                        [&_select]:border [&_select]:border-borda [&_textarea]:bg-[#0d0f12]
+                        [&_textarea]:p-2 [&_textarea]:border [&_textarea]:border-borda [&_textarea]:rounded-md"
                         onSubmit={async (evento) => {
                             evento.preventDefault();
                             definirSalvando(true);
@@ -121,45 +159,38 @@ export function Configuracoes({
                                 <AtualizacaoAplicativo estado={estado.atualizacao} ponte={ponte} executar={executar} />
                             </>
                         ) : (
-                            <ConfiguracaoMotor {...campos} estado={estado} ponte={ponte} executar={executar} />
+                            <ConfiguracaoMotor
+                                {...campos}
+                                estado={estado}
+                                ponte={ponte}
+                                executar={executar}
+                                hardware={hardware}
+                                consultando={consultando}
+                                erroHardware={erroHardware}
+                                consultar={async () => {
+                                    definirConsultando(true);
+                                    definirErroHardware('');
+                                    try {
+                                        await executar(async () => {
+                                            const resultado = await ponte!.consultarHardware();
+                                            if (resultado.ok) definirHardware(resultado.valor);
+                                            else definirErroHardware(resultado.erro);
+                                            return resultado;
+                                        });
+                                    } finally {
+                                        definirConsultando(false);
+                                    }
+                                }}
+                            />
                         )}
-                        <div
-                            data-ui="rodape-configuracoes"
-                            className={[
-                                'flex justify-between items-center gap-[16px] border-t border-solid',
-                                'border-t-hover pt-[24px] text-[12px]',
-                            ].join(' ')}
-                        >
-                            <span
-                                data-ui="texto-secundario"
-                                className={[
-                                    'text-secundario text-[12px] leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                                    '[[data-ui~=usuario-direita]_&]:text-secundario',
-                                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                                    '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                                ].join(' ')}
-                                role="status"
-                            >
+                        <div className="flex justify-between items-center gap-4 border-t border-borda pt-4 text-xs">
+                            <span role="status" className="text-secundario">
                                 {salvou ? 'Configurações salvas' : alterado ? 'Alterações não salvas' : ''}
                             </span>
                             <button
                                 type="submit"
-                                data-ui="botao botao-primario"
-                                className={[
-                                    'inline-flex items-center justify-center gap-[9px] bg-[#e0d8ef] rounded-[8px]',
-                                    'whitespace-nowrap text-[#251b38] px-[14px] py-[9px] border border-solid',
-                                    'border-transparent [&:hover:not(:disabled)]:bg-[#cec0e5]',
-                                    [
-                                        '[[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                                        '[[data-ui~=lista-projetos]_>_&]:justify-start',
-                                    ].join(' '),
-                                    '[[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                                ].join(' ')}
                                 disabled={ocupado || !alterado}
+                                className="rounded-md bg-[#e0d8ef] text-[#251b38] px-4 py-2 disabled:opacity-40"
                             >
                                 {salvando ? 'Salvando' : 'Salvar'}
                             </button>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { esquemaDados, type Estado, type Projeto, type Resultado } from '../../shared/contratos';
 import { useRascunhos } from './useRascunhos';
 import { reunirRascunhos } from '../../shared/rascunhos';
+import type { PreviaNavegador } from '../../shared/web';
 
 const inicial: Estado = {
     ...esquemaDados.parse({ versao: 1, configuracao: {}, modelos: [], conversas: [] }),
@@ -18,6 +19,7 @@ const inicial: Estado = {
 export function useSelene() {
     const [estado, definirEstado] = useState<Estado>(inicial);
     const [erro, definirErro] = useState('');
+    const [previasNavegador, definirPreviasNavegador] = useState<Record<string, PreviaNavegador>>({});
     const rascunhos = useRascunhos(definirErro);
     const [carregando, definirCarregando] = useState(!!window.selene);
     useEffect(() => {
@@ -28,6 +30,10 @@ export function useSelene() {
         if (!ponte) return;
         let ativo = true;
         const remover = ponte.aoEvento((evento) => {
+            if (evento.tipo === 'navegador') {
+                definirPreviasNavegador((anteriores) => ({ ...anteriores, [evento.previa.conversaId]: evento.previa }));
+                return;
+            }
             if (evento.tipo === 'erro') {
                 definirErro(evento.erro);
                 return;
@@ -50,6 +56,16 @@ export function useSelene() {
                 ),
             }));
         });
+        void ponte
+            .previasNavegador()
+            .then((resultado) => {
+                if (!ativo || !resultado.ok) return;
+                definirPreviasNavegador((anteriores) => ({
+                    ...Object.fromEntries(resultado.valor.map((previa) => [previa.conversaId, previa])),
+                    ...anteriores,
+                }));
+            })
+            .catch(() => {});
         void ponte
             .estado()
             .then((resultado) => {
@@ -89,6 +105,7 @@ export function useSelene() {
     return {
         estado: reunirRascunhos(estado, rascunhos.rascunhos),
         estadoPersistido: estado,
+        previasNavegador,
         ...rascunhos,
         criarRascunho: (modo: 'chat' | 'code', projeto?: Projeto | null, projetoChatId: string | null = null) =>
             rascunhos.criarRascunho(

@@ -1,5 +1,6 @@
 import { TextoAtividade } from './TextoAtividade';
-import { CaretRightIcon, CheckIcon, ClockIcon, TerminalIcon } from '@phosphor-icons/react';
+import { CaretRightIcon } from '@phosphor-icons/react';
+import { IconeAcao, escolherIconeAcao } from './IconeAcao';
 import type { Acao, PonteSelene } from '../../shared/contratos';
 import type { Executar } from './Configuracoes';
 
@@ -10,6 +11,9 @@ const nomes: Record<string, string> = {
     editar_arquivo: 'Editando',
     executar_terminal: 'Executando',
     atualizar_plano: 'Atualizando tarefas',
+    pesquisar_web: 'Pesquisando',
+    ler_pagina_web: 'Lendo página',
+    controlar_navegador: 'Usando navegador',
 };
 const nomesConcluidos: Record<string, string> = {
     listar_arquivos: 'Explorou',
@@ -18,6 +22,9 @@ const nomesConcluidos: Record<string, string> = {
     editar_arquivo: 'Editou',
     executar_terminal: 'Executou',
     atualizar_plano: 'Atualizou tarefas',
+    pesquisar_web: 'Pesquisou',
+    ler_pagina_web: 'Leu página',
+    controlar_navegador: 'Usou navegador',
 };
 const estados: Record<Acao['estado'], string> = {
     preparando: 'Preparando ação',
@@ -41,10 +48,20 @@ export function AcaoConversa({
     ponte?: PonteSelene;
     executar: Executar;
 }) {
-    const detalhe = acao.argumentos.comando ?? acao.argumentos.caminho;
+    const detalhe =
+        acao.argumentos.comando ??
+        acao.argumentos.caminho ??
+        acao.argumentos.consulta ??
+        acao.argumentos.url ??
+        acao.argumentos.acao;
+    const escrita = ['escrever_arquivo', 'editar_arquivo'].includes(acao.nome);
+    const conteudo = acao.argumentos.conteudo ?? acao.argumentos.novo;
+    const previa = acao.previa || (escrita && typeof conteudo === 'string' ? conteudo : undefined);
+    const mostrandoEscrita = escrita && acao.estado === 'preparando';
     return (
         <div
             data-ui={`acao ${acao.estado === 'aguardando' ? 'acao-pendente' : ''}`}
+            data-estado={acao.estado}
             className={[
                 [
                     'text-secundario mx-0 my-[10px] [&_summary]:flex [&_summary]:gap-[10px]',
@@ -112,15 +129,17 @@ export function AcaoConversa({
                 acao.estado === 'aguardando' ? '[&&]:border-[#8c75ad]' : '',
             ].join(' ')}
         >
-            <details open={acao.estado === 'aguardando' ? true : undefined}>
+            <details open={acao.estado === 'aguardando' || mostrandoEscrita ? true : undefined}>
                 <summary>
-                    {acao.estado === 'concluida' ? (
-                        <CheckIcon size={15} />
-                    ) : acao.estado === 'aguardando' ? (
-                        <ClockIcon size={15} />
-                    ) : (
-                        <TerminalIcon size={15} />
-                    )}
+                    <IconeAcao
+                        nome={escolherIconeAcao(acao)}
+                        className={[
+                            'size-[15px] shrink-0',
+                            acao.estado === 'erro' ? 'text-[#e9aaa7]' : '',
+                            acao.estado === 'aguardando' ? 'text-[#c4b8d6]' : '',
+                            ['recusada', 'interrompida'].includes(acao.estado) ? 'opacity-50' : '',
+                        ].join(' ')}
+                    />
                     <TextoAtividade ativo={emExecucao && ['preparando', 'executando'].includes(acao.estado)}>
                         {(acao.estado === 'concluida' ? nomesConcluidos[acao.nome] : nomes[acao.nome]) ?? acao.nome}
                         {typeof detalhe === 'string' ? ` ${detalhe}` : ''}
@@ -139,7 +158,9 @@ export function AcaoConversa({
                         size={12}
                     />
                 </summary>
-                <pre>{acao.previa || JSON.stringify(acao.argumentos, null, 4)}</pre>
+                <pre data-ui="previa-acao">
+                    {previa ?? (mostrandoEscrita ? 'Preparando conteúdo…' : JSON.stringify(acao.argumentos, null, 4))}
+                </pre>
                 {acao.resultado && (
                     <pre
                         data-ui="resultado-acao"

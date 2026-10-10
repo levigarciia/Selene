@@ -3,14 +3,6 @@ import type { EstadoAtualizacao } from './atualizacoes';
 import { esquemaIconeProjeto, type IconeDeProjeto } from './iconesProjetos';
 import { esquemaProjetoChat, type ProjetoChat, type EdicaoProjetoChat } from './projetosChat';
 
-export const esquemaModelo = z.object({
-    id: z.string().uuid(),
-    nome: z.string().min(1),
-    caminho: z.string().min(1),
-    tamanho: z.number().nonnegative(),
-    catalogoId: z.string().max(120).optional(),
-    projetorVisual: z.string().min(1).optional(),
-});
 export const esquemaBackend = z.enum(['auto', 'cpu', 'vulkan', 'rocm']);
 export type BackendMotor = z.infer<typeof esquemaBackend>;
 export type BackendRuntime = Exclude<BackendMotor, 'auto'>;
@@ -22,6 +14,24 @@ export const esquemaConfiguracao = z.object({
     temperatura: z.number().min(0).max(2).default(0.7),
     maxTokens: z.number().int().min(64).max(32768).default(2048),
     instrucao: z.string().max(20000).default('Responda em português brasileiro. Seja claro e preciso.'),
+});
+export const esquemaPerfilModelo = esquemaConfiguracao
+    .pick({
+        backend: true,
+        limitesAutomaticos: true,
+        contexto: true,
+        camadasGpu: true,
+    })
+    .strict();
+export type PerfilModelo = z.infer<typeof esquemaPerfilModelo>;
+export const esquemaModelo = z.object({
+    id: z.string().uuid(),
+    nome: z.string().min(1),
+    caminho: z.string().min(1),
+    tamanho: z.number().nonnegative(),
+    catalogoId: z.string().max(120).optional(),
+    projetorVisual: z.string().min(1).optional(),
+    perfil: esquemaPerfilModelo.optional(),
 });
 export const esquemaAcao = z.object({
     id: z.string(),
@@ -36,6 +46,7 @@ export const esquemaAcao = z.object({
 export const esquemaDesempenho = z.object({
     tokensGerados: z.number().int().nonnegative(),
     tokensEntrada: z.number().int().nonnegative().optional(),
+    tokensEntradaCache: z.number().int().nonnegative().optional(),
     tempoGeracaoMs: z.number().nonnegative(),
     tokensPorSegundo: z.number().nonnegative(),
 });
@@ -189,6 +200,7 @@ export type Estado = Dados & {
     downloads: DownloadModelo[];
 };
 export type Evento =
+    | { tipo: 'navegador'; previa: import('./web').PreviaNavegador }
     | { tipo: 'estado'; estado: Estado }
     | { tipo: 'erro'; erro: string }
     | {
@@ -209,6 +221,10 @@ export const esquemaAlteracao = z
     .partial();
 
 export interface PonteSelene {
+    previasNavegador(): Promise<Resultado<import('./web').PreviaNavegador[]>>;
+    atualizarNavegador(conversaId: string): Promise<Resultado<import('./web').PreviaNavegador>>;
+    consultarHardware(): Promise<Resultado<import('./compatibilidadeModelo').HardwareLocal>>;
+    configurarModelo(id: string, perfil: PerfilModelo | null): Promise<Resultado<void>>;
     criarProjetoChat(nome: string): Promise<Resultado<ProjetoChat>>;
     editarProjetoChat(id: string, edicao: EdicaoProjetoChat): Promise<Resultado<void>>;
     removerProjetoChat(id: string): Promise<Resultado<void>>;

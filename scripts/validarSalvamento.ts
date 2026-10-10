@@ -39,7 +39,9 @@ export async function validarSalvamento(pagina: Page, aplicativo: ElectronApplic
     assert.ok(geracaoSalva.ok);
     assert.equal(geracaoSalva.valor.motor.recarregamentoPendente, false);
     await secoes.getByRole('button', { name: 'Motor', exact: true }).click();
-    await pagina.getByLabel('Contexto', { exact: true }).selectOption('4096');
+    await pagina.getByText('Avançado', { exact: true }).click();
+    await pagina.getByLabel('Ajustar memória automaticamente', { exact: true }).uncheck();
+    await pagina.getByLabel('Contexto', { exact: true }).fill('4096');
     await pagina.getByRole('button', { name: 'Salvar', exact: true }).click();
     await pagina.getByText('Configurações salvas', { exact: true }).waitFor();
     const resultado = await pagina.evaluate(() => window.selene!.estado());

@@ -1,5 +1,6 @@
 import type { Configuracao, Mensagem } from '../../shared/contratos';
 import { receberResposta } from './streaming';
+import { criarContextoTemporal } from './contextoTemporal';
 
 export type BlocoConteudo =
     | { type: 'text'; text: string }
@@ -180,7 +181,8 @@ export class CompactadorContexto {
                 {
                     role: 'system',
                     content:
-                        `${instrucaoResumo}\nEscreva no máximo ${Math.max(24, Math.floor(maxTokens / 4))} palavras. ` +
+                        `${instrucaoResumo}\n${criarContextoTemporal()}\n` +
+                        `Escreva no máximo ${Math.max(24, Math.floor(maxTokens / 4))} palavras. ` +
                         'Responda diretamente com o resumo, sem introdução nem análise.',
                 },
                 {

@@ -2,6 +2,8 @@ import { BrainIcon, CheckIcon, CodeIcon, DownloadSimpleIcon, StarIcon, WrenchIco
 import { formatarTamanho, type ModeloCatalogo } from '../../shared/catalogo';
 import type { DownloadModelo, Modelo } from '../../shared/contratos';
 import { IconeModelo } from './IconeModelo';
+import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
+import { estimarVelocidadeModelo } from '../../shared/velocidadeModelo';
 
 const capacidades = {
     raciocinio: { nome: 'Raciocínio', Icone: BrainIcon },
@@ -22,6 +24,10 @@ export function LinhaModeloCatalogo({
     favoritar,
     baixar,
     cancelar,
+    hardware,
+    contexto = 2048,
+    somenteCpu = false,
+    camadasGpu,
 }: {
     item: ModeloCatalogo;
     local?: Modelo;
@@ -34,9 +40,24 @@ export function LinhaModeloCatalogo({
     favoritar: () => void;
     baixar: () => void;
     cancelar: () => void;
+    hardware?: HardwareLocal;
+    contexto?: number;
+    somenteCpu?: boolean;
+    camadasGpu?: number;
 }) {
     const ativo = download?.fase === 'baixando' || download?.fase === 'verificando';
     const percentual = download ? Math.floor((download.recebido / download.total) * 100) : 0;
+    const estimativa = hardware
+        ? estimarVelocidadeModelo({
+              tamanho: item.tamanho,
+              hardware,
+              contexto,
+              projetor: item.projetorVisual?.tamanho,
+              somenteCpu,
+              camadasGpu,
+              identificacao: item.nome,
+          })
+        : undefined;
     return (
         <div
             data-ui={`item-catalogo ${selecionado ? 'modelo-selecionado' : ''}`}
@@ -76,7 +97,7 @@ export function LinhaModeloCatalogo({
                             'text-[#9199a7] text-[11px]',
                         ].join(' ')}
                     >
-                        {item.descricao}
+                        {estimativa ? estimativa.rotulo : item.descricao}
                     </span>
                 </button>
                 <button
@@ -221,6 +242,12 @@ export function LinhaModeloCatalogo({
                 >
                     {download.erro}
                 </p>
+            )}
+            {estimativa && (
+                <details className="mt-2 ml-6 text-xs text-secundario">
+                    <summary className="cursor-pointer">Sobre a estimativa</summary>
+                    <p className="mt-2 leading-relaxed">{estimativa.detalhe}</p>
+                </details>
             )}
             {download?.fase === 'cancelado' && !local && (
                 <p

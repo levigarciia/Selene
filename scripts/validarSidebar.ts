@@ -228,9 +228,9 @@ try {
     );
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.getByRole('button', { name: 'Estatísticas', exact: true }).click();
-    const estatisticas = pagina.getByRole('dialog', { name: 'Estatísticas', exact: true });
-    assert.equal(await estatisticas.locator('[data-ui~="total-estatisticas"] strong').innerText(), '150');
-    await estatisticas.getByRole('button', { name: 'Mês', exact: true }).click();
+    const estatisticas = pagina.getByRole('region', { name: 'Estatísticas', exact: true });
+    assert.equal(await estatisticas.locator('[data-ui~="total-estatisticas"]').innerText(), '150');
+    await estatisticas.getByRole('button', { name: '30 dias', exact: true }).click();
     await estatisticas.getByRole('button', { name: 'Total', exact: true }).click();
     await pagina.keyboard.press('Escape');
     assert.equal(
@@ -252,7 +252,7 @@ try {
     assert.ok(restantes.valor.conversas.some((item) => item.titulo === 'Conversa Code 1'));
     assert.equal(restantes.valor.registrosUso.length, 1);
     await pagina.getByRole('button', { name: 'Estatísticas', exact: true }).click();
-    assert.equal(await estatisticas.locator('[data-ui~="total-estatisticas"] strong').innerText(), '150');
+    assert.equal(await estatisticas.locator('[data-ui~="total-estatisticas"]').innerText(), '150');
     await pagina.keyboard.press('Escape');
     await pagina.screenshot({ path: 'artifacts/selene-sidebar-final.png' });
     const dimensoes = pagina.viewportSize();

@@ -5,6 +5,7 @@ import { createElement } from 'react';
 import { MensagemConversa } from '../src/components/MensagemConversa';
 import { Agente } from '../electron/services/agente';
 import { esquemaConfiguracao, esquemaConversa, type Mensagem } from '../shared/contratos';
+import type { PreviaNavegador } from '../shared/web';
 
 const mensagem: Mensagem = {
     id: randomUUID(),
@@ -15,6 +16,33 @@ const mensagem: Mensagem = {
     acoes: [{ id: 'acao', nome: 'ler_arquivo', argumentos: {}, estado: 'executando', resultado: '' }],
 };
 const executar = async () => undefined;
+
+test('prévia aparece somente no navegador de uma tarefa ativa e some ao encerrar', () => {
+    const previa: PreviaNavegador = {
+        conversaId: randomUUID(), origem: 'navegador', aberto: true, carregando: false,
+        url: 'https://example.org/', titulo: 'Página', largura: 1100, altura: 800,
+    };
+    const atual: Mensagem = {
+        ...mensagem,
+        acoes: [{ ...mensagem.acoes[0]!, nome: 'controlar_navegador' }],
+    };
+    const renderizar = (atual: Mensagem, emExecucao = true, previaNavegador = previa) =>
+        renderToStaticMarkup(createElement(MensagemConversa, {
+            mensagem: atual, emExecucao, previaNavegador, executar,
+        }));
+    expect(renderizar(atual)).toContain('navegador-inline');
+    expect(renderizar(atual, false)).not.toContain('navegador-inline');
+    for (const estado of ['concluida', 'interrompida', 'erro'] as const) {
+        expect(renderizar({ ...atual, estado })).not.toContain('navegador-inline');
+    }
+    for (const origem of ['pesquisa', 'leitura'] as const) {
+        expect(renderizar(atual, true, { ...previa, origem })).not.toContain('navegador-inline');
+    }
+    for (const nome of ['pesquisar_web', 'ler_pagina_web']) {
+        expect(renderizar({ ...atual, acoes: [{ ...atual.acoes[0]!, nome }] }))
+            .not.toContain('navegador-inline');
+    }
+});
 
 function apresentar(atual: Mensagem, emExecucao: boolean): string {
     return renderToStaticMarkup(createElement(MensagemConversa, { mensagem: atual, emExecucao, executar }));

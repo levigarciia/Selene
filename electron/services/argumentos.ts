@@ -20,6 +20,46 @@ export function tentarInterpretarArgumentos(bruto: string): Record<string, unkno
     }
 }
 
+/** Obtém uma prévia de campos textuais durante a geração, sem validar argumentos para execução. */
+export function interpretarPreviaArgumentos(bruto: string): Record<string, unknown> {
+    const completos = tentarInterpretarArgumentos(bruto);
+    if (completos) return completos;
+    const campos: Record<string, unknown> = {};
+    const chave = /\s*"((?:[^"\\]|\\.)*)"\s*:\s*"/y;
+    let indice = bruto.indexOf('{');
+    if (indice < 0 || bruto.slice(0, indice).trim()) return campos;
+    indice += 1;
+    while (indice < bruto.length) {
+        chave.lastIndex = indice;
+        const correspondencia = chave.exec(bruto);
+        if (!correspondencia) break;
+        const inicio = chave.lastIndex;
+        indice = inicio;
+        while (indice < bruto.length && bruto[indice] !== '"') {
+            if (bruto[indice] !== '\\') {
+                indice += 1;
+                continue;
+            }
+            const tamanho = bruto[indice + 1] === 'u' ? 6 : 2;
+            if (indice + tamanho > bruto.length) break;
+            indice += tamanho;
+        }
+        try {
+            const nome = JSON.parse(`"${correspondencia[1]}"`) as string;
+            const valor = JSON.parse(`"${bruto.slice(inicio, indice)}"`) as string;
+            Object.defineProperty(campos, nome, { value: valor, enumerable: true, configurable: true });
+        } catch {
+            break;
+        }
+        if (bruto[indice] !== '"') break;
+        indice += 1;
+        while (/\s/.test(bruto[indice] ?? '') && indice < bruto.length) indice += 1;
+        if (bruto[indice] !== ',') break;
+        indice += 1;
+    }
+    return campos;
+}
+
 function listarCandidatos(bruto: string): string[] {
     const texto = bruto.trim();
     if (!texto) return ['{}'];

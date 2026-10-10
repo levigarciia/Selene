@@ -1,5 +1,13 @@
 # Validação do primeiro marco
 
+## Ícones contextuais de ações
+
+* Catálogo de 25 ícones baseado no T3 Code, incluindo estados de pull requests e sem a marca do T3.
+* `bun run test:icones`: aprovado no Electron. Verifica leitura, edição, pesquisa web, navegador,
+  terminal, busca por comando, compilação, plano e ferramenta desconhecida nos sete estados das ações.
+* Captura conferida: `artifacts/selene-icones-acoes.png`.
+* `bun run verificar`, `bun test`, `bun run build` e `git diff --check`: aprovados, com 106 testes unitários.
+
 ## Atividade e raciocínio em 9 de outubro de 2026
 
 * O brilho acompanha apenas a mensagem da execução atual e cessa ao concluir, falhar ou cancelar.
@@ -33,7 +41,8 @@ e `docs/user/thread-sidebar.md`.
 * O botão direito em Concluídas permite apagar todas após confirmação. Chats e conversas atuais são preservados.
 * O rodapé tem apenas três ícones. Configurações e Estatísticas ficam à esquerda, atualizações à direita.
   A fonte de atualizações ainda não está configurada, e o aplicativo informa essa condição.
-* Estatísticas usam as medições do motor por semana civil, mês e histórico total, com filtro Chat e Code.
+* Estatísticas usam as medições do motor em tela ampla, com gráfico diário e detalhamento por modelo ou dia.
+  Filtros por modo, modelo, 24 horas, 7, 30 e 90 dias ou histórico total.
   O registro de uso migra métricas antigas, evita duplicação e sobrevive à exclusão de conversas e ao reinício.
 * Aprovações ficam no topo. Respostas terminadas voltam ao topo, sem encerrar automaticamente a conversa.
 * Concluir e retomar no menu de contexto preserva mensagens e persiste a decisão. Um novo envio retoma a conversa.
@@ -304,3 +313,108 @@ Data: 9 de outubro de 2026.
 * Capturas conferidas em `artifacts/selene-gerenciamento-projeto.png` e
   `artifacts/selene-gerenciamento-projeto-estreito.png`, sem excesso horizontal em 420 pixels.
 * Projeto repetido abaixo da breadcrumb removido das conversas com mensagens.
+
+## Pesquisa e navegador
+
+Execute `bun run test:web` para validar o navegador real do Electron. O script usa duas conversas isoladas,
+uma interface HTTP local e uma pesquisa externa. Verifica preenchimento, clique, recusa de referências antigas,
+mudança do elemento após preparação, cancelamento e ausência de Node nas páginas remotas. Também lê uma fonte
+pública da documentação do Electron. A pesquisa externa depende de rede e pode falhar por bloqueio do mecanismo.
+
+`tests/web.test.ts` valida o ciclo do agente com respostas de modelo simuladas, pesquisa no Chat,
+restauração dos resultados no contexto, restrições de URLs e aprovação recusada ou acesso completo.
+Isso não comprova a qualidade das decisões de um GGUF real ao selecionar e usar ferramentas.
+
+Execute `bun run test:navegador-inline` depois de compilar o aplicativo para validar a interface real
+com o serviço de navegador e a ponte desktop. A fixture usa dados isolados e não carrega um modelo.
+Verifica imagens reais no histórico concluído, atualização automática da página, recolhimento, ampliação,
+atualização manual, largura reduzida, fechamento e ausência de outra janela visível.
+O teste web também exige um clique confiável do Chromium, aceita chamadas sem `observacao` e recusa
+referências antigas mesmo quando esse parâmetro está ausente.
+
+Validação em 10 de outubro de 2026: 116 testes unitários, compilação, `bun run test:web` e
+`bun run test:navegador-inline` aprovados. A pesquisa retornou oito fontes e a leitura pública foi aprovada.
+O teste geral `bun run test:desktop` continua falhando por acesso a `conversas[0].id` após criação de rascunho.
+O comportamento de um GGUF real e o fluxo completo do iFood não foram validados nesta execução.
+
+Correção da atualização em 10 de outubro de 2026: `bun run test:navegador-inline` também verifica a sequência
+navegador, pesquisa real, leitura de duas fontes públicas e retorno ao navegador. Uma alteração visual da página
+anterior não pode sobrescrever a captura da leitura atual. Verifica leitura no Chat sem navegador controlado
+e isolamento entre conversas. `bun test` contém 117 testes aprovados. Verificação de tipos e compilação aprovadas.
+
+Validação em 9 de outubro de 2026: 106 testes unitários aprovados, compilação aprovada e `bun run test:web`
+aprovado com pesquisa real e leitura de fonte pública. O teste geral `bun run test:desktop` falhou ao tentar
+acessar `conversas[0].id` depois de criar um rascunho ainda sem persistência. Esse fluxo geral não foi aprovado.
+
+## Configurações inspiradas no cookbook
+
+Validação em 9 de outubro de 2026: `bun run verificar`, `bun test` e `bun run build` aprovados.
+A suíte contém 112 testes. O roteiro `bun scripts/testarDesktop.ts scripts/validarConfiguracoes.ts`
+foi aprovado no Electron com dados isolados, runtime ROCm já instalado e GGUF Qwen3.5 9B real.
+O roteiro exige `SELENE_TESTE_RUNTIME` com a pasta dos runtimes existentes. `SELENE_TESTE_GGUF` aponta
+para um GGUF real opcional; sem essa variável, somente os fluxos sem inferência são exercitados.
+
+* Perfil salvo pela interface sobrevive ao reinício sem alterar a configuração global.
+* Restaurar preferências gerais remove o perfil persistido e atualiza os campos.
+* IPC recusa perfil com contexto inválido.
+* Modelo ausente produz diagnóstico com detalhes recolhidos e ação de nova tentativa.
+* Consulta detecta Radeon RX 7700 XT e 12 GB de VRAM total pelo runtime instalado.
+* Cancelamento durante carga, nova carga e encerramento foram exercitados com o GGUF real.
+* Salvar perfil com o modelo pronto preserva o PID. O próximo envio recarrega com contexto de 4096 tokens.
+* A resposta do chat termina concluída. A janela de 420 pixels não apresenta excesso horizontal nas configurações.
+
+Capturas conferidas: `artifacts/selene-catalogo-compatibilidade.png`, `artifacts/selene-motor-diagnostico.png`,
+`artifacts/selene-modelos-perfil.png` e `artifacts/selene-configuracoes-estreitas.png`.
+
+A estimativa é uma triagem, não uma medição por arquitetura: pesos com margem de 15%, projetor conhecido
+e faixa de cache de 64 a 512 KiB por token. O modo automático considera o mínimo de 2048 tokens para a triagem.
+Usa 85% da VRAM total como orçamento e reserva 2 GB da RAM livre. Memória ocupada da GPU, projetores importados
+sem tamanho cadastrado e particularidades da arquitetura podem mudar o resultado real.
+O catálogo controla revisões e integridade como antes. Não há descoberta aberta, SSH ou outros motores nesta etapa.
+
+## Estimativa de tokens por segundo
+
+A interface apresenta uma faixa de geração em `tokens/s`, mantendo a triagem de memória nos detalhes.
+O cálculo próprio segue o princípio de largura de banda por pesos usado em `services/hwfit/fit.py` do Odysseus.
+A tabela nominal cobre somente GPUs desktop reconhecidas. A previsão combina 30% a 60% de eficiência,
+largura de banda da GPU e faixa genérica de 20 a 55 GB/s para RAM. Reserva espaço para contexto e projetor
+antes de estimar a distribuição de pesos. Perfis com camadas manuais incluem o cenário conservador de CPU.
+Não é benchmark, não mede o processamento do prompt e não prevê o tempo até o primeiro token.
+MoE sem parâmetros ativos, GPU desconhecida, ausência de consulta e memória limitada ficam sem estimativa numérica.
+
+`tests/velocidadeModelo.test.ts` verifica variação por pesos, contexto, projetor e processamento,
+além de placas desconhecidas e distinção de variantes desktop e notebook.
+
+Validação em 10 de outubro de 2026: 116 testes aprovados, verificação TypeScript e compilação aprovadas.
+O roteiro de configurações passou no Electron sem inferência nesta rodada, usando o runtime ROCm instalado
+para consultar a GPU real e verificar indicadores em tokens por segundo. A captura do catálogo foi conferida.
+Não foi realizado benchmark para calibrar ou confirmar as velocidades previstas.
+
+## Painel de estatísticas e contexto temporal
+
+Validação em 10 de outubro de 2026: `bun test` aprovado com 120 testes. Verificação de tipos e compilação aprovadas.
+`bun run test:estatisticas` valida o aplicativo Electron com dados isolados e medições de exemplo.
+Confere total, agrupamento por modelo ou dia, período, filtros de modo e modelo, gráfico por teclado,
+ausência de dados, largura de 420 pixels e fechamento com Escape. Não carrega GGUF nem altera dados pessoais.
+
+`tests/estatisticas.test.ts` verifica janelas móveis, sessões distintas, dias vazios e soma dos grupos.
+`tests/contextoTemporal.test.ts` verifica mudança de dia entre fusos e a presença de uma única instrução
+com data atual em chamadas consecutivas do Chat e Code, preservando o histórico e instruções do projeto.
+A data vem do relógio e do fuso do computador. Não modifica os arquivos salvos nem garante a resposta de um GGUF.
+A compactação também recebe a referência temporal atual.
+
+## Cache de entrada
+
+A Selene já envia `cache_prompt: true` ao llama.cpp. O reaproveitamento depende do prefixo comum, do modelo
+e do estado do servidor. A data contextual usa apenas dia e fuso, sem horário ou segundos variáveis.
+
+Medições novas registram `usage.prompt_tokens_details.cached_tokens`, com alternativa em `timings.cache_n`.
+A entrada total prioriza `usage.prompt_tokens`; na ausência dele, soma `timings.prompt_n` e `timings.cache_n`.
+O cache faz parte da entrada e não é somado novamente ao total. Registros antigos não recebem valores inventados.
+Respostas com chamadas sem medição completa de cache permanecem sem essa divisão. O painel informa a cobertura
+e mantém as estatísticas na área central, com sidebar e controles de janela acessíveis.
+
+Fontes primárias, compatíveis com o runtime b10327 instalado:
+[Documentação do servidor](https://github.com/ggml-org/llama.cpp/blob/b10327/tools/server/README.md).
+Validação: parser, precedência, cache maior que entrada, múltiplas chamadas e totais com histórico sem cache
+são cobertos pelos testes. A interface usa medições de exemplo. O ganho de velocidade do GGUF real não foi medido.

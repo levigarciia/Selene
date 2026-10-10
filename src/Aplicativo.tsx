@@ -52,6 +52,7 @@ export function Aplicativo() {
         definirAtivas((anteriores) => ({ ...anteriores, [modoInicial]: novo.id }));
     }, [carregando, modoInicial, ativas]);
     function configurar() {
+        definirEstatisticasAbertas(false);
         definirProjetoChatAbertoId(null);
         definirAdicionandoProjeto(false);
         definirGerenciandoProjetos(false);
@@ -59,6 +60,7 @@ export function Aplicativo() {
         definirConfigurando(true);
     }
     function selecionar(id: string) {
+        definirEstatisticasAbertas(false);
         definirProjetoChatAbertoId(null);
         definirAdicionandoProjeto(false);
         definirGerenciandoProjetos(false);
@@ -69,6 +71,7 @@ export function Aplicativo() {
         definirConfigurando(false);
     }
     function criar(projeto?: Projeto | null, modo: 'chat' | 'code' = modoInicial) {
+        definirEstatisticasAbertas(false);
         definirProjetoChatAbertoId(null);
         definirAdicionandoProjeto(false);
         definirGerenciandoProjetos(false);
@@ -78,6 +81,7 @@ export function Aplicativo() {
         definirConfigurando(false);
     }
     function abrirProjetos(id: string | null = projetoAtual?.id ?? null) {
+        definirEstatisticasAbertas(false);
         definirProjetoChatAbertoId(null);
         definirAdicionandoProjeto(false);
         definirProjetoGerenciadoId(id);
@@ -93,12 +97,14 @@ export function Aplicativo() {
         if (!estado.projetos.length) definirGerenciandoProjetos(false);
     }
     function abrirProjetoChat(id: string) {
+        definirEstatisticasAbertas(false);
         definirConfigurando(false);
         definirGerenciandoProjetos(false);
         definirModoInicial('chat');
         definirProjetoChatAbertoId(id);
     }
     function criarChatProjeto(id: string) {
+        definirEstatisticasAbertas(false);
         const nova = dados.criarRascunho('chat', null, id);
         definirModoInicial('chat');
         definirAtivas((anteriores) => ({ ...anteriores, chat: nova.id }));
@@ -146,6 +152,7 @@ export function Aplicativo() {
                 estado={estado}
                 modo={modoInicial}
                 alterarModo={(modo) => {
+                    definirEstatisticasAbertas(false);
                     definirProjetoChatAbertoId(null);
                     definirAdicionandoProjeto(false);
                     definirGerenciandoProjetos(false);
@@ -194,7 +201,9 @@ export function Aplicativo() {
             />
             <main data-ui="area-principal" className="flex flex-col min-h-0 min-w-0 bg-fundo">
                 <BarraJanela ponte={ponte}>
-                    {gerenciandoProjetos || projetoChatAbertoId !== null ? (
+                    {estatisticasAbertas ? (
+                        <span className="text-[13px] font-medium">Estatísticas</span>
+                    ) : gerenciandoProjetos || projetoChatAbertoId !== null ? (
                         <>
                             <button
                                 data-ui="botao-icone"
@@ -405,7 +414,7 @@ export function Aplicativo() {
                 <div
                     data-ui="area-tela"
                     className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
-                    hidden={configurando || gerenciandoProjetos || projetoChatAbertoId !== null}
+                    hidden={estatisticasAbertas || configurando || gerenciandoProjetos || projetoChatAbertoId !== null}
                 >
                     {(['chat', 'code'] as const).map((modo) => (
                         <div
@@ -421,6 +430,7 @@ export function Aplicativo() {
                                 selecionar={selecionar}
                                 visivel={
                                     !configurando &&
+                                    !estatisticasAbertas &&
                                     !gerenciandoProjetos &&
                                     projetoChatAbertoId === null &&
                                     modo === modoInicial
@@ -430,7 +440,10 @@ export function Aplicativo() {
                         </div>
                     ))}
                 </div>
-                {projetoChatAbertoId !== null && (
+                {estatisticasAbertas && (
+                    <Estatisticas estado={estado} fechar={() => definirEstatisticasAbertas(false)} />
+                )}
+                {!estatisticasAbertas && projetoChatAbertoId !== null && (
                     <TelaProjetoChat
                         key={projetoChatAbertoId}
                         dados={dados}
@@ -441,7 +454,7 @@ export function Aplicativo() {
                         fechar={() => definirProjetoChatAbertoId(null)}
                     />
                 )}
-                {gerenciandoProjetos && (
+                {!estatisticasAbertas && gerenciandoProjetos && (
                     <TelaProjetos
                         dados={dados}
                         projetoId={projetoGerenciadoId}
@@ -457,13 +470,12 @@ export function Aplicativo() {
                     <div
                         data-ui="area-tela"
                         className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
-                        hidden={!configurando}
+                        hidden={!configurando || estatisticasAbertas}
                     >
                         <Configuracoes estado={estado} ponte={ponte} executar={executar} />
                     </div>
                 )}
             </main>
-            {estatisticasAbertas && <Estatisticas estado={estado} fechar={() => definirEstatisticasAbertas(false)} />}
             {excluindoConcluidas && (
                 <Modal
                     titulo="Apagar todos os chats concluídos?"

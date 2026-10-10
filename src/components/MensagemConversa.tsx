@@ -2,11 +2,14 @@ import { TextoAtividade } from './TextoAtividade';
 import { ArrowsClockwiseIcon, CaretRightIcon, InfoIcon, PencilSimpleIcon } from '@phosphor-icons/react';
 import { lazy, memo, Suspense, useState } from 'react';
 import type { Mensagem, PonteSelene } from '../../shared/contratos';
-import { montarAtividade } from '../../shared/atividade';
+import { agruparAtividade } from '../../shared/atividade';
+import { GrupoAcoesConversa } from './GrupoAcoesConversa';
 import type { Executar } from './Configuracoes';
 import { AcaoConversa } from './AcaoConversa';
 import { ImagemConversa } from './ImagemConversa';
 import { EditorMensagem } from './EditorMensagem';
+import { NavegadorConversa } from './NavegadorConversa';
+import type { PreviaNavegador } from '../../shared/web';
 
 const TextoMarkdown = lazy(() => import('./TextoMarkdown'));
 
@@ -54,7 +57,7 @@ function Texto({ texto }: { texto: string }) {
     );
 }
 
-/** Apresenta ações na ordem real e recolhe o trabalho anterior à resposta final no modo Code. */
+/** Apresenta o texto e recolhe sequências concluídas na ordem real da conversa. */
 export const MensagemConversa = memo(function MensagemConversa({
     mensagem,
     modo = 'chat',
@@ -64,6 +67,7 @@ export const MensagemConversa = memo(function MensagemConversa({
     reenviar,
     regerar,
     edicaoDesativada = false,
+    previaNavegador,
 }: {
     mensagem: Mensagem;
     modo?: 'chat' | 'code';
@@ -73,20 +77,22 @@ export const MensagemConversa = memo(function MensagemConversa({
     reenviar?: (mensagemId: string, texto: string) => Promise<boolean>;
     regerar?: (mensagemId: string) => Promise<void>;
     edicaoDesativada?: boolean;
+    previaNavegador?: PreviaNavegador;
 }) {
     const [mostrarTokens, definirMostrarTokens] = useState(false);
     const [editando, definirEditando] = useState(false);
     const tokens = mensagem.desempenho?.tokensPorSegundo;
     const gerando = emExecucao && mensagem.estado === 'gerando' && !mensagem.concluidoEm;
-    const recolher =
-        modo === 'code' &&
-        mensagem.papel === 'assistant' &&
-        mensagem.estado === 'concluida' &&
-        mensagem.acoes.length > 0;
-    const inicioFinal = recolher ? (mensagem.inicioTextoFinal ?? 0) : mensagem.texto.length;
-    const atividade = montarAtividade(mensagem, inicioFinal).map((bloco, indice) =>
+    const atividade = agruparAtividade(mensagem).map((bloco, indice) =>
         bloco.tipo === 'texto' ? (
             <Texto key={`texto-${indice}`} texto={bloco.texto} />
+        ) : bloco.tipo === 'grupo' ? (
+            <GrupoAcoesConversa
+                key={`grupo-${bloco.acoes[0]!.id}`}
+                acoes={bloco.acoes}
+                ponte={ponte}
+                executar={executar}
+            />
         ) : (
             <AcaoConversa
                 key={bloco.acao.id}
@@ -97,10 +103,12 @@ export const MensagemConversa = memo(function MensagemConversa({
             />
         ),
     );
-    const segundos = mensagem.concluidoEm
-        ? Math.max(0, Math.round((Date.parse(mensagem.concluidoEm) - Date.parse(mensagem.criadoEm)) / 1000))
-        : 0;
-    const duracao = segundos >= 60 ? `${Math.floor(segundos / 60)} min ${segundos % 60} s` : `${segundos} s`;
+    const mostrarNavegador = gerando
+        && previaNavegador?.origem === 'navegador'
+        && mensagem.acoes.some((acao) => acao.nome === 'controlar_navegador');
+    const painelNavegador = mostrarNavegador ? (
+        <NavegadorConversa previa={previaNavegador} ponte={ponte} executar={executar} />
+    ) : null;
     return (
         <article
             id={`mensagem-${mensagem.id}`}
@@ -183,33 +191,10 @@ export const MensagemConversa = memo(function MensagemConversa({
                         cancelar={() => definirEditando(false)}
                         reenviar={(texto) => reenviar(mensagem.id, texto)}
                     />
-                ) : recolher ? (
-                    <>
-                        <details
-                            data-ui="historico-tarefa"
-                            className={[
-                                '[&_summary::-webkit-details-marker]:hidden [&[open]_>_summary_svg]:rotate-90',
-                                'mb-[16px] [&_>_summary]:flex [&_>_summary]:items-center [&_>_summary]:gap-[8px]',
-                                '[&_>_summary]:text-secundario [&_>_summary]:text-[12px] [&_>_summary]:cursor-pointer',
-                                '[&_>_summary]:pt-[4px] [&_>_summary]:pb-[12px] [&_>_summary]:border-b',
-                                '[&_>_summary]:border-solid [&_>_summary]:border-b-[#22252a]',
-                                '[&_>_summary]:px-0 [&_>_summary_span]:text-[11px]',
-                            ].join(' ')}
-                        >
-                            <summary>
-                                Trabalhou{mensagem.concluidoEm ? ` por ${duracao}` : ''}
-                                <span>{mensagem.acoes.length} ações</span>
-                                <CaretRightIcon size={13} />
-                            </summary>
-                            <div data-ui="atividade-tarefa" className="">
-                                {atividade}
-                            </div>
-                        </details>
-                        <Texto texto={mensagem.texto.slice(inicioFinal)} />
-                    </>
                 ) : (
                     <div data-ui="atividade-tarefa" className="">
                         {atividade}
+                        {painelNavegador}
                     </div>
                 )}
                 {modo === 'chat' && mensagem.papel === 'user' && reenviar && !editando && (

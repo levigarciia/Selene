@@ -129,6 +129,35 @@ export const catalogoModelos: ModeloCatalogo[] = [
         descricao: 'Raciocínio em um modelo compacto.',
         capacidades: ['raciocinio'],
     },
+    {
+        id: 'gemma-4-12b-q4',
+        familia: 'gemma',
+        nome: 'Gemma 4 12B',
+        repositorio: 'unsloth/gemma-4-12b-it-GGUF',
+        arquivo: 'gemma-4-12b-it-Q4_K_M.gguf',
+        revisao: 'gemma4_unified_encoder_free',
+        tamanho: 7598963788,
+        sha256: '0a270ec9fe6b34f4a0d33992b6135117b484ebc4766ab76b51d4ae8c457e4c42',
+        descricao: 'Multimodal unificado encoder-free com áudio e visão nativos.',
+        capacidades: ['raciocinio', 'ferramentas', 'code'],
+    },
+    {
+        id: 'bonsai-27b-q2',
+        familia: 'qwen',
+        nome: 'Ternary Bonsai 27B',
+        repositorio: 'prism-ml/Ternary-Bonsai-27B-gguf',
+        arquivo: 'Ternary-Bonsai-27B-Q2_0.gguf',
+        revisao: 'qwen3.6_finetuned_ternary',
+        tamanho: 7671675648,
+        sha256: '868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757',
+        descricao: 'Versão Q2_0 fine-tuned do Qwen 3.6 27B com arquitetura ternária.',
+        capacidades: ['raciocinio', 'ferramentas', 'code'],
+        projetorVisual: {
+            arquivo: 'Ternary-Bonsai-27B-mmproj-BF16.gguf',
+            tamanho: 976961280,
+            sha256: 'acaf5b55d24ebd38c71fa220dc58c9a36776ec543b17728a4b322fc8d92f1de4',
+        },
+    },
 ];
 
 /** Identifica arquivos já disponíveis, incluindo importações com o nome e tamanho da edição do catálogo. */

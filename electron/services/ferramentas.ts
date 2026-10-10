@@ -4,6 +4,14 @@ import { z } from 'zod';
 import { executarProcesso } from './processos';
 import type { Conversa } from '../../shared/contratos';
 import { esquemaPlano } from '../../shared/atividade';
+import {
+    esquemaPesquisaWeb,
+    esquemaLeituraWeb,
+    esquemaNavegador,
+    ferramentasPesquisa,
+    ferramentaNavegador,
+    type ServicoWeb,
+} from '../../shared/web';
 
 const texto = z.string().min(1).max(30000);
 const esquemaLer = z.object({ caminho: texto, inicio: z.number().int().min(1).default(1) });
@@ -84,6 +92,12 @@ export const ferramentas = [
     ),
 ];
 
+/** Oferece pesquisa nos dois modos e controle do navegador somente no modo Code. */
+export function obterFerramentas(modo: Conversa['modo'], webDisponivel: boolean) {
+    const pesquisa = webDisponivel ? ferramentasPesquisa : [];
+    return modo === 'code' ? [...ferramentas, ...pesquisa, ...(webDisponivel ? [ferramentaNavegador] : [])] : pesquisa;
+}
+
 async function resolverExistente(caminho: string): Promise<string> {
     try {
         return await realpath(caminho);
@@ -135,7 +149,37 @@ export async function prepararFerramenta(
     nome: string,
     entrada: unknown,
     conversa: Conversa,
+    web?: ServicoWeb,
 ): Promise<FerramentaPreparada> {
+    if (nome === 'pesquisar_web' || nome === 'ler_pagina_web') {
+        if (!web) throw new Error('Pesquisa na web indisponível.');
+        if (nome === 'pesquisar_web') {
+            const argumentos = esquemaPesquisaWeb.parse(entrada);
+            return {
+                argumentos,
+                aprovacao: false,
+                previa: argumentos.consulta,
+                executar: (sinal) => web.pesquisar(argumentos.consulta, sinal, conversa.id),
+            };
+        }
+        const argumentos = esquemaLeituraWeb.parse(entrada);
+        return {
+            argumentos,
+            aprovacao: false,
+            previa: argumentos.url,
+            executar: (sinal) => web.ler(argumentos.url, sinal, conversa.id),
+        };
+    }
+    if (conversa.modo !== 'code') throw new Error('Esta ferramenta está disponível somente no modo Code.');
+    if (nome === 'controlar_navegador') {
+        if (!web) throw new Error('Navegador indisponível.');
+        const argumentos = esquemaNavegador.parse(entrada);
+        return {
+            argumentos,
+            aprovacao: argumentos.acao !== 'observar',
+            ...web.preparar(conversa.id, argumentos),
+        };
+    }
     if (nome === 'atualizar_plano') {
         const argumentos = esquemaPlano.parse(entrada);
         return {

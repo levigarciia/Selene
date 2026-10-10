@@ -1,7 +1,34 @@
 import { describe, expect, test } from 'bun:test';
-import { interpretarArgumentos, tentarInterpretarArgumentos } from '../electron/services/argumentos';
+import {
+    interpretarArgumentos,
+    interpretarPreviaArgumentos,
+    tentarInterpretarArgumentos,
+} from '../electron/services/argumentos';
 
 describe('Argumentos de ferramenta', () => {
+    test('mostra conteúdo progressivo sem aceitar o fragmento para execução', () => {
+        const completo = JSON.stringify({ caminho: 'prospeccao.txt', conteudo: 'Clientes:\n"João" C:\\Fotos' });
+        for (let tamanho = 1; tamanho < completo.length; tamanho += 1) {
+            const fragmento = completo.slice(0, tamanho);
+            const previa = interpretarPreviaArgumentos(fragmento);
+            if (typeof previa.conteudo === 'string') {
+                expect('Clientes:\n"João" C:\\Fotos'.startsWith(previa.conteudo)).toBe(true);
+            }
+            expect(tentarInterpretarArgumentos(fragmento)).toBeNull();
+        }
+        expect(interpretarPreviaArgumentos('{"caminho":"a.txt","conteudo":"Clientes:\\nJo')).toEqual({
+            caminho: 'a.txt',
+            conteudo: 'Clientes:\nJo',
+        });
+        expect(interpretarPreviaArgumentos(completo)).toEqual(JSON.parse(completo));
+    });
+    test('aguarda escapes Unicode completos e não confunde conteúdo com campos', () => {
+        expect(interpretarPreviaArgumentos('{"conteudo":"Ol\\u00')).toEqual({ conteudo: 'Ol' });
+        expect(interpretarPreviaArgumentos('{"conteudo":"Ol\\u00e1')).toEqual({ conteudo: 'Olá' });
+        expect(interpretarPreviaArgumentos('{"conteudo":"{\\"caminho\\":\\"falso')).toEqual({
+            conteudo: '{"caminho":"falso',
+        });
+    });
     test('aceita JSON válido, vazio e cercas de Markdown', () => {
         expect(interpretarArgumentos('{"caminho":"a.txt"}')).toEqual({ caminho: 'a.txt' });
         expect(interpretarArgumentos('')).toEqual({});

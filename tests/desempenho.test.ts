@@ -154,3 +154,93 @@ test('reduz publicações sem perder texto, conclusão ou métricas do agente', 
     expect(requisicao.cache_prompt).toBe(true);
     expect(agente.conversaId).toBeNull();
 });
+
+test('mede cache sem duplicar entrada e prioriza o uso compatível do motor', async () => {
+    for (const [tempos, uso, entrada, cache] of [
+        [{ prompt_n: 100, cache_n: 900 }, undefined, 1000, 900],
+        [
+            { prompt_n: 100, cache_n: 900 },
+            { prompt_tokens: 1000, prompt_tokens_details: { cached_tokens: 850 } },
+            1000,
+            850,
+        ],
+        [{ prompt_n: 100 }, { prompt_tokens: 1000 }, 1000, undefined],
+        [
+            { prompt_n: 100, cache_n: 900 },
+            { prompt_tokens: 10, prompt_tokens_details: { cached_tokens: 20 } },
+            10,
+            undefined,
+        ],
+    ] as const) {
+        const resultado = await receberResposta(
+            respostaEventos([
+                {
+                    choices: [{ delta: { content: 'Resposta' }, finish_reason: 'stop' }],
+                    timings: { predicted_n: 10, predicted_ms: 100, predicted_per_second: 100, ...tempos },
+                    usage: uso,
+                },
+            ]),
+            new AbortController().signal,
+            () => {},
+        );
+        expect(resultado.desempenho?.tokensEntrada).toBe(entrada);
+        expect(resultado.desempenho?.tokensEntradaCache).toBe(cache);
+    }
+});
+
+test('acumula cache das ferramentas somente quando todas as chamadas foram medidas', async () => {
+    for (const medirSegunda of [true, false]) {
+        const conversa = esquemaDados.parse({
+            versao: 1,
+            configuracao: {},
+            modelos: [],
+            conversas: [{ id: randomUUID(), titulo: 'Cache', modo: 'chat', atualizadoEm: new Date().toISOString() }],
+        }).conversas[0];
+        let chamadas = 0;
+        const agente = new Agente({
+            salvar: async () => {},
+            publicar: () => {},
+            web: {
+                pesquisar: async () => 'Resultado',
+                ler: async () => 'Fonte',
+                preparar: () => {
+                    throw new Error('Não deve abrir navegador.');
+                },
+            },
+            completar: async () => {
+                const primeira = chamadas++ === 0;
+                return respostaEventos([
+                    {
+                        choices: [
+                            {
+                                delta: primeira
+                                    ? {
+                                          tool_calls: [
+                                              {
+                                                  index: 0,
+                                                  id: 'web',
+                                                  function: {
+                                                      name: 'pesquisar_web',
+                                                      arguments: '{"consulta":"cache"}',
+                                                  },
+                                              },
+                                          ],
+                                      }
+                                    : { content: 'Resposta' },
+                                finish_reason: primeira ? 'tool_calls' : 'stop',
+                            },
+                        ],
+                        timings: { prompt_n: 100, predicted_n: 10, predicted_ms: 1000, predicted_per_second: 10 },
+                        usage: {
+                            prompt_tokens: 1000,
+                            ...(primeira || medirSegunda ? { prompt_tokens_details: { cached_tokens: 900 } } : {}),
+                        },
+                    },
+                ]);
+            },
+        });
+        await agente.executar(conversa, 'Pesquise', esquemaConfiguracao.parse({}));
+        expect(conversa.mensagens.at(-1)?.desempenho?.tokensEntrada).toBe(2000);
+        expect(conversa.mensagens.at(-1)?.desempenho?.tokensEntradaCache).toBe(medirSegunda ? 1800 : undefined);
+    }
+});

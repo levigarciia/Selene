@@ -14,6 +14,7 @@ import {
     esquemaAlteracao,
     esquemaBackend,
     esquemaConfiguracao,
+    esquemaPerfilModelo,
     esquemaEntradaImagem,
     type Estado,
     type Evento,
@@ -22,6 +23,7 @@ import {
 import { Persistencia } from './services/persistencia';
 import { MotorLocal } from './services/motor';
 import { Agente } from './services/agente';
+import { Navegador } from './services/navegador';
 import { obterPedidoParaRegerarChat, prepararReenvioChat } from './services/reenvioChat';
 import { catalogoModelos, encontrarModeloLocal, type ModeloCatalogo } from '../shared/catalogo';
 import { DownloadsModelos } from './services/downloadModelos';
@@ -31,6 +33,8 @@ import { Atualizacoes } from './services/atualizacoes';
 import electronUpdater from 'electron-updater';
 import { shell } from 'electron';
 import { urlRelease } from '../shared/atualizacoes';
+import { configuracaoParaModelo } from '../shared/configuracaoMotor';
+import { consultarHardware } from './services/hardwareLocal';
 
 app.setName('Selene');
 app.setPath('userData', join(app.getPath('appData'), 'Selene'));
@@ -40,6 +44,7 @@ let janela: BrowserWindow | null = null;
 let persistencia: Persistencia;
 let motor: MotorLocal;
 let agente: Agente;
+let navegador: Navegador;
 let downloads: DownloadsModelos;
 let anexos: AnexosImagens;
 let atualizacoes: Atualizacoes;
@@ -116,6 +121,7 @@ async function salvar(): Promise<void> {
 
 async function excluirConversas(ids: string[]): Promise<void> {
     for (const id of ids) exigirLivre(id);
+    for (const id of ids) navegador?.fecharConversa(id);
     const idsImagens = [
         ...new Set(
             ids.flatMap((id) =>
@@ -163,11 +169,16 @@ async function registrarDownload(item: ModeloCatalogo, caminho: string): Promise
 async function carregarModelo(id: string): Promise<void> {
     const modelo = persistencia.dados.modelos.find((item) => item.id === id);
     if (!modelo) throw new Error('Modelo não encontrado.');
-    const configuracao = persistencia.dados.configuracao;
+    const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
     await motor.carregar(modelo, configuracao);
 }
 
 function registrarOperacoes(): void {
+    registrar('previasNavegador', z.tuple([]), () => navegador.listarPrevias());
+    registrar('atualizarNavegador', z.tuple([uuid]), async ([id]) => {
+        if (conversaPorId(id).modo !== 'code') throw new Error('O navegador pertence ao modo Code.');
+        return navegador.atualizarConversa(id);
+    });
     const projetosChat = new ProjetosChat(persistencia.dados, salvar, () => agente.conversaId);
     registrar('criarProjetoChat', z.tuple([esquemaProjetoChat.shape.nome]), ([nome]) => projetosChat.criar(nome));
     registrar('editarProjetoChat', z.tuple([uuid, esquemaEdicaoProjetoChat]), ([id, edicao]) =>
@@ -191,6 +202,27 @@ function registrarOperacoes(): void {
     });
     const vazio = z.tuple([]);
     registrar('estado', vazio, estado);
+    registrar('consultarHardware', vazio, () =>
+        consultarHardware(join(app.getPath('userData'), 'runtime'), persistencia.dados.configuracao.backend),
+    );
+    registrar('configurarModelo', z.tuple([uuid, esquemaPerfilModelo.nullable()]), async ([id, perfil]) => {
+        exigirLivre();
+        if (['carregando', 'instalando'].includes(motor.estado.fase)) throw new Error('Aguarde a operação do motor.');
+        const modelo = persistencia.dados.modelos.find((item) => item.id === id);
+        if (!modelo) throw new Error('Modelo não encontrado.');
+        const anterior = modelo.perfil;
+        if (perfil) modelo.perfil = perfil;
+        else delete modelo.perfil;
+        try {
+            await salvar();
+        } catch (erro) {
+            modelo.perfil = anterior;
+            throw erro;
+        }
+        if (motor.estado.modeloId === id) {
+            motor.aplicarConfiguracao(configuracaoParaModelo(persistencia.dados.configuracao, modelo));
+        }
+    });
     registrar('verificarAtualizacao', vazio, () => atualizacoes.verificar());
     registrar('reiniciarAtualizacao', vazio, () => atualizacoes.reiniciar());
     registrar('abrirRelease', z.tuple([z.string().max(80).optional()]), async ([versao]) => {
@@ -478,9 +510,16 @@ function registrarOperacoes(): void {
             throw new Error('O limite de resposta deve ocupar no máximo metade do contexto.');
         }
         if (['carregando', 'instalando'].includes(motor.estado.fase)) throw new Error('Aguarde a operação do motor.');
+        const anterior = persistencia.dados.configuracao;
         persistencia.dados.configuracao = configuracao;
-        await salvar();
-        motor.aplicarConfiguracao(configuracao);
+        try {
+            await salvar();
+        } catch (erro) {
+            persistencia.dados.configuracao = anterior;
+            throw erro;
+        }
+        const modelo = persistencia.dados.modelos.find((item) => item.id === motor.estado.modeloId);
+        motor.aplicarConfiguracao(configuracaoParaModelo(configuracao, modelo));
     });
     async function enviarMensagem(id: string, texto: string, ids: string[], mensagemId?: string): Promise<void> {
         exigirLivre();
@@ -496,17 +535,18 @@ function registrarOperacoes(): void {
         }
         const modelo = persistencia.dados.modelos.find((item) => item.id === conversa.modeloId);
         if (!modelo) throw new Error('Modelo não encontrado.');
+        const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
         const precisaLigar =
             motor.estado.fase !== 'pronto' ||
             motor.estado.modeloId !== modelo.id ||
-            motor.precisaRecarregar(persistencia.dados.configuracao, modelo);
+            motor.precisaRecarregar(configuracao, modelo);
         const indiceResumo = preparada.contextoCompactado
             ? preparada.mensagens.findIndex((mensagem) => mensagem.id === preparada.contextoCompactado!.ateMensagemId)
             : -1;
         const possuiImagens =
             imagens.length || preparada.mensagens.slice(indiceResumo + 1).some((mensagem) => mensagem.imagens?.length);
         tarefa = agente
-            .executar(conversa, texto, persistencia.dados.configuracao, imagens, modelo, mensagemId, {
+            .executar(conversa, texto, configuracao, imagens, modelo, mensagemId, {
                 ligandoModelo: precisaLigar,
                 executar: async (sinal) => {
                     sinal.throwIfAborted();
@@ -521,7 +561,7 @@ function registrarOperacoes(): void {
                     if (!motor.estado.contextoDisponivel)
                         throw new Error('O motor não informou o contexto disponível.');
                     return {
-                        ...persistencia.dados.configuracao,
+                        ...configuracao,
                         contexto: motor.estado.contextoDisponivel,
                     };
                 },
@@ -608,6 +648,10 @@ async function criarJanela(): Promise<void> {
     });
     janela.webContents.session.setPermissionRequestHandler((_conteudo, _permissao, responder) => responder(false));
     janela.once('ready-to-show', () => janela?.show());
+    janela.once('closed', () => {
+        janela = null;
+        app.quit();
+    });
     await janela.loadURL(urlInterface);
 }
 
@@ -634,7 +678,9 @@ app.whenReady()
         await motor.verificar();
         downloads = new DownloadsModelos(join(app.getPath('userData'), 'models'), publicarEstado, registrarDownload);
         await downloads.preparar(catalogoModelos);
+        navegador = new Navegador((previa) => publicar({ tipo: 'navegador', previa }));
         agente = new Agente({
+            web: navegador,
             contextoProjetoChat: (conversa) => contextoProjetoChat(persistencia.dados, conversa),
             completar: (corpo, sinal) => motor.completar(corpo, sinal),
             lerImagem: (id) => anexos.ler(id),
@@ -668,6 +714,7 @@ app.on('window-all-closed', () => app.quit());
 async function prepararEncerramento(): Promise<void> {
     atualizacoes?.encerrar();
     agente?.cancelar();
+    navegador?.encerrar();
     motor?.parar();
     await downloads?.encerrar();
     await tarefa;

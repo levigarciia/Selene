@@ -32,12 +32,53 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
 * Entrada de conversa com controles compactos, logos das famílias e favoritos no início do seletor de modelos.
 * Nível de raciocínio por conversa nos modelos compatíveis e seleção de permissões em menu na entrada.
 * Conversas locais persistentes, histórico, busca, renomeação, exclusão e exportação.
+* Data atual e fuso horário do computador no contexto do Chat e Code, atualizados a cada chamada e na compactação.
+  Datas antigas no histórico permanecem como fatos históricos. Decisão própria da Selene solicitada pelo usuário.
+* Estatísticas em tela ampla com consumo diário, distribuição por entrada e saída, sessões e detalhamento por modelo
+  ou dia. Filtros por modo, modelo, 24 horas, 7, 30 e 90 dias ou histórico total. O consumo inclui contexto reenviado
+  e permanece após apagar conversas. Entrada em cache e sem cache usam somente medições do motor;
+  registros antigos preservam a entrada sem divisão medida. A sidebar permanece disponível nesta tela.
+  Layout solicitado pelo usuário a partir da referência visual fornecida, como decisão própria da Selene.
 * Streaming de texto e raciocínio separado em seção recolhível, Markdown, cancelamento e indicação de erros.
   O brilho das ações acompanha somente a mensagem da execução atual. A tarefa encerra ações ainda pendentes.
   Os níveis do Qwen controlam orçamentos de 25%, 50% e 75% dos tokens de geração.
 * Listagem, leitura, escrita, edição de arquivos e execução de terminal.
 * Ciclo de ferramentas do agente e histórico de ações.
+* Ícones contextuais de ações com o catálogo do T3 Code, sem sua marca. O ícone identifica leitura, edição,
+  pesquisa, navegador ou comando e permanece após a conclusão. Comandos de busca e compilação têm ícones próprios.
+  Decisão própria da Selene solicitada pelo usuário, documentada em `docs/ICONES_ACOES.md`.
+* Pesquisa na web e leitura de fontes públicas no Chat e no Code, com links no retorno das ferramentas.
+  A pesquisa usa páginas de resultados do DuckDuckGo e Bing, sem chave de API. Bloqueios e ausência de resultados
+  são erros explícitos. O navegador usa o Chromium incluído no Electron, com página e sessão isolada por conversa
+  Code. Suporta abrir, observar, clicar, preencher, rolar, voltar, avançar e fechar. Ações exigem aprovação enquanto
+  acesso completo estiver desativado. Referências são vinculadas à observação e ao elemento capturado.
+  A Selene resolve a observação quando o modelo envia somente a referência, sem relaxar a validação da aprovação.
+  Cliques usam eventos reais do mouse do Chromium, com verificação de visibilidade e sobreposição do elemento.
+  O navegador é renderizado em segundo plano e acompanhado por imagens atualizadas dentro da conversa,
+  com endereço, recolhimento, ampliação e atualização manual. A imagem permanece fora do histórico recolhido.
+  As imagens são transitórias, não são gravadas na conversa nem enviadas ao modelo.
+  O painel aparece somente durante uma tarefa ativa que usa `controlar_navegador` e desaparece ao concluir,
+  cancelar ou falhar. Pesquisas e leituras públicas usam páginas temporárias independentes, sem gerar imagens
+  ou atualizar esse painel, inclusive quando várias fontes são consultadas. Ao navegar, a imagem anterior
+  é descartada durante o carregamento.
+  O estado de login existe somente durante a sessão. Não há controle de abas múltiplas, interação com iframes,
+  capturas de tela enviadas ao modelo, uploads ou downloads nesta versão.
+  Fontes da referência: `src/builtin_mcp.py`, `src/browser_observation.py`, `src/browser_identity.py` e
+  `src/agent_tools/web_tools.py`. A visualização inline segue `static/js/chat.js`,
+  `static/js/chatRenderer.js` e `static/css/03-agent-chat.css`. A implementação da Selene é própria.
 * Configurações em tela própria, separadas em Geral, Modelos e Motor, com catálogo integrado.
+  A tela abre em Modelos, com biblioteca e catálogo na mesma área, opções inline e limites avançados recolhidos.
+  Perfis tipados por GGUF guardam processamento, contexto e camadas na GPU, sem alterar preferências de geração.
+  Salvar um perfil preserva o processo atual; a próxima carga ou envio aplica os parâmetros do modelo.
+  A consulta de hardware usa RAM do sistema e VRAM total enumerada por motores já instalados, sem instalar pacotes.
+  O catálogo oferece uma triagem heurística de memória, com contexto e projetor conhecido. Não é benchmark.
+  O indicador principal estima uma faixa de tokens por segundo no catálogo e na biblioteca, inclusive carregados.
+  A previsão usa pesos, largura de banda nominal de GPUs reconhecidas e distribuição entre GPU e RAM.
+  Hardware sem referência, memória insuficiente e MoE sem parâmetros ativos não recebem números inventados.
+  Fonte do cálculo de referência: `services/hwfit/fit.py`, funções `_lookup_bandwidth` e `_estimate_speed`.
+  Falhas do motor apresentam diagnóstico, saída técnica recolhida e nova tentativa para o modelo afetado.
+  Fontes da referência: `static/js/cookbook-hwfit.js`, `static/js/cookbookServe.js`,
+  `static/js/cookbookRunning.js` e `static/js/cookbook-diagnosis.js`. A implementação da Selene é própria.
 * Sidebar recolhível e exportação ou exclusão pelo menu de contexto da conversa.
 * Históricos Chat e Code separados, com seletor na sidebar e rascunhos independentes por modo.
   No Code, conversas atuais ficam no topo, tarefas em execução em Trabalhando e conversas encerradas em Concluídas.
@@ -231,6 +272,10 @@ Ele não estabelece uma funcionalidade geral de delegação de tarefas para agen
 Checkpoints de pesquisa com retomada e automação visual de todo o desktop não tiveram implementação
 correspondente identificada nesta inspeção e continuam fora da paridade confirmada.
 O navegador via MCP está no catálogo por ter implementação própria no Odysseus.
+Na referência atual, `src/tool_execution.py` bloqueia operações de página do navegador nativo e do Playwright MCP.
+`private_browser` admite somente metadados de sessão previamente registrada, com produtor validado em Linux.
+A presença do servidor e dos esquemas não comprova navegação funcional. A Selene usa outra implementação,
+validada com Chromium no Windows, sem reproduzir esse produtor.
 
 A reconexão ao stream, o botão de continuar uma resposta e a retomada de um agendamento têm escopos específicos.
 O botão de continuar produz outro envio. Isso não comprova restauração exata de processos nem continuação
@@ -313,6 +358,16 @@ Mover um chat descarta o checkpoint de compactação para não reutilizar contex
 Remover o projeto preserva conversas e rascunhos no histórico geral. Essas decisões foram solicitadas
 pelo usuário, inspiradas em `https://help.openai.com/en/articles/10169521-projects-in-chatgpt`, e não
 ampliam a paridade com o Odysseus. O contexto foi validado com respostas simuladas do motor, sem um GGUF real.
+
+Durante a preparação de uma escrita ou edição, a conversa mostra o caminho e o conteúdo textual
+conforme os argumentos chegam do modelo, com o bloco aberto. Essa prévia não autoriza a execução:
+o JSON completo continua sendo validado antes da aprovação e da gravação. Comportamento solicitado
+pelo usuário como decisão própria da Selene, sem ampliar a paridade com o Odysseus.
+
+Sequências de duas ou mais ações concluídas são recolhidas em uma linha expansível quando chega
+texto depois delas, tanto no Chat quanto no Code. O resumo conta comandos, arquivos distintos,
+pesquisas, páginas e outras ações. Cada sequência permanece na posição original entre os textos.
+Ações pendentes ou com falha continuam visíveis. Decisão de interface solicitada pelo usuário.
 
 No modo chat não existem ferramentas de computador. No modo code uma escrita ou comando deve aguardar
 aprovação; a recusa precisa voltar ao modelo. Cancelar interrompe a geração, aprovações pendentes e processos
