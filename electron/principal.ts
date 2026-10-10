@@ -25,7 +25,7 @@ import { MotorLocal } from './services/motor';
 import { Agente } from './services/agente';
 import { EnviosCode } from './services/enviosCode';
 import { OpenRouter } from './services/openrouter';
-import { esquemaOrdenacaoOpenRouter } from '../shared/openrouter';
+import { esforcosDoProvedor, esquemaOrdenacaoOpenRouter, nomeModeloOpenRouter } from '../shared/openrouter';
 import { Navegador } from './services/navegador';
 import { Computador } from './services/computador';
 import { obterPedidoParaRegerarChat, prepararReenvioChat } from './services/reenvioChat';
@@ -248,6 +248,7 @@ function registrarOperacoes(): void {
     registrar('catalogoOpenRouter', z.tuple([z.boolean(), esquemaOrdenacaoOpenRouter]), ([atualizar, ordenacao]) =>
         openrouter.modelos(atualizar, ordenacao),
     );
+    registrar('saldoOpenRouter', z.tuple([]), () => openrouter.saldo());
     registrar('cadastrarModeloOpenRouter', z.tuple([z.string().min(1).max(200)]), async ([id]) => {
         const item = (await openrouter.modelos()).find((modelo) => modelo.id === id);
         if (!item) throw new Error('Modelo ausente no catálogo OpenRouter.');
@@ -259,12 +260,14 @@ function registrarOperacoes(): void {
             imagens: item.architecture.input_modalities.includes('image'),
             ferramentas: item.supported_parameters.includes('tools'),
             raciocinio: item.supported_parameters.includes('reasoning'),
+            esforcos: esforcosDoProvedor(item.reasoning?.supported_efforts),
         };
+        const nome = nomeModeloOpenRouter(item.name);
         if (modelo) {
-            modelo.nome = item.name;
+            modelo.nome = nome;
             modelo.openrouter = remoto;
         } else {
-            modelo = { id: randomUUID(), nome: item.name, caminho: item.id, tamanho: 0, openrouter: remoto };
+            modelo = { id: randomUUID(), nome, caminho: item.id, tamanho: 0, openrouter: remoto };
             persistencia.dados.modelos.push(modelo);
         }
         await salvar();

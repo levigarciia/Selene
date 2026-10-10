@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Agente } from '../electron/services/agente';
 import { esquemaAlteracao, esquemaConfiguracao, esquemaConversa, type Modelo } from '../shared/contratos';
-import { niveisRaciocinio, resolverNivelRaciocinio } from '../shared/raciocinio';
+import { nomesRaciocinio, niveisRaciocinio, parametrosRaciocinio, resolverNivelRaciocinio } from '../shared/raciocinio';
 
 const qwen: Modelo = {
     id: randomUUID(),
@@ -22,6 +22,39 @@ test('oferece somente níveis compatíveis e resolve a escolha ao trocar o model
     expect(niveisRaciocinio(deepseek)).not.toContain('desativado');
     expect(resolverNivelRaciocinio(deepseek, 'desativado')).toBe('medio');
     expect(resolverNivelRaciocinio(llama, 'alto')).toBe('desativado');
+});
+
+test('mostra os esforços informados pelo OpenRouter e envia o valor exato', () => {
+    const remoto = (esforcos: NonNullable<Modelo['openrouter']>['esforcos']): Modelo => ({
+        ...qwen,
+        catalogoId: undefined,
+        caminho: 'openai/gpt-5',
+        openrouter: { id: 'openai/gpt-5', contexto: 8192, imagens: false, ferramentas: true, raciocinio: true, esforcos },
+    });
+    const gpt = remoto(['xhigh', 'high', 'medium', 'low', 'minimal']);
+    expect(niveisRaciocinio(gpt)).toEqual(['desativado', 'xhigh', 'alto', 'medio', 'baixo']);
+    expect(nomesRaciocinio.xhigh).toBe('Extra alto');
+    expect(parametrosRaciocinio(gpt, 'xhigh', 1000)).toEqual({ reasoning: { effort: 'xhigh' } });
+
+    const anthropic = remoto(['max', 'high', 'medium', 'low']);
+    expect(niveisRaciocinio(anthropic)).toContain('max');
+    expect(parametrosRaciocinio(anthropic, 'max', 1000)).toEqual({ reasoning: { effort: 'max' } });
+    expect(resolverNivelRaciocinio(anthropic, 'xhigh')).toBe('desativado');
+});
+
+test('segue a capacidade de raciocínio do catálogo local e do OpenRouter', () => {
+    const gemma4 = { ...qwen, catalogoId: 'gemma-4-12b-q4', nome: 'Gemma 4 12B' };
+    const gemma3 = { ...qwen, catalogoId: 'gemma-3-1b-q4', nome: 'Gemma 3 1B' };
+    const remoto = (raciocinio: boolean): Modelo => ({
+        ...qwen,
+        catalogoId: undefined,
+        caminho: 'teste/remoto',
+        openrouter: { id: 'teste/remoto', contexto: 8192, imagens: false, ferramentas: true, raciocinio },
+    });
+    expect(niveisRaciocinio(gemma4)).toEqual(['desativado', 'baixo', 'medio', 'alto']);
+    expect(niveisRaciocinio(gemma3)).toEqual([]);
+    expect(niveisRaciocinio(remoto(true))).toContain('alto');
+    expect(niveisRaciocinio(remoto(false))).toEqual([]);
 });
 
 test('valida níveis na fronteira IPC e preserva conversas antigas', () => {

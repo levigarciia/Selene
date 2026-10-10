@@ -1,5 +1,5 @@
 import { CheckIcon, StarIcon } from '@phosphor-icons/react';
-import { precoModelo, type ModeloOpenRouter } from '../../shared/openrouter';
+import { nomeModeloOpenRouter, precoModelo, type ModeloOpenRouter } from '../../shared/openrouter';
 import { IconeModeloRemoto } from './IconeModeloRemoto';
 import { CapacidadesModelo, type CapacidadeModelo } from './CapacidadesModelo';
 
@@ -19,7 +19,7 @@ export function LinhaModeloOpenRouter({
     selecionar: () => void;
     favoritar: () => void;
 }) {
-    const nome = modelo.name.replace(/^[^:]+:\s*/, '').trim() || modelo.name;
+    const nome = nomeModeloOpenRouter(modelo.name);
     const capacidades: CapacidadeModelo[] = [];
     if (modelo.supported_parameters.includes('reasoning')) capacidades.push('raciocinio');
     if (modelo.supported_parameters.includes('tools')) capacidades.push('ferramentas');

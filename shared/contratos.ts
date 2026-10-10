@@ -3,6 +3,12 @@ import type { EstadoAtualizacao } from './atualizacoes';
 import { esquemaIconeProjeto, type IconeDeProjeto } from './iconesProjetos';
 import { esquemaProjetoChat, type ProjetoChat, type EdicaoProjetoChat } from './projetosChat';
 
+/** Esforços aceitos pelo OpenRouter, do mais leve ao mais intenso. */
+export const esforcosOpenRouter = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type EsforcoOpenRouter = (typeof esforcosOpenRouter)[number];
+/** Níveis que a Selene guarda por conversa. Os locais usam os quatro primeiros. */
+export const niveisRaciocinioTodos = ['desativado', 'baixo', 'medio', 'alto', 'xhigh', 'max'] as const;
+
 export const esquemaBackend = z.enum(['auto', 'cpu', 'vulkan', 'rocm']);
 export type BackendMotor = z.infer<typeof esquemaBackend>;
 export type BackendRuntime = Exclude<BackendMotor, 'auto'>;
@@ -37,6 +43,7 @@ export const esquemaModelo = z.object({
             imagens: z.boolean(),
             ferramentas: z.boolean(),
             raciocinio: z.boolean(),
+            esforcos: z.array(z.enum(esforcosOpenRouter)).optional(),
         })
         .optional(),
     tamanho: z.number().nonnegative(),
@@ -141,7 +148,7 @@ export const esquemaConversa = z.object({
     pastaTrabalho: z.string().min(1).optional(),
     acessoCompleto: z.boolean().default(false),
     modeloId: z.string().uuid().nullable().default(null),
-    nivelRaciocinio: z.enum(['desativado', 'baixo', 'medio', 'alto']).optional(),
+    nivelRaciocinio: z.enum(niveisRaciocinioTodos).optional(),
     mensagens: z.array(esquemaMensagem).default([]),
     enviosPendentes: z
         .array(
@@ -270,6 +277,7 @@ export interface PonteSelene {
         atualizar?: boolean,
         ordenacao?: import('./openrouter').OrdenacaoOpenRouter,
     ): Promise<Resultado<import('./openrouter').ModeloOpenRouter[]>>;
+    saldoOpenRouter(): Promise<Resultado<import('./openrouter').SaldoOpenRouter>>;
     cadastrarModeloOpenRouter(id: string): Promise<Resultado<Modelo>>;
     previasNavegador(): Promise<Resultado<import('./web').PreviaNavegador[]>>;
     previasComputador(): Promise<Resultado<import('./computador').PreviaComputador[]>>;

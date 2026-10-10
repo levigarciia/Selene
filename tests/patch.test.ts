@@ -148,10 +148,10 @@ test('impede escape por caminho relativo, absoluto, link e destino de renomea√ß√
     await writeFile(join(pasta, 'atual.txt'), 'antigo');
     await symlink(fora, join(pasta, 'atalho'), process.platform === 'win32' ? 'junction' : 'dir');
     for (const caminho of ['../escape.txt', join(fora, 'novo.txt'), 'atalho/novo.txt']) {
-        await expect(preparar(`*** Add File: ${caminho}\n+novo`)).rejects.toThrow('fora do projeto');
+        await expect(preparar(`*** Add File: ${caminho}\n+novo`)).rejects.toThrow('fora da pasta de trabalho');
         await expect(
             preparar(`*** Update File: atual.txt\n*** Move to: ${caminho}\n@@\n-antigo\n+novo`),
-        ).rejects.toThrow('fora do projeto');
+        ).rejects.toThrow('fora da pasta de trabalho');
     }
 });
 

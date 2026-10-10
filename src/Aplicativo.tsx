@@ -506,7 +506,7 @@ export function Aplicativo() {
                     ))}
                 </div>
                 {estatisticasAbertas && (
-                    <Estatisticas estado={estado} fechar={() => definirEstatisticasAbertas(false)} />
+                    <Estatisticas estado={estado} ponte={ponte} fechar={() => definirEstatisticasAbertas(false)} />
                 )}
                 {!estatisticasAbertas && projetoChatAbertoId !== null && (
                     <TelaProjetoChat

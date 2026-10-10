@@ -36,9 +36,9 @@ A seleção automática de processamento considera a GPU disponível. Nas Radeon
 se essa carga falhar, tenta Vulkan e informa a troca. Também é possível escolher o processamento manualmente.
 Imagens dependem de um modelo visual compatível e do projetor correspondente.
 
-No modo Code, caminhos de arquivos ficam limitados ao projeto quando o acesso completo está desativado.
+No modo Code, caminhos relativos partem da pasta de trabalho e ficam limitados a ela quando o acesso completo está desativado.
 Comandos aprovados executam PowerShell e podem acessar outras partes do computador.
-O acesso completo libera ferramentas sem aprovações individuais e permanece salvo por conversa.
+O acesso completo autoriza caminhos absolutos fora da pasta de trabalho, dispensa aprovações individuais e permanece salvo por conversa.
 
 ## Atualizações automáticas
 

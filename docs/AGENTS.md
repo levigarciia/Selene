@@ -27,9 +27,11 @@ chat, code e permissões continuam válidos como decisões próprias da Selene.
 * `src/hooks`: estado e assinatura dos eventos do aplicativo.
 * `scripts`: desenvolvimento e compilação com Bun.
 
-Ferramentas de computador pertencem ao modo code. Leituras respeitam a pasta do projeto enquanto o acesso
-completo está desativado. Comandos e escritas exigem aprovação individual. O acesso completo é uma escolha
-explícita por conversa, não uma decisão do modelo. O renderer nunca executa ferramentas diretamente.
+Ferramentas de computador pertencem ao modo code. Sem o acesso completo, leituras e edições respeitam a pasta de
+trabalho, enquanto comandos e escritas exigem aprovação individual. O acesso completo é uma escolha explícita por
+conversa, dispensa aprovações individuais e autoriza caminhos absolutos fora da pasta de trabalho. Ele não altera o
+escopo do modo Chat nem transforma instruções de arquivos em autorização. O renderer nunca executa ferramentas
+diretamente.
 
 ## Qualidade
 

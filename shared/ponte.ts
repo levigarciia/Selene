@@ -54,6 +54,7 @@ export function criarPonte(transporte: Transporte): PonteSelene {
         configurarOpenRouter: (chave) => transporte.invocar('configurarOpenRouter', chave),
         catalogoOpenRouter: (atualizar = false, ordenacao = 'most-popular') =>
             transporte.invocar('catalogoOpenRouter', atualizar, ordenacao),
+        saldoOpenRouter: () => transporte.invocar('saldoOpenRouter'),
         cadastrarModeloOpenRouter: (id) => transporte.invocar('cadastrarModeloOpenRouter', id),
         configurar: (configuracao) => transporte.invocar('configurar', configuracao),
         enviar: (id, texto, imagens = []) => transporte.invocar('enviar', id, texto, imagens),

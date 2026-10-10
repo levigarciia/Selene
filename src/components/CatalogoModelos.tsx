@@ -10,6 +10,7 @@ import {
 } from '@phosphor-icons/react';
 import { catalogoModelos, encontrarModeloLocal, formatarTamanho, type FamiliaModelo } from '../../shared/catalogo';
 import type { Estado, PonteSelene } from '../../shared/contratos';
+import { nomeExibicaoModelo } from '../../shared/openrouter';
 import type { Executar } from './Configuracoes';
 import { LinhaModeloCatalogo } from './LinhaModeloCatalogo';
 import { CatalogoOpenRouter } from './CatalogoOpenRouter';
@@ -143,7 +144,7 @@ export function CatalogoModelos({
                     ) : (
                         <IconeModelo familia={familiaSelecionada} nome={selecionado?.nome} />
                     )}
-                    <span>{selecionado?.nome ?? 'Selecionar modelo'}</span>
+                    <span>{nomeExibicaoModelo(selecionado?.nome) ?? 'Selecionar modelo'}</span>
                     {baixando && (
                         <span
                             data-ui="indicador-download"

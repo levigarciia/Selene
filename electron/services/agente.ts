@@ -435,7 +435,7 @@ export class Agente {
                         'por perguntas repetidas de confirmação nem alegue limitações sem verificar a janela escolhida.',
                 );
             sistema.push(
-                'Você é um agente de programação. Use ferramentas para inspecionar e alterar o projeto.',
+                'Você é um agente de programação. Use ferramentas para inspecionar e alterar arquivos autorizados.',
                 'Prefira apply_patch para editar arquivos existentes com alterações pequenas e contexto exato. ' +
                     'editar_arquivo também permite substituir um trecho único. Use escrever_arquivo para criar arquivos ' +
                     'ou quando a tarefa exigir uma substituição integral. Não reescreva um arquivo inteiro ' +
@@ -456,11 +456,17 @@ export class Agente {
                       ]
                     : []),
                 conversa.acessoCompleto
-                    ? 'O usuário autorizou ferramentas com acesso completo nesta conversa.'
-                    : 'Comandos e escritas exigem aprovação. Não contorne recusas.',
+                    ? 'O usuário autorizou acesso completo ao computador nesta conversa. Use as ferramentas para ler, ' +
+                      'pesquisar, escrever e executar comandos também fora da pasta do projeto quando isso fizer parte ' +
+                      'da tarefa. Passe caminhos absolutos para destinos externos. Não alegue falta de acesso nem ' +
+                      'recuse preventivamente; execute a ação solicitada. As aprovações individuais são dispensadas ' +
+                      'enquanto este modo permanecer ativo.'
+                    : 'Comandos e escritas exigem aprovação individual. Mantenha leituras e edições dentro da pasta de ' +
+                      'trabalho, salvo autorização explícita do usuário para mudar o escopo. Não contorne recusas.',
                 `Projeto: ${conversa.projeto ?? 'nenhum selecionado'}.`,
-                `Pasta de trabalho: ${conversa.projeto ?? conversa.pastaTrabalho ?? 'não preparada'}.`,
-                `Acesso completo: ${conversa.acessoCompleto ? 'ativado' : 'desativado'}.`,
+                `Pasta de trabalho: ${conversa.projeto ?? conversa.pastaTrabalho ?? 'não preparada'}. ` +
+                    'Caminhos relativos partem daqui.',
+                `Acesso completo: ${conversa.acessoCompleto ? 'ativado; todo o computador está disponível' : 'desativado'}.`,
             );
             if (!conversa.projeto) {
                 sistema.push(

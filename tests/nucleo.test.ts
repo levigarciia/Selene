@@ -71,9 +71,9 @@ describe('Arquivos e permissões', () => {
         await mkdir(fora);
         await writeFile(join(fora, 'segredo.txt'), 'privado');
         await symlink(fora, join(projeto, 'atalho'), process.platform === 'win32' ? 'junction' : 'dir');
-        await expect(resolverCaminho('../fora/segredo.txt', projeto, false)).rejects.toThrow('fora do projeto');
-        await expect(resolverCaminho(join(fora, 'segredo.txt'), projeto, false)).rejects.toThrow('fora do projeto');
-        await expect(resolverCaminho('atalho/segredo.txt', projeto, false)).rejects.toThrow('fora do projeto');
+        await expect(resolverCaminho('../fora/segredo.txt', projeto, false)).rejects.toThrow('fora da pasta de trabalho');
+        await expect(resolverCaminho(join(fora, 'segredo.txt'), projeto, false)).rejects.toThrow('fora da pasta de trabalho');
+        await expect(resolverCaminho('atalho/segredo.txt', projeto, false)).rejects.toThrow('fora da pasta de trabalho');
         expect(await resolverCaminho('atalho/segredo.txt', projeto, true)).toContain('segredo.txt');
     });
     test('a prévia não escreve e uma alteração concorrente impede a sobrescrita', async () => {
@@ -357,6 +357,41 @@ describe('Ciclo do agente', () => {
         expect(JSON.stringify(contexto)).toContain('O usuário recusou');
         expect(conversa.mensagens[1].estado).toBe('concluida');
         await expect(readFile(join(pasta, 'negado.txt'))).rejects.toThrow();
+    });
+    test('acesso completo permite caminhos absolutos fora da pasta de trabalho', async () => {
+        const raiz = await criarPasta();
+        const projeto = join(raiz, 'projeto');
+        const externo = join(raiz, 'AppData', 'Selene');
+        await mkdir(projeto);
+        await mkdir(externo, { recursive: true });
+        const lido = join(externo, 'existente.txt');
+        const escrito = join(externo, 'criado-pelo-agente.txt');
+        await writeFile(lido, 'conteúdo externo');
+        const conversa = criarConversa(projeto);
+        conversa.acessoCompleto = true;
+        let rodada = 0;
+        let contextoExterno = '';
+        const agente = new Agente({
+            salvar: async () => {},
+            publicar: (mensagem) => {
+                expect(mensagem.acoes.some((acao) => acao.estado === 'aguardando')).toBe(false);
+            },
+            completar: async (corpo) => {
+                contextoExterno = JSON.stringify(corpo);
+                const chamadas = [
+                    { nome: 'ler_arquivo', argumentos: { caminho: lido } },
+                    { nome: 'escrever_arquivo', argumentos: { caminho: escrito, conteudo: 'salvo fora' } },
+                    { nome: 'executar_terminal', argumentos: { comando: '$PWD.Path', pasta: externo } },
+                ][rodada]!;
+                rodada += 1;
+                return respostaModelo('', chamadas);
+            },
+        });
+        await agente.executar(conversa, `Analise ${externo}`, esquemaConfiguracao.parse({}));
+        expect(contextoExterno).toContain('acesso completo ao computador');
+        expect(await readFile(lido, 'utf8')).toBe('conteúdo externo');
+        expect(await readFile(escrito, 'utf8')).toBe('salvo fora');
+        expect(conversa.mensagens.at(-1)?.acoes.every((acao) => acao.estado === 'concluida')).toBe(true);
     });
     test('aprovação executa, enquanto acesso completo dispensa a aprovação', async () => {
         for (const acessoCompleto of [false, true]) {

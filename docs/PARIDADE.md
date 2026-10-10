@@ -337,7 +337,9 @@ Comandos, leituras e caminhos de arquivos permanecem no histórico de ações e 
 Sem plano, o painel não aparece. Ao concluir, interromper ou falhar, ele sai da área de entrada e o histórico
 preserva o plano. Referências locais do T3 Code: `apps/web/src/components/ChatView.tsx`,
 `apps/web/src/session-logic.ts` e `apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.ts`.
-O acesso completo permanece salvo por conversa, inclusive ao escolher um projeto ou reiniciar.
+O acesso completo permanece salvo por conversa, inclusive ao escolher um projeto ou reiniciar. No Code, ele autoriza
+caminhos absolutos para fora da pasta de trabalho e dispensa aprovações individuais; sem ele, a pasta continua sendo
+o limite padrão.
 Essas decisões de experiência seguem as imagens fornecidas do T3 Code e não ampliam a paridade com o Odysseus.
 
 O contexto é obtido automaticamente do GGUF pelo motor e confirmado pelo endpoint `/props`.
@@ -407,9 +409,11 @@ Implementação própria em TypeScript e decisão solicitada pelo usuário, sem 
 com o Odysseus. Validada com arquivos reais e interface Electron; a preferência de um GGUF real
 pela nova ferramenta ainda não foi medida.
 
-No modo chat não existem ferramentas de computador. No modo code uma escrita ou comando deve aguardar
-aprovação; a recusa precisa voltar ao modelo. Cancelar interrompe a geração, aprovações pendentes e processos
-da tarefa. Fora do acesso completo, leituras e escritas ficam na pasta real do projeto, incluindo links simbólicos.
+No modo chat não existem ferramentas de computador. No modo code, com o acesso padrão, uma escrita ou comando deve
+aguardar aprovação individual; a recusa precisa voltar ao modelo. O acesso completo é uma escolha explícita por
+conversa e dispensa essas aprovações individuais. Ele mantém caminhos relativos na pasta de trabalho, mas autoriza
+caminhos absolutos para outras pastas do computador. Cancelar interrompe a geração, aprovações pendentes e processos
+da tarefa. Sem o acesso completo, leituras e escritas ficam na pasta real do projeto, incluindo links simbólicos.
 O estado de conclusão só pode ser apresentado depois de persistir o resultado.
 
 Solicitações OpenRouter repetem até duas vezes falhas temporárias anteriores à resposta,

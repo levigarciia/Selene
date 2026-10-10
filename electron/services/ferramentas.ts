@@ -37,7 +37,8 @@ function definir(nome: string, descricao: string, properties: object, required: 
 export const ferramentas = [
     definir(
         'apply_patch',
-        'Edite arquivos com patch contextual. Requer aprovação. Envie patch entre *** Begin Patch e *** End Patch. ' +
+        'Edite arquivos com patch contextual. Fora do acesso completo, requer aprovação individual. ' +
+            'Envie patch entre *** Begin Patch e *** End Patch. ' +
             'Use *** Add File: caminho com linhas +, *** Delete File: caminho, ou *** Update File: caminho. ' +
             'Em Update, use @@ antes de cada trecho, espaço para contexto, menos para remover e + para adicionar. ' +
             'Aceita @@ contexto, *** End of File e *** Move to: destino antes dos trechos. ' +
@@ -46,10 +47,16 @@ export const ferramentas = [
         { patch: { type: 'string' } },
         ['patch'],
     ),
-    definir('listar_arquivos', 'Lista uma pasta do projeto.', { caminho: { type: 'string' } }, []),
+    definir(
+        'listar_arquivos',
+        'Lista uma pasta. Caminhos relativos partem da pasta de trabalho. Com acesso completo, use um caminho absoluto ' +
+            'para operar fora dela.',
+        { caminho: { type: 'string' } },
+        [],
+    ),
     definir(
         'ler_arquivo',
-        'Lê até 400 linhas de texto, com numeração.',
+        'Lê até 400 linhas de texto, com numeração. Aceita caminho absoluto quando o acesso completo está ativado.',
         {
             caminho: { type: 'string' },
             inicio: { type: 'integer', minimum: 1 },
@@ -58,7 +65,8 @@ export const ferramentas = [
     ),
     definir(
         'escrever_arquivo',
-        'Cria ou substitui um arquivo. Requer aprovação.',
+        'Cria ou substitui um arquivo. Fora do acesso completo, requer aprovação individual. ' +
+            'Aceita caminho absoluto quando o acesso completo está ativado.',
         {
             caminho: { type: 'string' },
             conteudo: { type: 'string' },
@@ -67,7 +75,8 @@ export const ferramentas = [
     ),
     definir(
         'editar_arquivo',
-        'Substitui uma ocorrência textual única e exata. Requer aprovação.',
+        'Substitui uma ocorrência textual única e exata. Fora do acesso completo, requer aprovação individual. ' +
+            'Aceita caminho absoluto quando o acesso completo está ativado.',
         {
             caminho: { type: 'string' },
             anterior: { type: 'string' },
@@ -77,7 +86,8 @@ export const ferramentas = [
     ),
     definir(
         'executar_terminal',
-        'Executa PowerShell no Windows. Limite de 60 segundos. Requer aprovação.',
+        'Executa PowerShell no Windows. Limite de 60 segundos. Fora do acesso completo, requer aprovação individual. ' +
+            'A pasta aceita caminho absoluto quando o acesso completo está ativado.',
         {
             comando: { type: 'string' },
             pasta: { type: 'string' },
@@ -124,7 +134,7 @@ async function resolverExistente(caminho: string): Promise<string> {
     }
 }
 
-/** Valida os caminhos reais para impedir escapes por caminhos relativos, absolutos ou links simbólicos. */
+/** Resolve o caminho real aplicando o limite da pasta de trabalho somente sem acesso completo. */
 export async function resolverCaminho(caminho: string, projeto: string, acessoCompleto: boolean): Promise<string> {
     const raiz = await realpath(projeto);
     const absoluto = resolve(raiz, caminho);
@@ -139,7 +149,9 @@ export async function resolverCaminho(caminho: string, projeto: string, acessoCo
         !acessoCompleto &&
         (isAbsolute(caminhoRelativo) || caminhoRelativo === '..' || caminhoRelativo.startsWith(`..${sep}`))
     ) {
-        throw new Error('O caminho está fora do projeto. Ative acesso completo para acessar outras pastas.');
+        throw new Error(
+            'O caminho está fora da pasta de trabalho. Peça ao usuário para ativar acesso completo nesta conversa.',
+        );
     }
     return destino;
 }

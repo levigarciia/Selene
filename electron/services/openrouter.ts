@@ -2,7 +2,12 @@ import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { safeStorage } from 'electron';
 import { interpretarErroOpenRouter, solicitarOpenRouter } from './solicitacaoOpenRouter';
-import { esquemaModeloOpenRouter, type ModeloOpenRouter, type OrdenacaoOpenRouter } from '../../shared/openrouter';
+import {
+    esquemaModeloOpenRouter,
+    type ModeloOpenRouter,
+    type OrdenacaoOpenRouter,
+    type SaldoOpenRouter,
+} from '../../shared/openrouter';
 
 /** Mantém a credencial no processo principal e consulta o catálogo oficial para enviar solicitações. */
 export class OpenRouter {
@@ -55,6 +60,21 @@ export class OpenRouter {
         if (!modelos.length) throw new Error('O catálogo não retornou modelos de texto válidos.');
         this.catalogos.set(ordenacao, { modelos, consultadoEm: Date.now() });
         return modelos;
+    }
+
+    /** Consulta o saldo da conta com a chave configurada, sem expor a credencial ao renderer. */
+    async saldo(): Promise<SaldoOpenRouter> {
+        if (!this.chave) throw new Error('Configure a chave de API do OpenRouter nas configurações.');
+        const resposta = await fetch('https://openrouter.ai/api/v1/credits', {
+            headers: { Authorization: `Bearer ${this.chave}` },
+            signal: AbortSignal.timeout(15000),
+        });
+        if (!resposta.ok) throw new Error(`Não foi possível consultar o saldo: HTTP ${resposta.status}.`);
+        const bruto = (await resposta.json()) as { data?: { total_credits?: unknown; total_usage?: unknown } };
+        const creditos = Number(bruto.data?.total_credits);
+        const usado = Number(bruto.data?.total_usage);
+        if (!Number.isFinite(creditos) || !Number.isFinite(usado)) throw new Error('Saldo OpenRouter inválido.');
+        return { creditos, usado, restante: creditos - usado };
     }
 
     async completar(
