@@ -154,7 +154,7 @@ export const catalogoModelos: ModeloCatalogo[] = [
         capacidades: ['raciocinio', 'ferramentas', 'code'],
         projetorVisual: {
             arquivo: 'Ternary-Bonsai-27B-mmproj-BF16.gguf',
-            tamanho: 976961280,
+            tamanho: 931000000,
             sha256: 'acaf5b55d24ebd38c71fa220dc58c9a36776ec543b17728a4b322fc8d92f1de4',
         },
     },

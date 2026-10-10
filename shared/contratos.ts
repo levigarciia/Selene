@@ -24,13 +24,14 @@ export const esquemaPerfilModelo = esquemaConfiguracao
     })
     .strict();
 export type PerfilModelo = z.infer<typeof esquemaPerfilModelo>;
+export type ArquivoProjetor = { arquivo: string; tamanho: number; sha256: string };
 export const esquemaModelo = z.object({
-    id: z.string().uuid(),
+    id: z.string().min(1),
     nome: z.string().min(1),
     caminho: z.string().min(1),
     tamanho: z.number().nonnegative(),
     catalogoId: z.string().max(120).optional(),
-    projetorVisual: z.string().min(1).optional(),
+    projetorVisual: z.any().optional(),
     perfil: esquemaPerfilModelo.optional(),
 });
 export const esquemaAcao = z.object({

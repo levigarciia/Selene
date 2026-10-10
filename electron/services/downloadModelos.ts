@@ -13,7 +13,7 @@ function validarItem(item: ModeloCatalogo): void {
         !/^[a-z0-9.-]+$/.test(item.id) ||
         !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(item.repositorio) ||
         !/^[a-zA-Z0-9_.-]+\.gguf$/.test(item.arquivo) ||
-        !/^[a-f0-9]{40}$/.test(item.revisao) ||
+        !(item.revisao.match(/^[a-f0-9]{40}$/) || item.revisao.match(/^[a-zA-Z0-9_.-]+$/)) ||
         !/^[a-f0-9]{64}$/.test(item.sha256) ||
         !Number.isSafeInteger(item.tamanho) ||
         item.tamanho < 4
