@@ -20,6 +20,7 @@ import { ImagemConversa } from './ImagemConversa';
 import { TarefasConversa } from './TarefasConversa';
 import { SeletorProjeto } from './SeletorProjeto';
 import type { Conversa } from '../../shared/contratos';
+import { rolagemDiscreta } from './rolagemDiscreta';
 
 /** Coordena os dois modos do MVP e os controles da conversa selecionada. */
 export function TelaConversa({
@@ -192,6 +193,7 @@ export function TelaConversa({
             data-ui={`tela-conversa ${inicial ? 'tela-inicial' : ''}`}
             className={[
                 'flex flex-col flex-1 min-w-0 min-h-0',
+                rolagemDiscreta,
                 inicial
                     ? [
                           '[&&]:grid',
@@ -207,6 +209,7 @@ export function TelaConversa({
                     '[[data-ui~=tela-inicial]_&]:row-[3] [[data-ui~=tela-inicial]_&]:overflow-visible flex-1',
                     'min-h-0 overflow-y-auto px-[36px] py-0 [@media(width<=760px)]:px-[20px]',
                     '[@media(width<=760px)]:py-[0]',
+                    rolagemDiscreta,
                 ].join(' ')}
                 ref={rolagem}
                 onScroll={() => {

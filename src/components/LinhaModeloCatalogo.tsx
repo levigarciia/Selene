@@ -1,15 +1,10 @@
-import { BrainIcon, CheckIcon, CodeIcon, DownloadSimpleIcon, StarIcon, WrenchIcon, XIcon } from '@phosphor-icons/react';
+import { CheckIcon, DownloadSimpleIcon, StarIcon, XIcon } from '@phosphor-icons/react';
 import { formatarTamanho, type ModeloCatalogo } from '../../shared/catalogo';
 import type { DownloadModelo, Modelo } from '../../shared/contratos';
+import { CapacidadesModelo } from './CapacidadesModelo';
 import { IconeModelo } from './IconeModelo';
 import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
 import { estimarVelocidadeModelo } from '../../shared/velocidadeModelo';
-
-const capacidades = {
-    raciocinio: { nome: 'Raciocínio', Icone: BrainIcon },
-    ferramentas: { nome: 'Ferramentas', Icone: WrenchIcon },
-    code: { nome: 'Código', Icone: CodeIcon },
-};
 
 /** Permite acompanhar e controlar o download de um modelo do catálogo. */
 export function LinhaModeloCatalogo({
@@ -123,28 +118,7 @@ export function LinhaModeloCatalogo({
                 >
                     <StarIcon size={16} weight={favorito ? 'fill' : 'regular'} />
                 </button>
-                <div data-ui="capacidades-modelo" className="flex gap-[2px]">
-                    {item.capacidades.map((capacidade) => {
-                        const { nome, Icone } = capacidades[capacidade];
-                        return (
-                            <span
-                                data-ui={`capacidade capacidade-${capacidade}`}
-                                className={[
-                                    'grid place-items-center w-[23px] h-[23px] rounded-full bg-[#232631]',
-                                    capacidade === 'raciocinio'
-                                        ? ['[&&]:text-[#b6a3ea]', '[&&]:bg-[#27213c]'].join(' ')
-                                        : capacidade === 'ferramentas'
-                                          ? ['[&&]:text-[#92bbed]', '[&&]:bg-[#1f2b3b]'].join(' ')
-                                          : '[&&]:text-[#b6a3ea] [&&]:bg-[#29243a]',
-                                ].join(' ')}
-                                title={nome}
-                                key={capacidade}
-                            >
-                                <Icone size={14} aria-label={nome} />
-                            </span>
-                        );
-                    })}
-                </div>
+                <CapacidadesModelo itens={item.capacidades} />
                 {ativo ? (
                     <button
                         type="button"

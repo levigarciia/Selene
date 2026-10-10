@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { executarProcesso } from './processos';
 import type { Conversa } from '../../shared/contratos';
 import { esquemaPlano } from '../../shared/atividade';
+import { prepararPatch } from './patch';
 import {
     esquemaPesquisaWeb,
     esquemaLeituraWeb,
@@ -19,6 +20,7 @@ const esquemaListar = z.object({ caminho: texto.default('.') });
 const esquemaEscrever = z.object({ caminho: texto, conteudo: z.string().max(200000) });
 const esquemaEditar = z.object({ caminho: texto, anterior: texto, novo: z.string().max(200000) });
 const esquemaTerminal = z.object({ comando: texto, pasta: texto.default('.') });
+const esquemaPatch = z.object({ patch: z.string().min(1).max(200000) });
 
 function definir(nome: string, descricao: string, properties: object, required: string[]) {
     return {
@@ -32,6 +34,17 @@ function definir(nome: string, descricao: string, properties: object, required: 
 }
 
 export const ferramentas = [
+    definir(
+        'apply_patch',
+        'Edite arquivos com patch contextual. Requer aprovação. Envie patch entre *** Begin Patch e *** End Patch. ' +
+            'Use *** Add File: caminho com linhas +, *** Delete File: caminho, ou *** Update File: caminho. ' +
+            'Em Update, use @@ antes de cada trecho, espaço para contexto, menos para remover e + para adicionar. ' +
+            'Aceita @@ contexto, *** End of File e *** Move to: destino antes dos trechos. ' +
+            'Envie contexto exato e único, sem números de linha. Cada caminho pode aparecer uma vez. ' +
+            'Exemplo: *** Begin Patch\n*** Update File: arquivo.txt\n@@\n-antigo\n+novo\n*** End Patch',
+        { patch: { type: 'string' } },
+        ['patch'],
+    ),
     definir('listar_arquivos', 'Lista uma pasta do projeto.', { caminho: { type: 'string' } }, []),
     definir(
         'ler_arquivo',
@@ -192,6 +205,14 @@ export async function prepararFerramenta(
     const pasta = conversa.projeto ?? conversa.pastaTrabalho;
     if (!pasta) throw new Error('A pasta de trabalho da conversa ainda não foi preparada.');
     const caminhoValidado = (caminho: string) => resolverCaminho(caminho, pasta, conversa.acessoCompleto);
+    if (nome === 'apply_patch') {
+        const argumentos = esquemaPatch.parse(entrada);
+        return {
+            argumentos,
+            aprovacao: true,
+            ...(await prepararPatch(argumentos.patch, caminhoValidado)),
+        };
+    }
     if (nome === 'listar_arquivos') {
         const argumentos = esquemaListar.parse(entrada);
         return {

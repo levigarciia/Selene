@@ -369,7 +369,59 @@ texto depois delas, tanto no Chat quanto no Code. O resumo conta comandos, arqui
 pesquisas, páginas e outras ações. Cada sequência permanece na posição original entre os textos.
 Ações pendentes ou com falha continuam visíveis. Decisão de interface solicitada pelo usuário.
 
+Ao encerrar uma tarefa Code, comentários intermediários, raciocínio e ferramentas ficam recolhidos
+em uma linha com a duração total. A resposta final permanece visível. Expandir preserva a ordem do
+histórico, inclusive erros e recusas. Durante a execução, ações e aprovações continuam no fluxo.
+Atualizações de plano sem argumentos válidos não oferecem um painel vazio. Planos completos mostram
+etapas e estados legíveis. A duração usa os horários persistidos da mensagem, incluindo esperas.
+
+O Code oferece `apply_patch` como ferramenta nativa com argumento JSON `patch`, compatível com
+modelos locais que utilizam chamadas de função. Aceita criação, exclusão, atualização por trechos,
+contexto e renomeação no formato do Codex. Trechos precisam corresponder exatamente e ser únicos.
+Cada caminho aparece uma vez no lote. Preserva quebras de linha do arquivo atualizado e exige
+aprovação quando o acesso completo está desativado. Valida o lote antes de escrever e revalida
+conteúdo e caminhos após a aprovação. Em falhas de gravação ou cancelamento, tenta restaurar os
+arquivos já alterados. Isso não garante atomicidade contra encerramento abrupto ou falha de disco.
+O modelo recebe instrução para preferir patches e evitar substituições integrais desnecessárias.
+Referências públicas estudadas: `https://github.com/openai/codex/blob/main/codex-rs/apply-patch/src/parser.rs`,
+`https://github.com/openai/codex/blob/main/codex-rs/apply-patch/src/lib.rs` e
+`https://github.com/openai/codex/blob/main/codex-rs/core/src/tools/handlers/apply_patch.rs`.
+Implementação própria em TypeScript e decisão solicitada pelo usuário, sem ampliar a paridade
+com o Odysseus. Validada com arquivos reais e interface Electron; a preferência de um GGUF real
+pela nova ferramenta ainda não foi medida.
+
 No modo chat não existem ferramentas de computador. No modo code uma escrita ou comando deve aguardar
 aprovação; a recusa precisa voltar ao modelo. Cancelar interrompe a geração, aprovações pendentes e processos
 da tarefa. Fora do acesso completo, leituras e escritas ficam na pasta real do projeto, incluindo links simbólicos.
 O estado de conclusão só pode ser apresentado depois de persistir o resultado.
+
+Solicitações OpenRouter repetem até duas vezes falhas temporárias anteriores à resposta,
+respeitando `Retry-After` com espera máxima de 30 segundos por tentativa e cancelamento.
+Cotas diárias, chave inválida e créditos insuficientes recebem mensagens específicas sem novas tentativas.
+Erros recebidos durante o fluxo também são interpretados, sem repetir uma resposta parcial.
+Correção solicitada pelo usuário, sem ampliar a paridade com o Odysseus.
+
+A Selene também oferece OpenRouter como decisão explícita do usuário, sem ampliar a paridade
+com o Odysseus. A chave de API é salva criptografada pelo Windows, fora do histórico, e nunca
+é devolvida no estado da interface. Configurações, Geral permite salvar, substituir ou remover
+a chave. O seletor consulta o catálogo oficial de modelos de texto, com busca por nome ou
+identificador, ícones de provedores, capacidades, favoritos e indicação do modelo selecionado.
+Raciocínio, ferramentas e imagens aparecem com os mesmos indicadores do catálogo local.
+Os ícones adicionais são do LobeHub Icons, versão 1.95.1, com licença em `docs/licenses/LobeHub.txt`.
+
+A ordenação vem da própria API: mais populares, mais recentes, destaques da semana, menor
+ou maior preço, maior contexto, mais rápidos e menor latência. Preços do catálogo aparecem
+por milhão de tokens em dólares. As capacidades descrevem o modelo, sem substituir a ordenação.
+
+Solicitações remotas preservam Chat, Code, aprovações, cancelamento, anexos compatíveis e
+compactação. O botão de informações mostra o custo informado pela API para a resposta,
+incluindo suas chamadas de ferramentas e compactação. Estatísticas acumulam gastos feitos
+pela Selene, com filtros de período e detalhamento por modelo ou dia. Registros sobrevivem
+à edição e exclusão das conversas. Custos ausentes são indicados e não estimados, inclusive
+quando uma interrupção impede receber o evento de cobrança. O total não importa o histórico
+de gastos da conta OpenRouter em outros aplicativos.
+
+Referências: `https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties`
+e `https://openrouter.ai/docs/cookbook/administration/usage-accounting`.
+Catálogo e ordenação consultados ao vivo. Envio e cobrança validados no Electron com respostas
+simuladas, sem uma solicitação paga usando credenciais reais. Validação: `bun run test:openrouter`.

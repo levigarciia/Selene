@@ -16,6 +16,22 @@ export const esquemaPlano = z.object({
 type BlocoAtividade = { tipo: 'texto'; texto: string } | { tipo: 'acao'; acao: Acao };
 type BlocoApresentacao = BlocoAtividade | { tipo: 'grupo'; acoes: Acao[] };
 
+/** Use para separar a atividade encerrada da resposta final sem alterar o histórico. */
+export function obterResumoTrabalho(mensagem: Mensagem) {
+    if (mensagem.papel !== 'assistant' || mensagem.estado === 'gerando' || !mensagem.concluidoEm) return null;
+    if (!mensagem.acoes.length && !mensagem.raciocinio) return null;
+    const ultimaPosicao = Math.max(0, ...mensagem.acoes.map((acao) => acao.posicaoTexto ?? 0));
+    const corte = Math.min(mensagem.texto.length, Math.max(mensagem.inicioTextoFinal ?? ultimaPosicao, ultimaPosicao));
+    const tempo = Date.parse(mensagem.concluidoEm) - Date.parse(mensagem.criadoEm);
+    const segundos = Number.isFinite(tempo) ? Math.max(0, Math.round(tempo / 1000)) : 0;
+    const minutos = Math.floor(segundos / 60);
+    return {
+        atividade: montarAtividade(mensagem, corte),
+        textoFinal: mensagem.texto.slice(corte),
+        duracao: minutos ? `${minutos} min ${segundos % 60} s` : `${segundos} s`,
+    };
+}
+
 /** Recolhe sequências concluídas somente quando existe texto posterior, preservando ações pendentes. */
 export function agruparAtividade(mensagem: Mensagem): BlocoApresentacao[] {
     const blocos = montarAtividade(mensagem);

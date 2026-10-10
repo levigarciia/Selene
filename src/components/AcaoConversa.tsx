@@ -3,12 +3,14 @@ import { CaretRightIcon } from '@phosphor-icons/react';
 import { IconeAcao, escolherIconeAcao } from './IconeAcao';
 import type { Acao, PonteSelene } from '../../shared/contratos';
 import type { Executar } from './Configuracoes';
+import { esquemaPlano } from '../../shared/atividade';
 
 const nomes: Record<string, string> = {
     listar_arquivos: 'Explorando',
     ler_arquivo: 'Lendo',
     escrever_arquivo: 'Escrevendo',
     editar_arquivo: 'Editando',
+    apply_patch: 'Aplicando patch',
     executar_terminal: 'Executando',
     atualizar_plano: 'Atualizando tarefas',
     pesquisar_web: 'Pesquisando',
@@ -20,6 +22,7 @@ const nomesConcluidos: Record<string, string> = {
     ler_arquivo: 'Leu',
     escrever_arquivo: 'Escreveu',
     editar_arquivo: 'Editou',
+    apply_patch: 'Aplicou patch',
     executar_terminal: 'Executou',
     atualizar_plano: 'Atualizou tarefas',
     pesquisar_web: 'Pesquisou',
@@ -54,10 +57,30 @@ export function AcaoConversa({
         acao.argumentos.consulta ??
         acao.argumentos.url ??
         acao.argumentos.acao;
-    const escrita = ['escrever_arquivo', 'editar_arquivo'].includes(acao.nome);
-    const conteudo = acao.argumentos.conteudo ?? acao.argumentos.novo;
+    const escrita = ['escrever_arquivo', 'editar_arquivo', 'apply_patch'].includes(acao.nome);
+    const conteudo = acao.argumentos.conteudo ?? acao.argumentos.novo ?? acao.argumentos.patch;
     const previa = acao.previa || (escrita && typeof conteudo === 'string' ? conteudo : undefined);
     const mostrandoEscrita = escrita && acao.estado === 'preparando';
+    const plano = acao.nome === 'atualizar_plano' ? esquemaPlano.safeParse(acao.argumentos) : null;
+    const detalhesPlano = plano?.success
+        ? plano.data.etapas.map((etapa) => `${etapa.estado}: ${etapa.descricao}`).join('\n')
+        : undefined;
+    const temArgumentos = Object.keys(acao.argumentos).length > 0;
+    const temDetalhes = !!(previa || acao.resultado || detalhesPlano || (!plano && temArgumentos));
+    if (!temDetalhes) {
+        return (
+            <div
+                data-ui="acao"
+                data-estado={acao.estado}
+                className="flex items-center gap-[10px] my-[10px] text-[12px]"
+            >
+                <IconeAcao nome={escolherIconeAcao(acao)} className="size-[15px] text-secundario" />
+                <TextoAtividade ativo={emExecucao && ['preparando', 'executando'].includes(acao.estado)}>
+                    {(acao.estado === 'concluida' ? nomesConcluidos[acao.nome] : nomes[acao.nome]) ?? acao.nome}
+                </TextoAtividade>
+            </div>
+        );
+    }
     return (
         <div
             data-ui={`acao ${acao.estado === 'aguardando' ? 'acao-pendente' : ''}`}
@@ -158,10 +181,14 @@ export function AcaoConversa({
                         size={12}
                     />
                 </summary>
-                <pre data-ui="previa-acao">
-                    {previa ?? (mostrandoEscrita ? 'Preparando conteúdo…' : JSON.stringify(acao.argumentos, null, 4))}
-                </pre>
-                {acao.resultado && (
+                {(previa || detalhesPlano || temArgumentos) && (
+                    <pre data-ui="previa-acao">
+                        {detalhesPlano ??
+                            previa ??
+                            (mostrandoEscrita ? 'Preparando conteúdo…' : JSON.stringify(acao.argumentos, null, 4))}
+                    </pre>
+                )}
+                {acao.resultado && acao.resultado !== detalhesPlano && (
                     <pre
                         data-ui="resultado-acao"
                         className={[

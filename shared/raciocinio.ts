@@ -12,6 +12,7 @@ export const nomesRaciocinio: Record<NivelRaciocinio, string> = {
 /** Oferece níveis somente para famílias com template de raciocínio conhecido. */
 export function niveisRaciocinio(modelo?: Modelo): NivelRaciocinio[] {
     if (!modelo) return [];
+    if (modelo.openrouter) return modelo.openrouter.raciocinio ? ['desativado', 'baixo', 'medio', 'alto'] : [];
     const item = catalogoModelos.find((entrada) => encontrarModeloLocal(entrada, [modelo]));
     const nome = `${modelo.nome} ${modelo.caminho}`.toLowerCase();
     if (item?.familia === 'qwen' || (!item && /qwen3(?:[.\s_-]|$)/.test(nome))) {
@@ -37,6 +38,13 @@ export function parametrosRaciocinio(
     maxTokens: number,
 ) {
     const resolvido = resolverNivelRaciocinio(modelo, nivel);
+    if (modelo?.openrouter)
+        return {
+            reasoning:
+                resolvido === 'desativado'
+                    ? { enabled: false }
+                    : { effort: { baixo: 'low', medio: 'medium', alto: 'high' }[resolvido] },
+        };
     const proporcao = { desativado: 0, baixo: 0.25, medio: 0.5, alto: 0.75 }[resolvido];
     return {
         chat_template_kwargs: { enable_thinking: resolvido !== 'desativado' },

@@ -2,6 +2,7 @@
 import { ChatCircleIcon, CpuIcon, StackIcon } from '@phosphor-icons/react';
 import type { Configuracao, Estado, PonteSelene, Resultado } from '../../shared/contratos';
 import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
+import { ConfiguracaoOpenRouter } from './ConfiguracaoOpenRouter';
 import { CamposGeracao } from './CamposGeracao';
 import { ConfiguracaoMotor } from './ConfiguracaoMotor';
 import { ModelosConfiguracoes } from './ModelosConfiguracoes';
@@ -156,6 +157,12 @@ export function Configuracoes({
                         {secao === 'geral' ? (
                             <>
                                 <CamposGeracao {...campos} />
+                                <ConfiguracaoOpenRouter
+                                    configurado={!!estado.openrouterConfigurado}
+                                    ocupado={ocupado}
+                                    ponte={ponte}
+                                    executar={executar}
+                                />
                                 <AtualizacaoAplicativo estado={estado.atualizacao} ponte={ponte} executar={executar} />
                             </>
                         ) : (

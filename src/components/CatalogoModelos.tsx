@@ -12,7 +12,9 @@ import { catalogoModelos, encontrarModeloLocal, formatarTamanho, type FamiliaMod
 import type { Estado, PonteSelene } from '../../shared/contratos';
 import type { Executar } from './Configuracoes';
 import { LinhaModeloCatalogo } from './LinhaModeloCatalogo';
+import { CatalogoOpenRouter } from './CatalogoOpenRouter';
 import { IconeModelo } from './IconeModelo';
+import { IconeModeloRemoto } from './IconeModeloRemoto';
 import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
 import { configuracaoParaModelo } from '../../shared/configuracaoMotor';
 
@@ -45,8 +47,9 @@ export function CatalogoModelos({
     hardware?: HardwareLocal;
 }) {
     const idCatalogo = useId();
+    const [provedor, definirProvedor] = useState<'local' | 'openrouter'>('local');
     const [busca, definirBusca] = useState('');
-    const [filtro, definirFiltro] = useState<'todos' | 'favoritos' | FamiliaModelo>('todos');
+    const [filtro, definirFiltro] = useState<string>('todos');
     const [somenteLocais, definirSomenteLocais] = useState(false);
     const raiz = useRef<HTMLDivElement>(null);
     const campoBusca = useRef<HTMLInputElement>(null);
@@ -72,6 +75,7 @@ export function CatalogoModelos({
         );
     const importados = estado.modelos.filter(
         (modelo) =>
+            !modelo.openrouter &&
             !catalogoModelos.some((item) => encontrarModeloLocal(item, [modelo])) &&
             modelo.nome.toLocaleLowerCase('pt-BR').includes(termo),
     );
@@ -106,7 +110,7 @@ export function CatalogoModelos({
             data-ui={`seletor-catalogo ${embutido ? 'catalogo-embutido' : ''}`}
             className={[
                 [
-                    'relative min-w-0',
+                    'relative min-w-0 [anchor-scope:--gatilho-modelo]',
                     '[@media(width<=760px)]:[[data-ui~=barra-entrada]_&]:max-w-[calc(100%_-_88px)]',
                 ].join(' '),
                 embutido ? '' : '',
@@ -119,6 +123,7 @@ export function CatalogoModelos({
                     data-ui="gatilho-catalogo"
                     className={[
                         'flex items-center gap-[7px] max-w-[260px] rounded-[6px] bg-transparent text-secundario',
+                        '[anchor-name:--gatilho-modelo]',
                         'text-[12px] px-[2px] py-[7px] border-0 border-solid border-current',
                         '[&_>_span:not([data-ui~=icone-modelo]):not([data-ui~=indicador-download])]:overflow-hidden',
                         '[&_>_span:not([data-ui~=icone-modelo]):not([data-ui~=indicador-download])]:text-ellipsis',
@@ -133,7 +138,11 @@ export function CatalogoModelos({
                     aria-controls={idCatalogo}
                     onClick={() => definirAberto(!aberto)}
                 >
-                    <IconeModelo familia={familiaSelecionada} nome={selecionado?.nome} />
+                    {selecionado?.openrouter ? (
+                        <IconeModeloRemoto id={selecionado.openrouter.id} nome={selecionado.nome} />
+                    ) : (
+                        <IconeModelo familia={familiaSelecionada} nome={selecionado?.nome} />
+                    )}
                     <span>{selecionado?.nome ?? 'Selecionar modelo'}</span>
                     {baixando && (
                         <span
@@ -152,9 +161,11 @@ export function CatalogoModelos({
                         '[[data-ui~=catalogo-embutido]_&]:static [[data-ui~=catalogo-embutido]_&]:w-full',
                         '[[data-ui~=catalogo-embutido]_&]:h-auto [[data-ui~=catalogo-embutido]_&]:min-h-0',
                         '[[data-ui~=catalogo-embutido]_&]:shadow-[none]',
-                        '[[data-ui~=catalogo-embutido]_&]:rounded-[10px] absolute bottom-[calc(100%_+_16px)]',
-                        'left-0 w-[min(480px,_calc(100vw_-_48px))] h-[min(480px,_calc(100dvh_-_190px))]',
-                        'min-h-[270px] grid grid-cols-[55px_minmax(0,_1fr)] z-[20] bg-superficie rounded-[15px]',
+                        '[[data-ui~=catalogo-embutido]_&]:rounded-[10px] fixed [position-anchor:--gatilho-modelo]',
+                        'top-[max(68px,_calc(anchor(top)_-_496px))] bottom-[calc(anchor(top)_+_16px)]',
+                        'left-[clamp(12px,_anchor(left),_max(12px,_calc(100%_-_492px)))]',
+                        'w-[min(480px,_calc(100%_-_24px))] min-h-0',
+                        'grid grid-cols-[55px_minmax(0,_1fr)] z-[20] bg-superficie rounded-[15px]',
                         'shadow-[0_18px_60px_#0007] overflow-hidden border border-solid border-[#2d3036]',
                         '[[data-ui~=catalogo-embutido]_&]:border-0 [[data-ui~=catalogo-embutido]_&]:rounded-none',
                     ].join(' ')}
@@ -165,10 +176,12 @@ export function CatalogoModelos({
                     <nav
                         data-ui="familias-catalogo"
                         className={[
-                            'flex items-center flex-col gap-[6px] border-r border-solid',
+                            'flex items-center flex-col gap-[6px] border-r border-solid overflow-y-auto min-h-0',
+                            'overflow-x-hidden [scrollbar-width:none]',
                             'border-r-borda bg-[#101114] px-[7px] py-[14px] [&_button]:grid',
                             '[&_button]:place-items-center [&_button]:w-[36px] [&_button]:h-[36px]',
-                            '[&_button]:rounded-[9px] [&_button]:bg-transparent [&_button]:text-[#9298a3]',
+                            '[&_button]:shrink-0 [&_button]:rounded-[9px]',
+                            '[&_button]:bg-transparent [&_button]:text-[#9298a3]',
                             '[&_button]:border-0 [&_button]:border-solid [&_button]:border-current',
                             '[&_button:hover]:bg-[#282b31] [&_button:hover]:text-[#eef0f3]',
                             [
@@ -197,6 +210,27 @@ export function CatalogoModelos({
                             <StarIcon size={20} />
                         </button>
                         <span data-ui="divisor-catalogo" className="w-[26px] h-[1px] bg-[#2b2e35] mx-0 my-[5px]" />
+                        {provedor === 'openrouter' &&
+                            [
+                                ['openai', 'OpenAI'],
+                                ['anthropic', 'Anthropic'],
+                                ['google', 'Google'],
+                                ['mistralai', 'Mistral'],
+                                ['x-ai', 'xAI'],
+                                ['moonshotai', 'Moonshot'],
+                                ['z-ai', 'Z.ai'],
+                            ].map(([id, nome]) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    aria-label={`Provedor ${nome}`}
+                                    title={nome}
+                                    aria-pressed={filtro === id}
+                                    onClick={() => definirFiltro(id)}
+                                >
+                                    <IconeModeloRemoto id={`${id}/`} nome={nome} tamanho={21} />
+                                </button>
+                            ))}
                         {familias.map((familia) => (
                             <button
                                 type="button"
@@ -211,10 +245,34 @@ export function CatalogoModelos({
                         ))}
                     </nav>
                     <div data-ui="conteudo-catalogo" className="flex flex-col min-w-0 min-h-0">
+                        <div className="flex gap-2 border-b border-borda px-3 py-2 text-xs">
+                            <button
+                                type="button"
+                                aria-pressed={provedor === 'local'}
+                                className="rounded px-2 py-1 aria-pressed:bg-hover"
+                                onClick={() => {
+                                    definirProvedor('local');
+                                    definirFiltro('todos');
+                                }}
+                            >
+                                Local
+                            </button>
+                            <button
+                                type="button"
+                                aria-pressed={provedor === 'openrouter'}
+                                className="rounded px-2 py-1 aria-pressed:bg-hover"
+                                onClick={() => {
+                                    definirProvedor('openrouter');
+                                    definirFiltro('todos');
+                                }}
+                            >
+                                OpenRouter
+                            </button>
+                        </div>
                         <div
                             data-ui="busca-catalogo"
                             className={[
-                                'flex items-center gap-[9px] border-b border-solid border-b-borda',
+                                'flex shrink-0 items-center gap-[9px] border-b border-solid border-b-borda',
                                 'text-[#9aa2af] px-[12px] py-[11px] [&_input]:w-full [&_input]:min-w-0',
                                 [
                                     '[&_input]:bg-transparent [&_input]:text-principal',
@@ -268,84 +326,108 @@ export function CatalogoModelos({
                                 'px-0 py-[8px]',
                             ].join(' ')}
                         >
-                            {itens.map((item) => {
-                                const local = encontrarModeloLocal(item, estado.modelos);
-                                const configuracao = configuracaoParaModelo(estado.configuracao, local);
-                                return (
-                                    <LinhaModeloCatalogo
-                                        key={item.id}
-                                        item={item}
-                                        hardware={hardware}
-                                        contexto={configuracao.limitesAutomaticos ? 2048 : configuracao.contexto}
-                                        somenteCpu={configuracao.backend === 'cpu'}
-                                        camadasGpu={
-                                            configuracao.limitesAutomaticos ? undefined : configuracao.camadasGpu
-                                        }
-                                        local={local}
-                                        download={estado.downloads.find((download) => download.catalogoId === item.id)}
-                                        selecionado={local?.id === modeloId}
-                                        favorito={estado.favoritosCatalogo.includes(item.id)}
-                                        ocupado={ocupado}
-                                        baixando={baixando}
-                                        selecionar={usar}
-                                        favoritar={() =>
-                                            void executar(() =>
-                                                ponte!.favoritarModelo(
-                                                    item.id,
-                                                    !estado.favoritosCatalogo.includes(item.id),
-                                                ),
-                                            )
-                                        }
-                                        baixar={() => void executar(() => ponte!.baixarModelo(item.id))}
-                                        cancelar={() => void executar(() => ponte!.cancelarDownload(item.id))}
-                                    />
-                                );
-                            })}
-                            {filtro === 'todos' &&
-                                importados.map((modelo) => (
-                                    <button
-                                        type="button"
-                                        data-ui="modelo-importado"
-                                        className={[
-                                            [
-                                                'flex items-center justify-between w-full bg-transparent',
-                                                'text-[#d6dae2] text-left text-[12px]',
-                                            ].join(' '),
-                                            'gap-[9px] px-[16px] py-[13px] border-0 border-solid border-current',
-                                            '[&:hover]:bg-[#20232a] [&_>_span:not([data-ui~=icone-modelo])]:min-w-0',
-                                            [
-                                                '[&_>_span:not([data-ui~=icone-modelo])]:flex-1',
-                                                '[&_strong]:block [&_strong]:overflow-hidden',
-                                            ].join(' '),
-                                            [
-                                                '[&_strong]:text-ellipsis [&_strong]:whitespace-nowrap',
-                                                '[&_strong]:font-medium [&_small]:block',
-                                            ].join(' '),
-                                            '[&_small]:mt-[5px] [&_small]:text-secundario',
-                                        ].join(' ')}
-                                        key={modelo.id}
-                                        disabled={ocupado}
-                                        aria-label={`Selecionar ${modelo.nome}`}
-                                        onClick={() => void usar(modelo.id)}
-                                    >
-                                        <IconeModelo nome={modelo.nome} />
-                                        <span>
-                                            <strong>{modelo.nome}</strong>
-                                            <small>{formatarTamanho(modelo.tamanho)}</small>
-                                        </span>
-                                        {modelo.id === modeloId && <CheckIcon size={17} />}
-                                    </button>
-                                ))}
-                            {!itens.length && !(filtro === 'todos' && importados.length) && (
-                                <p data-ui="catalogo-vazio" className="text-[12px] text-secundario px-[14px] py-[25px]">
-                                    Nenhum modelo encontrado
-                                </p>
+                            {provedor === 'openrouter' ? (
+                                <CatalogoOpenRouter
+                                    estado={estado}
+                                    ponte={ponte}
+                                    executar={executar}
+                                    selecionar={usar}
+                                    busca={busca}
+                                    filtro={filtro}
+                                    modeloId={modeloId}
+                                    somenteDisponiveis={somenteLocais}
+                                />
+                            ) : (
+                                <>
+                                    {itens.map((item) => {
+                                        const local = encontrarModeloLocal(item, estado.modelos);
+                                        const configuracao = configuracaoParaModelo(estado.configuracao, local);
+                                        return (
+                                            <LinhaModeloCatalogo
+                                                key={item.id}
+                                                item={item}
+                                                hardware={hardware}
+                                                contexto={
+                                                    configuracao.limitesAutomaticos ? 2048 : configuracao.contexto
+                                                }
+                                                somenteCpu={configuracao.backend === 'cpu'}
+                                                camadasGpu={
+                                                    configuracao.limitesAutomaticos
+                                                        ? undefined
+                                                        : configuracao.camadasGpu
+                                                }
+                                                local={local}
+                                                download={estado.downloads.find(
+                                                    (download) => download.catalogoId === item.id,
+                                                )}
+                                                selecionado={local?.id === modeloId}
+                                                favorito={estado.favoritosCatalogo.includes(item.id)}
+                                                ocupado={ocupado}
+                                                baixando={baixando}
+                                                selecionar={usar}
+                                                favoritar={() =>
+                                                    void executar(() =>
+                                                        ponte!.favoritarModelo(
+                                                            item.id,
+                                                            !estado.favoritosCatalogo.includes(item.id),
+                                                        ),
+                                                    )
+                                                }
+                                                baixar={() => void executar(() => ponte!.baixarModelo(item.id))}
+                                                cancelar={() => void executar(() => ponte!.cancelarDownload(item.id))}
+                                            />
+                                        );
+                                    })}
+                                    {filtro === 'todos' &&
+                                        importados.map((modelo) => (
+                                            <button
+                                                type="button"
+                                                data-ui="modelo-importado"
+                                                className={[
+                                                    [
+                                                        'flex items-center justify-between w-full bg-transparent',
+                                                        'text-[#d6dae2] text-left text-[12px]',
+                                                    ].join(' '),
+                                                    'gap-[9px] px-[16px] py-[13px] border-0 border-solid border-current',
+                                                    '[&:hover]:bg-[#20232a] [&_>_span:not([data-ui~=icone-modelo])]:min-w-0',
+                                                    [
+                                                        '[&_>_span:not([data-ui~=icone-modelo])]:flex-1',
+                                                        '[&_strong]:block [&_strong]:overflow-hidden',
+                                                    ].join(' '),
+                                                    [
+                                                        '[&_strong]:text-ellipsis [&_strong]:whitespace-nowrap',
+                                                        '[&_strong]:font-medium [&_small]:block',
+                                                    ].join(' '),
+                                                    '[&_small]:mt-[5px] [&_small]:text-secundario',
+                                                ].join(' ')}
+                                                key={modelo.id}
+                                                disabled={ocupado}
+                                                aria-label={`Selecionar ${modelo.nome}`}
+                                                onClick={() => void usar(modelo.id)}
+                                            >
+                                                <IconeModelo nome={modelo.nome} />
+                                                <span>
+                                                    <strong>{modelo.nome}</strong>
+                                                    <small>{formatarTamanho(modelo.tamanho)}</small>
+                                                </span>
+                                                {modelo.id === modeloId && <CheckIcon size={17} />}
+                                            </button>
+                                        ))}
+                                    {!itens.length && !(filtro === 'todos' && importados.length) && (
+                                        <p
+                                            data-ui="catalogo-vazio"
+                                            className="text-[12px] text-secundario px-[14px] py-[25px]"
+                                        >
+                                            Nenhum modelo encontrado
+                                        </p>
+                                    )}
+                                </>
                             )}
                         </div>
                         <footer
                             data-ui="rodape-catalogo"
                             className={[
-                                'flex items-center justify-between border-t border-solid border-t-borda',
+                                'flex shrink-0 items-center justify-between border-t border-solid border-t-borda',
                                 [
                                     'text-[10px] text-[#929aa6] px-[14px] py-[12px] [&_button]:flex',
                                     '[&_button]:items-center',
@@ -355,7 +437,7 @@ export function CatalogoModelos({
                                 '[&_button]:border-[currentColor]',
                             ].join(' ')}
                         >
-                            {!embutido && (
+                            {!embutido && provedor === 'local' && (
                                 <button type="button" onClick={() => executar(() => ponte!.importarModelo())}>
                                     <PlusIcon size={14} /> Importar arquivo
                                 </button>

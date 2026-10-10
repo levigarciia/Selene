@@ -418,3 +418,23 @@ Fontes primárias, compatíveis com o runtime b10327 instalado:
 [Documentação do servidor](https://github.com/ggml-org/llama.cpp/blob/b10327/tools/server/README.md).
 Validação: parser, precedência, cache maior que entrada, múltiplas chamadas e totais com histórico sem cache
 são cobertos pelos testes. A interface usa medições de exemplo. O ganho de velocidade do GGUF real não foi medido.
+
+## Revisão para publicação em 10 de outubro de 2026
+
+Tipos, 148 testes automatizados e build aprovados. A instalação de dependências com lockfile congelado
+não modificou o cadastro de pacotes. Os testes que impediam as duas publicações anteriores foram corrigidos
+para preservar as instruções do sistema e aceitar o contexto temporal acrescentado pelo agente.
+
+OpenRouter foi validado no Electron com API simulada: chave criptografada, catálogo, ordenação oficial,
+ícones, capacidades, favoritos, busca, seleção, raciocínio, envio e custo informado. Também foram verificados
+o custo após excluir a conversa, a preservação da chave e dos favoritos no reinício e a remoção da credencial.
+Catálogo e ordenação foram consultados ao vivo. Nenhum envio pago com chave real foi feito nesta validação.
+
+Estatísticas, resumo de trabalho, seletor de modelos em Chat e Code, redimensionamento e ícones de ações
+passaram nos scripts Electron. O patch nativo foi validado com arquivos reais, aprovação, recusa,
+cancelamento, limites de pasta e rejeição de caminhos repetidos por diferenças de maiúsculas no Windows.
+
+`bun audit` aponta um alerta moderado em `sprintf-js` 1.1.3, transitivo de `electron` e `electron-builder`
+por `@electron/get`, `global-agent` e `roarr`. Não há versão corrigida publicada. O alerta foi preservado,
+sem excluir dependências da auditoria ou aplicar uma atualização incompatível nas ferramentas de distribuição.
+Referência: [aviso de segurança](https://github.com/advisories/GHSA-hp3w-g68c-fv3c).

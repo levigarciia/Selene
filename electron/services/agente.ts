@@ -53,7 +53,10 @@ export class Agente {
         if (preparada) imagens = preparada.mensagens.at(-1)?.imagens ?? [];
         if (!texto.trim() && !imagens.length) throw new Error('Escreva uma mensagem ou anexe uma imagem.');
         const controle = new AbortController();
-        const ferramentas = obterFerramentas(conversa.modo, !!this.dependencias.web);
+        const ferramentas =
+            modelo?.openrouter && !modelo.openrouter.ferramentas
+                ? []
+                : obterFerramentas(conversa.modo, !!this.dependencias.web);
         this.controle = controle;
         this.conversaId = conversa.id;
         const resposta: Mensagem = {
@@ -64,6 +67,8 @@ export class Agente {
             acoes: [],
             criadoEm: new Date().toISOString(),
             inicioTextoFinal: 0,
+            ...(modelo ? { modeloUsoId: modelo.id } : {}),
+            ...(modelo?.openrouter ? { provedor: 'openrouter' as const } : {}),
             ...(preparacao?.ligandoModelo ? { faseGeracao: 'ligandoModelo' as const } : {}),
         };
         if (preparada) {
@@ -143,7 +148,7 @@ export class Agente {
                     ferramentas.length ? ferramentas : undefined,
                 );
                 atualizarData();
-                const maxTokens = configuracao.limitesAutomaticos
+                const maxTokensDisponiveis = configuracao.limitesAutomaticos
                     ? Math.max(
                           64,
                           configuracao.contexto -
@@ -151,6 +156,9 @@ export class Agente {
                               256,
                       )
                     : configuracao.maxTokens;
+                const maxTokens = modelo?.openrouter
+                    ? Math.min(maxTokensDisponiveis, modelo.openrouter.maxTokens ?? 32768)
+                    : maxTokensDisponiveis;
                 const resultado = await receberResposta(
                     await this.dependencias.completar(
                         {
@@ -334,6 +342,10 @@ export class Agente {
         if (conversa.modo === 'code') {
             sistema.push(
                 'Você é um agente de programação. Use ferramentas para inspecionar e alterar o projeto.',
+                'Prefira apply_patch para editar arquivos existentes com alterações pequenas e contexto exato. ' +
+                    'editar_arquivo também permite substituir um trecho único. Use escrever_arquivo para criar arquivos ' +
+                    'ou quando a tarefa exigir uma substituição integral. Não reescreva um arquivo inteiro ' +
+                    'para alterar poucas linhas e não use o terminal para contornar a ferramenta de edição.',
                 'Planeje tarefas complexas, valide os resultados e relate apenas ações realmente concluídas.',
                 'Para trabalhos com várias etapas, use atualizar_plano para registrar objetivos curtos e claros. ' +
                     'Atualize o plano ao iniciar ou concluir cada objetivo, enviando todas as etapas. ' +

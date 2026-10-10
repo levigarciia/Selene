@@ -29,6 +29,16 @@ export const esquemaModelo = z.object({
     id: z.string().min(1),
     nome: z.string().min(1),
     caminho: z.string().min(1),
+    openrouter: z
+        .object({
+            id: z.string().min(1).max(200),
+            contexto: z.number().int().positive(),
+            maxTokens: z.number().int().positive().optional(),
+            imagens: z.boolean(),
+            ferramentas: z.boolean(),
+            raciocinio: z.boolean(),
+        })
+        .optional(),
     tamanho: z.number().nonnegative(),
     catalogoId: z.string().max(120).optional(),
     projetorVisual: z.any().optional(),
@@ -53,6 +63,8 @@ export const esquemaDesempenho = z.object({
 });
 export type Desempenho = z.infer<typeof esquemaDesempenho>;
 export const esquemaRegistroUso = esquemaDesempenho.extend({
+    custoUsd: z.number().nonnegative().optional(),
+    provedor: z.literal('openrouter').optional(),
     mensagemId: z.string().uuid(),
     conversaId: z.string().uuid(),
     modo: z.enum(['chat', 'code']),
@@ -99,6 +111,9 @@ export const esquemaMensagem = z.object({
     inicioTextoFinal: z.number().int().nonnegative().optional(),
     concluidoEm: z.string().optional(),
     desempenho: esquemaDesempenho.optional(),
+    custoUsd: z.number().nonnegative().optional(),
+    provedor: z.literal('openrouter').optional(),
+    modeloUsoId: z.string().uuid().optional(),
     imagens: z.array(esquemaImagem).max(4).optional(),
     faseContexto: z.literal('compactando').optional(),
     compactacoes: z.array(esquemaCompactacao).optional(),
@@ -166,7 +181,7 @@ export const esquemaDados = z.object({
     conversas: z.array(esquemaConversa),
     projetos: z.array(esquemaProjeto).default([]),
     projetosChat: z.array(esquemaProjetoChat).default([]),
-    favoritosCatalogo: z.array(z.string().min(1).max(120)).default([]),
+    favoritosCatalogo: z.array(z.string().min(1).max(240)).default([]),
     registrosUso: z.array(esquemaRegistroUso).default([]),
 });
 export type Modelo = z.infer<typeof esquemaModelo>;
@@ -195,6 +210,7 @@ export type DownloadModelo = {
     erro?: string;
 };
 export type Estado = Dados & {
+    openrouterConfigurado?: boolean;
     atualizacao?: EstadoAtualizacao;
     motor: EstadoMotor;
     conversaEmExecucao: string | null;
@@ -222,6 +238,12 @@ export const esquemaAlteracao = z
     .partial();
 
 export interface PonteSelene {
+    configurarOpenRouter(chave: string): Promise<Resultado<void>>;
+    catalogoOpenRouter(
+        atualizar?: boolean,
+        ordenacao?: import('./openrouter').OrdenacaoOpenRouter,
+    ): Promise<Resultado<import('./openrouter').ModeloOpenRouter[]>>;
+    cadastrarModeloOpenRouter(id: string): Promise<Resultado<Modelo>>;
     previasNavegador(): Promise<Resultado<import('./web').PreviaNavegador[]>>;
     atualizarNavegador(conversaId: string): Promise<Resultado<import('./web').PreviaNavegador>>;
     consultarHardware(): Promise<Resultado<import('./compatibilidadeModelo').HardwareLocal>>;

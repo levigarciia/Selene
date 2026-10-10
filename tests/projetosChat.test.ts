@@ -15,7 +15,7 @@ const conversa = (modo: 'chat' | 'code' = 'chat'): Conversa =>
         modo,
         atualizadoEm: new Date().toISOString(),
     });
-const dadosNovos = () => esquemaDados.parse({ versao: 1, configuracao: {}, conversas: [], modelos: [] });
+const dadosNovos = () => esquemaDados.parse({ versao: 1, configuracao: { contexto: 32768 }, conversas: [], modelos: [] });
 
 test('cadastros antigos abrem sem projetos de Chat e projetos novos não criam pastas Code', async () => {
     const dados = dadosNovos();
@@ -124,7 +124,20 @@ test('o modelo recebe instruções e referências isoladas do projeto, sem ferra
     );
     const projeto = await gerenciador.criar('Estudos');
     await gerenciador.editar(projeto.id, { nome: projeto.nome, instrucao: 'Seja meu tutor.', memoria: true });
-    const atual = { ...conversa(), projetoChatId: projeto.id };
+    const atual = {
+        ...conversa(),
+        projetoChatId: projeto.id,
+        mensagens: [
+            {
+                id: randomUUID(),
+                papel: 'user' as const,
+                texto: 'Início da conversa',
+                estado: 'concluida' as const,
+                criadoEm: new Date().toISOString(),
+                acoes: [],
+            },
+        ],
+    };
     dados.projetosChat[0].arquivos = [{ id: randomUUID(), nome: 'referencia.txt', texto: 'Referência compartilhada' }];
     const outra = {
         ...conversa(),
@@ -152,7 +165,7 @@ test('o modelo recebe instruções e referências isoladas do projeto, sem ferra
         contextoProjetoChat: (chat) => contextoProjetoChat(dados, chat),
         completar: async (corpo) => {
             const pedido = corpo as { messages: { role: string; content: string }[]; tools?: unknown };
-            expect(pedido.messages[0].content).toBe('Seja meu tutor.');
+            expect(pedido.messages[0].content).toStartWith('Seja meu tutor.');
             expect(JSON.stringify(pedido)).toContain('Tema compartilhado');
             expect(JSON.stringify(pedido)).toContain('Referência compartilhada');
             expect(JSON.stringify(pedido)).not.toContain('Dado de outro projeto');

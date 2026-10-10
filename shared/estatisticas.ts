@@ -20,15 +20,24 @@ export function reunirRegistrosUso(dados: Pick<Dados, 'conversas' | 'registrosUs
     const registros = new Map(dados.registrosUso.map((registro) => [registro.mensagemId, registro]));
     for (const conversa of dados.conversas) {
         for (const mensagem of conversa.mensagens) {
-            if (mensagem.papel !== 'assistant' || !mensagem.desempenho) continue;
+            if (
+                mensagem.papel !== 'assistant' ||
+                (!mensagem.desempenho && mensagem.custoUsd === undefined && !mensagem.provedor)
+            )
+                continue;
             const data = Date.parse(mensagem.criadoEm);
             if (!Number.isFinite(data)) continue;
             registros.set(mensagem.id, {
+                tokensGerados: 0,
+                tempoGeracaoMs: 0,
+                tokensPorSegundo: 0,
                 ...mensagem.desempenho,
+                custoUsd: mensagem.custoUsd,
+                provedor: mensagem.provedor,
                 mensagemId: mensagem.id,
                 conversaId: conversa.id,
                 modo: conversa.modo,
-                modeloId: conversa.modeloId,
+                modeloId: mensagem.modeloUsoId ?? conversa.modeloId,
                 criadoEm: new Date(data).toISOString(),
             });
         }
@@ -61,6 +70,9 @@ export function calcularEstatisticas(registros: RegistroUso[], periodo: PeriodoE
     const tokensMedidos = medidos.reduce((total, item) => total + item.tokensGerados, 0);
     const ultima = [...atuais].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))[0];
     return {
+        custoUsd: atuais.reduce((total, item) => total + (item.custoUsd ?? 0), 0),
+        custosMedidos: atuais.filter((item) => item.custoUsd !== undefined).length,
+        custosPendentes: atuais.filter((item) => item.provedor === 'openrouter' && item.custoUsd === undefined).length,
         tokensGerados,
         tokensEntrada,
         tokensEntradaCache,

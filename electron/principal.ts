@@ -23,6 +23,8 @@ import {
 import { Persistencia } from './services/persistencia';
 import { MotorLocal } from './services/motor';
 import { Agente } from './services/agente';
+import { OpenRouter } from './services/openrouter';
+import { esquemaOrdenacaoOpenRouter } from '../shared/openrouter';
 import { Navegador } from './services/navegador';
 import { obterPedidoParaRegerarChat, prepararReenvioChat } from './services/reenvioChat';
 import { catalogoModelos, encontrarModeloLocal, type ModeloCatalogo } from '../shared/catalogo';
@@ -44,6 +46,7 @@ let janela: BrowserWindow | null = null;
 let persistencia: Persistencia;
 let motor: MotorLocal;
 let agente: Agente;
+let openrouter: OpenRouter;
 let navegador: Navegador;
 let downloads: DownloadsModelos;
 let anexos: AnexosImagens;
@@ -61,6 +64,7 @@ function estado(): Estado {
     return structuredClone({
         ...persistencia.dados,
         motor: motor.estado,
+        openrouterConfigurado: openrouter?.configurado ?? false,
         conversaEmExecucao: agente?.conversaId ?? null,
         downloads: downloads?.estadosAtuais ?? [],
         atualizacao: atualizacoes?.estado,
@@ -169,6 +173,7 @@ async function registrarDownload(item: ModeloCatalogo, caminho: string): Promise
 async function carregarModelo(id: string): Promise<void> {
     const modelo = persistencia.dados.modelos.find((item) => item.id === id);
     if (!modelo) throw new Error('Modelo não encontrado.');
+    if (modelo.openrouter) throw new Error('Selecione o modelo OpenRouter na conversa para enviar mensagens.');
     const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
     await motor.carregar(modelo, configuracao);
 }
@@ -202,6 +207,46 @@ function registrarOperacoes(): void {
     });
     const vazio = z.tuple([]);
     registrar('estado', vazio, estado);
+    registrar(
+        'configurarOpenRouter',
+        z.tuple([
+            z
+                .string()
+                .trim()
+                .max(500)
+                .refine((chave) => !/[\r\n]/.test(chave), 'Chave inválida.'),
+        ]),
+        async ([chave]) => {
+            exigirLivre();
+            await openrouter.configurar(chave);
+            publicarEstado();
+        },
+    );
+    registrar('catalogoOpenRouter', z.tuple([z.boolean(), esquemaOrdenacaoOpenRouter]), ([atualizar, ordenacao]) =>
+        openrouter.modelos(atualizar, ordenacao),
+    );
+    registrar('cadastrarModeloOpenRouter', z.tuple([z.string().min(1).max(200)]), async ([id]) => {
+        const item = (await openrouter.modelos()).find((modelo) => modelo.id === id);
+        if (!item) throw new Error('Modelo ausente no catálogo OpenRouter.');
+        let modelo = persistencia.dados.modelos.find((modelo) => modelo.openrouter?.id === id);
+        const remoto = {
+            id: item.id,
+            contexto: item.context_length,
+            maxTokens: item.top_provider?.max_completion_tokens ?? undefined,
+            imagens: item.architecture.input_modalities.includes('image'),
+            ferramentas: item.supported_parameters.includes('tools'),
+            raciocinio: item.supported_parameters.includes('reasoning'),
+        };
+        if (modelo) {
+            modelo.nome = item.name;
+            modelo.openrouter = remoto;
+        } else {
+            modelo = { id: randomUUID(), nome: item.name, caminho: item.id, tamanho: 0, openrouter: remoto };
+            persistencia.dados.modelos.push(modelo);
+        }
+        await salvar();
+        return modelo;
+    });
     registrar('consultarHardware', vazio, () =>
         consultarHardware(join(app.getPath('userData'), 'runtime'), persistencia.dados.configuracao.backend),
     );
@@ -486,8 +531,11 @@ function registrarOperacoes(): void {
         itemCatalogo(id);
         downloads.cancelar(id);
     });
-    registrar('favoritarModelo', z.tuple([z.string().min(1).max(120), z.boolean()]), async ([id, favorito]) => {
-        itemCatalogo(id);
+    registrar('favoritarModelo', z.tuple([z.string().min(1).max(240), z.boolean()]), async ([id, favorito]) => {
+        if (id.startsWith('openrouter:')) {
+            if (favorito && !(await openrouter.modelos()).some((modelo) => `openrouter:${modelo.id}` === id))
+                throw new Error('Modelo ausente no catálogo OpenRouter.');
+        } else itemCatalogo(id);
         const favoritos = persistencia.dados.favoritosCatalogo.filter((atual) => atual !== id);
         persistencia.dados.favoritosCatalogo = favorito ? [...favoritos, id] : favoritos;
         await salvar();
@@ -528,7 +576,7 @@ function registrarOperacoes(): void {
         const preparada = mensagemId ? prepararReenvioChat(conversa, mensagemId, texto) : conversa;
         const imagens = mensagemId ? (preparada.mensagens.at(-1)?.imagens ?? []) : anexos.obter(ids);
         if (!texto && !imagens.length) throw new Error('Escreva uma mensagem ou anexe uma imagem.');
-        if (!conversa.modeloId) throw new Error('Selecione um modelo GGUF.');
+        if (!conversa.modeloId) throw new Error('Selecione um modelo.');
         if (conversa.modo === 'code' && !conversa.projeto) {
             await prepararPastaTrabalho(conversa, app.getPath('userData'));
             await salvar();
@@ -537,9 +585,10 @@ function registrarOperacoes(): void {
         if (!modelo) throw new Error('Modelo não encontrado.');
         const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
         const precisaLigar =
-            motor.estado.fase !== 'pronto' ||
-            motor.estado.modeloId !== modelo.id ||
-            motor.precisaRecarregar(configuracao, modelo);
+            !modelo.openrouter &&
+            (motor.estado.fase !== 'pronto' ||
+                motor.estado.modeloId !== modelo.id ||
+                motor.precisaRecarregar(configuracao, modelo));
         const indiceResumo = preparada.contextoCompactado
             ? preparada.mensagens.findIndex((mensagem) => mensagem.id === preparada.contextoCompactado!.ateMensagemId)
             : -1;
@@ -550,6 +599,16 @@ function registrarOperacoes(): void {
                 ligandoModelo: precisaLigar,
                 executar: async (sinal) => {
                     sinal.throwIfAborted();
+                    if (modelo.openrouter) {
+                        if (!openrouter.configurado) throw new Error('Configure a chave de API do OpenRouter.');
+                        if (possuiImagens && !modelo.openrouter.imagens)
+                            throw new Error('Este modelo OpenRouter não aceita imagens.');
+                        return {
+                            ...configuracao,
+                            contexto: modelo.openrouter.contexto,
+                            maxTokens: Math.min(configuracao.maxTokens, modelo.openrouter.maxTokens ?? 32768),
+                        };
+                    }
                     if (precisaLigar) await carregarModelo(modelo.id);
                     sinal.throwIfAborted();
                     if (possuiImagens && !motor.estado.suportaImagens) {
@@ -679,10 +738,23 @@ app.whenReady()
         downloads = new DownloadsModelos(join(app.getPath('userData'), 'models'), publicarEstado, registrarDownload);
         await downloads.preparar(catalogoModelos);
         navegador = new Navegador((previa) => publicar({ tipo: 'navegador', previa }));
+        openrouter = new OpenRouter(app.getPath('userData'));
+        await openrouter.abrir();
         agente = new Agente({
             web: navegador,
             contextoProjetoChat: (conversa) => contextoProjetoChat(persistencia.dados, conversa),
-            completar: (corpo, sinal) => motor.completar(corpo, sinal),
+            completar: (corpo, sinal) => {
+                const conversa = agente.conversaId ? conversaPorId(agente.conversaId) : undefined;
+                const modelo = persistencia.dados.modelos.find((item) => item.id === conversa?.modeloId);
+                if (!modelo?.openrouter) return motor.completar(corpo, sinal);
+                const mensagem = conversa!.mensagens.at(-1)!;
+                return openrouter.completar(modelo.openrouter.id, corpo, sinal, async (custo) => {
+                    mensagem.custoUsd = (mensagem.custoUsd ?? 0) + custo;
+                    mensagem.provedor = 'openrouter';
+                    mensagem.modeloUsoId = modelo.id;
+                    await salvar();
+                });
+            },
             lerImagem: (id) => anexos.ler(id),
             salvar,
             publicar: (mensagem) => {

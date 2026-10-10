@@ -6,6 +6,7 @@ import { MensagemConversa } from '../src/components/MensagemConversa';
 import { Agente } from '../electron/services/agente';
 import { esquemaConfiguracao, esquemaConversa, type Mensagem } from '../shared/contratos';
 import type { PreviaNavegador } from '../shared/web';
+import { obterResumoTrabalho } from '../shared/atividade';
 
 const mensagem: Mensagem = {
     id: randomUUID(),
@@ -17,19 +18,63 @@ const mensagem: Mensagem = {
 };
 const executar = async () => undefined;
 
+test('recolhe comentários, raciocínio e ferramentas preservando a resposta final e a duração', () => {
+    const atual: Mensagem = {
+        ...mensagem,
+        estado: 'concluida',
+        texto: 'Investigando.\n\nResultado final.',
+        raciocinio: 'Analisando',
+        inicioTextoFinal: 15,
+        criadoEm: '2026-10-10T10:00:00Z',
+        concluidoEm: '2026-10-10T10:04:37Z',
+        acoes: [{ ...mensagem.acoes[0]!, estado: 'concluida', posicaoTexto: 13 }],
+    };
+    const resumo = obterResumoTrabalho(atual)!;
+    expect(resumo.duracao).toBe('4 min 37 s');
+    expect(resumo.textoFinal).toBe('Resultado final.');
+    const html = renderToStaticMarkup(createElement(MensagemConversa, { mensagem: atual, modo: 'code', executar }));
+    expect(html).toContain('Trabalhou por 4 min 37 s');
+    expect(html.indexOf('Resultado final.')).toBeGreaterThan(html.indexOf('</details>'));
+    expect(obterResumoTrabalho({ ...atual, estado: 'gerando' })).toBeNull();
+});
+
+test('atualização de plano sem argumentos não oferece detalhes vazios e plano pronto usa texto legível', () => {
+    const atual = { ...mensagem, acoes: [{ ...mensagem.acoes[0]!, nome: 'atualizar_plano' }] };
+    expect(apresentar(atual, true)).not.toContain('<details');
+    const pronto = {
+        ...atual,
+        acoes: [
+            { ...atual.acoes[0]!, argumentos: { etapas: [{ descricao: 'Corrigir interface', estado: 'pendente' }] } },
+        ],
+    };
+    expect(apresentar(pronto, true)).toContain('pendente: Corrigir interface');
+    expect(apresentar(pronto, true)).not.toContain('&quot;etapas&quot;');
+});
+
 test('prévia aparece somente no navegador de uma tarefa ativa e some ao encerrar', () => {
     const previa: PreviaNavegador = {
-        conversaId: randomUUID(), origem: 'navegador', aberto: true, carregando: false,
-        url: 'https://example.org/', titulo: 'Página', largura: 1100, altura: 800,
+        conversaId: randomUUID(),
+        origem: 'navegador',
+        aberto: true,
+        carregando: false,
+        url: 'https://example.org/',
+        titulo: 'Página',
+        largura: 1100,
+        altura: 800,
     };
     const atual: Mensagem = {
         ...mensagem,
         acoes: [{ ...mensagem.acoes[0]!, nome: 'controlar_navegador' }],
     };
     const renderizar = (atual: Mensagem, emExecucao = true, previaNavegador = previa) =>
-        renderToStaticMarkup(createElement(MensagemConversa, {
-            mensagem: atual, emExecucao, previaNavegador, executar,
-        }));
+        renderToStaticMarkup(
+            createElement(MensagemConversa, {
+                mensagem: atual,
+                emExecucao,
+                previaNavegador,
+                executar,
+            }),
+        );
     expect(renderizar(atual)).toContain('navegador-inline');
     expect(renderizar(atual, false)).not.toContain('navegador-inline');
     for (const estado of ['concluida', 'interrompida', 'erro'] as const) {
@@ -39,8 +84,7 @@ test('prévia aparece somente no navegador de uma tarefa ativa e some ao encerra
         expect(renderizar(atual, true, { ...previa, origem })).not.toContain('navegador-inline');
     }
     for (const nome of ['pesquisar_web', 'ler_pagina_web']) {
-        expect(renderizar({ ...atual, acoes: [{ ...atual.acoes[0]!, nome }] }))
-            .not.toContain('navegador-inline');
+        expect(renderizar({ ...atual, acoes: [{ ...atual.acoes[0]!, nome }] })).not.toContain('navegador-inline');
     }
 });
 

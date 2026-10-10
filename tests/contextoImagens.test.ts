@@ -270,7 +270,7 @@ describe('Compactação automática', () => {
             'Qual decisão foi tomada?',
             esquemaConfiguracao.parse({ instrucao: 'Instrução atual.' }),
         );
-        expect(requisicoes.at(-1)?.messages[0].content).toBe('Instrução atual.');
+        expect(requisicoes.at(-1)?.messages[0].content).toContain('Instrução atual.');
         expect(JSON.stringify(requisicoes.at(-1))).toContain('Escrita recusada');
         expect(JSON.stringify(requisicoes.at(-1))).not.toContain('Detalhe. '.repeat(20));
         expect(resumos).toBeGreaterThan(1);

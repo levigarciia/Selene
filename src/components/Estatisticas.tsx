@@ -4,6 +4,8 @@ import type { Estado } from '../../shared/contratos';
 import { reunirRegistrosUso, type PeriodoEstatisticas } from '../../shared/estatisticas';
 import { montarPainelEstatisticas } from '../../shared/painelEstatisticas';
 import { GraficoTokens } from './GraficoTokens';
+import { formatarCusto } from '../../shared/openrouter';
+import { rolagemDiscreta } from './rolagemDiscreta';
 
 const numero = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
 const compacto = new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 2 });
@@ -58,6 +60,7 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
         { nome: 'Saída', tokens: dados.tokensGerados, cor: '#ececec' },
     ];
     const metricas = [
+        { nome: 'Gasto OpenRouter na Selene', valor: formatarCusto(dados.custoUsd) },
         { nome: 'Tokens acumulados', valor: compacto.format(dados.tokensRegistrados) },
         {
             nome: 'Entrada acumulada',
@@ -84,7 +87,10 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
             tabIndex={-1}
             aria-label="Estatísticas"
             data-ui="tela-estatisticas"
-            className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#090909] text-principal outline-none"
+            className={[
+                'min-h-0 min-w-0 flex-1 overflow-y-auto bg-[#090909] text-principal outline-none',
+                rolagemDiscreta,
+            ].join(' ')}
         >
             <header className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
                 <div className="flex flex-wrap items-center gap-3">
@@ -178,6 +184,11 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
                     <GraficoTokens serie={dados.serie} />
                 </div>
                 <section className="mt-12" aria-label="Totais">
+                    <p className="mb-4 text-xs text-secundario">
+                        Custos informados pelo OpenRouter nas solicitações feitas pela Selene, em dólares.
+                        {dados.custosPendentes > 0 &&
+                            ` ${dados.custosPendentes} respostas sem custo informado não entram no total.`}
+                    </p>
                     <h2 className="mb-4 text-[13px] font-medium">Totais</h2>
                     <dl
                         data-ui="metricas-estatisticas"
@@ -258,7 +269,7 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
                                 <tr>
                                     <th className="w-8 pb-3 font-normal">#</th>
                                     <th className="pb-3 font-normal">{agrupamento === 'modelo' ? 'Modelo' : 'Dia'}</th>
-                                    {['Entrada', 'Saída', 'Participação', 'Tokens'].map((nome) => (
+                                    {['Entrada', 'Saída', 'Participação', 'Tokens', 'Gasto USD'].map((nome) => (
                                         <th key={nome} className="pb-3 text-right font-normal">
                                             {nome}
                                         </th>
@@ -300,6 +311,7 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
                                                 dados.tokensRegistrados ? item.total / dados.tokensRegistrados : 0,
                                             ),
                                             compacto.format(item.total),
+                                            formatarCusto(item.custoUsd),
                                         ].map((valor, coluna) => (
                                             <td
                                                 key={coluna}

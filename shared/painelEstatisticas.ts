@@ -8,6 +8,7 @@ export type GrupoEstatisticas = {
     total: number;
     respostas: number;
     sessoes: number;
+    custoUsd: number;
 };
 
 /** Identifica dias pelo calendário local, sem deslocar registros pela conversão UTC. */
@@ -20,13 +21,14 @@ function agrupar(registros: RegistroUso[], chave: (registro: RegistroUso) => str
     for (const registro of registros) {
         const id = chave(registro);
         const atual = grupos.get(id) ?? {
-            grupo: { id, entrada: 0, saida: 0, total: 0, respostas: 0, sessoes: 0 },
+            grupo: { id, entrada: 0, saida: 0, total: 0, respostas: 0, sessoes: 0, custoUsd: 0 },
             conversas: new Set<string>(),
         };
         atual.grupo.entrada += registro.tokensEntrada ?? 0;
         atual.grupo.saida += registro.tokensGerados;
         atual.grupo.total = atual.grupo.entrada + atual.grupo.saida;
         atual.grupo.respostas++;
+        atual.grupo.custoUsd += registro.custoUsd ?? 0;
         atual.conversas.add(registro.conversaId);
         atual.grupo.sessoes = atual.conversas.size;
         grupos.set(id, atual);

@@ -39,6 +39,10 @@ const ponte: PonteSelene = {
     instalarMotor: (backend) => ipcRenderer.invoke('selene:instalar', backend),
     carregarModelo: (id) => ipcRenderer.invoke('selene:carregar', id),
     pararMotor: () => ipcRenderer.invoke('selene:pararMotor'),
+    configurarOpenRouter: (chave) => ipcRenderer.invoke('selene:configurarOpenRouter', chave),
+    catalogoOpenRouter: (atualizar = false, ordenacao = 'most-popular') =>
+        ipcRenderer.invoke('selene:catalogoOpenRouter', atualizar, ordenacao),
+    cadastrarModeloOpenRouter: (id) => ipcRenderer.invoke('selene:cadastrarModeloOpenRouter', id),
     configurar: (configuracao) => ipcRenderer.invoke('selene:configurar', configuracao),
     enviar: (id, texto, imagens = []) => ipcRenderer.invoke('selene:enviar', id, texto, imagens),
     editarEReenviar: (id, mensagemId, texto) => ipcRenderer.invoke('selene:editarEReenviar', id, mensagemId, texto),

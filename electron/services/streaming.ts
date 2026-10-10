@@ -9,6 +9,7 @@ const esquemaTempos = z.object({
     cache_n: z.number().int().nonnegative().optional(),
 });
 const esquemaUso = z.object({
+    completion_tokens: z.number().int().nonnegative().optional(),
     prompt_tokens: z.number().int().nonnegative(),
     prompt_tokens_details: z.object({ cached_tokens: z.number().int().nonnegative() }).nullish(),
 });
@@ -19,6 +20,7 @@ const esquemaTrecho = z.object({
             delta: z.object({
                 content: z.string().nullable().optional(),
                 reasoning_content: z.string().nullable().optional(),
+                reasoning: z.string().nullable().optional(),
                 tool_calls: z
                     .array(
                         z.object({
@@ -93,6 +95,8 @@ export async function receberResposta(
     let motivo: string | null = null;
     const chamadas = new Map<number, Chamada>();
     let desempenho: Desempenho | undefined;
+    const inicio = performance.now();
+    let tokensSaida: number | undefined;
     let tokensEntrada: number | undefined;
     let tokensCacheUso: number | undefined;
     await lerEventos(
@@ -104,6 +108,7 @@ export async function receberResposta(
             const uso = esquemaUso.safeParse(bruto.usage);
             if (uso.success) {
                 tokensEntrada = uso.data.prompt_tokens;
+                tokensSaida = uso.data.completion_tokens;
                 tokensCacheUso = uso.data.prompt_tokens_details?.cached_tokens;
             }
             const tempos = esquemaTempos.safeParse(bruto.timings);
@@ -121,7 +126,8 @@ export async function receberResposta(
             const escolha = evento.choices[0];
             if (!escolha) return;
             if (escolha.finish_reason) motivo = escolha.finish_reason;
-            if (escolha.delta.reasoning_content) adicionarRaciocinio?.(escolha.delta.reasoning_content);
+            const raciocinio = escolha.delta.reasoning_content ?? escolha.delta.reasoning;
+            if (raciocinio) adicionarRaciocinio?.(raciocinio);
             if (escolha.delta.content) {
                 texto += escolha.delta.content;
                 adicionarTexto(escolha.delta.content);
@@ -144,6 +150,14 @@ export async function receberResposta(
         sinal,
     );
     if (!motivo) throw new Error('O fluxo do modelo encerrou antes de confirmar a conclusão da resposta.');
+    if (!desempenho && tokensSaida !== undefined) {
+        const tempo = performance.now() - inicio;
+        desempenho = {
+            tokensGerados: tokensSaida,
+            tempoGeracaoMs: tempo,
+            tokensPorSegundo: tempo > 0 ? tokensSaida / (tempo / 1000) : 0,
+        };
+    }
     if (desempenho && tokensEntrada !== undefined) desempenho.tokensEntrada = tokensEntrada;
     if (desempenho && tokensCacheUso !== undefined) desempenho.tokensEntradaCache = tokensCacheUso;
     if (

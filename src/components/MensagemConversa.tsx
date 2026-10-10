@@ -1,8 +1,9 @@
+import { formatarCusto } from '../../shared/openrouter';
 import { TextoAtividade } from './TextoAtividade';
 import { ArrowsClockwiseIcon, CaretRightIcon, InfoIcon, PencilSimpleIcon } from '@phosphor-icons/react';
 import { lazy, memo, Suspense, useState } from 'react';
 import type { Mensagem, PonteSelene } from '../../shared/contratos';
-import { agruparAtividade } from '../../shared/atividade';
+import { agruparAtividade, obterResumoTrabalho } from '../../shared/atividade';
 import { GrupoAcoesConversa } from './GrupoAcoesConversa';
 import type { Executar } from './Configuracoes';
 import { AcaoConversa } from './AcaoConversa';
@@ -83,7 +84,8 @@ export const MensagemConversa = memo(function MensagemConversa({
     const [editando, definirEditando] = useState(false);
     const tokens = mensagem.desempenho?.tokensPorSegundo;
     const gerando = emExecucao && mensagem.estado === 'gerando' && !mensagem.concluidoEm;
-    const atividade = agruparAtividade(mensagem).map((bloco, indice) =>
+    const resumo = modo === 'code' ? obterResumoTrabalho(mensagem) : null;
+    const atividade = (resumo?.atividade ?? agruparAtividade(mensagem)).map((bloco, indice) =>
         bloco.tipo === 'texto' ? (
             <Texto key={`texto-${indice}`} texto={bloco.texto} />
         ) : bloco.tipo === 'grupo' ? (
@@ -103,9 +105,10 @@ export const MensagemConversa = memo(function MensagemConversa({
             />
         ),
     );
-    const mostrarNavegador = gerando
-        && previaNavegador?.origem === 'navegador'
-        && mensagem.acoes.some((acao) => acao.nome === 'controlar_navegador');
+    const mostrarNavegador =
+        gerando &&
+        previaNavegador?.origem === 'navegador' &&
+        mensagem.acoes.some((acao) => acao.nome === 'controlar_navegador');
     const painelNavegador = mostrarNavegador ? (
         <NavegadorConversa previa={previaNavegador} ponte={ponte} executar={executar} />
     ) : null;
@@ -162,7 +165,7 @@ export const MensagemConversa = memo(function MensagemConversa({
                         ))}
                     </details>
                 )}
-                {!!mensagem.raciocinio && (
+                {!!mensagem.raciocinio && !resumo && (
                     <details
                         data-ui="raciocinio-mensagem"
                         className={[
@@ -193,7 +196,23 @@ export const MensagemConversa = memo(function MensagemConversa({
                     />
                 ) : (
                     <div data-ui="atividade-tarefa" className="">
-                        {atividade}
+                        {resumo ? (
+                            <>
+                                <details data-ui="resumo-trabalho" className="mb-[14px] text-secundario group/trabalho">
+                                    <summary className="flex items-center gap-[8px] cursor-pointer text-[12px] list-none">
+                                        Trabalhou por {resumo.duracao}
+                                        <CaretRightIcon size={12} className="group-open/trabalho:rotate-90" />
+                                    </summary>
+                                    <div className="pt-[10px]">
+                                        {mensagem.raciocinio && <Texto texto={mensagem.raciocinio} />}
+                                        {atividade}
+                                    </div>
+                                </details>
+                                <Texto texto={resumo.textoFinal} />
+                            </>
+                        ) : (
+                            atividade
+                        )}
                         {painelNavegador}
                     </div>
                 )}
@@ -319,67 +338,78 @@ export const MensagemConversa = memo(function MensagemConversa({
                         A tarefa não foi concluída
                     </span>
                 )}
-                {mensagem.papel === 'assistant' && (!!tokens || (modo === 'chat' && regerar && !gerando)) && (
-                    <div
-                        data-ui="velocidade-mensagem"
-                        className={[
-                            'flex items-center gap-[8px] mt-[8px] text-[11px] opacity-0 pointer-events-none',
-                            'group-hover/mensagem:opacity-100 group-hover/mensagem:pointer-events-auto',
-                            'focus-within:opacity-100 focus-within:pointer-events-auto',
-                        ].join(' ')}
-                    >
-                        {!!tokens && (
-                            <button
-                                data-ui="botao-icone botao-icone-tokens"
-                                className={[
-                                    '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                                    [
-                                        'inline-flex items-center justify-center bg-transparent text-secundario',
-                                        'rounded-[6px] p-[8px]',
-                                    ].join(' '),
-                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
-                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
-                                    '[[data-ui~=velocidade-mensagem]_&]:inline-flex',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:border-borda',
-                                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&:hover:not(:disabled)]:bg-hover',
-                                    '[[data-ui~=usuario-direita]_&]:text-secundario',
-                                    '[[data-ui~=usuario-direita]_&]:border-borda',
-                                    '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:text-principal',
-                                    '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:bg-hover',
-                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                                    '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
-                                ].join(' ')}
-                                onClick={() => definirMostrarTokens(!mostrarTokens)}
-                                aria-label={
-                                    mostrarTokens ? 'Esconder tokens por segundo' : 'Mostrar tokens por segundo'
-                                }
-                            >
-                                <InfoIcon size={14} />
-                            </button>
-                        )}
-                        {modo === 'chat' && regerar && !gerando && (
-                            <button
-                                type="button"
-                                aria-label="Regerar mensagem"
-                                title="Regerar mensagem"
-                                disabled={edicaoDesativada}
-                                onClick={() => void regerar(mensagem.id)}
-                                className={[
-                                    'inline-flex items-center justify-center rounded-[6px] p-[8px] text-secundario',
-                                    'hover:text-principal hover:bg-hover disabled:opacity-40',
-                                ].join(' ')}
-                            >
-                                <ArrowsClockwiseIcon size={14} />
-                            </button>
-                        )}
-                        {mostrarTokens && !!tokens && (
-                            <span role="tooltip">
-                                {tokens.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tokens/s
-                            </span>
-                        )}
-                    </div>
-                )}
+                {mensagem.papel === 'assistant' &&
+                    (!!tokens || mensagem.provedor === 'openrouter' || (modo === 'chat' && regerar && !gerando)) && (
+                        <div
+                            data-ui="velocidade-mensagem"
+                            className={[
+                                'flex items-center gap-[8px] mt-[8px] text-[11px] opacity-0 pointer-events-none',
+                                'group-hover/mensagem:opacity-100 group-hover/mensagem:pointer-events-auto',
+                                'focus-within:opacity-100 focus-within:pointer-events-auto',
+                            ].join(' ')}
+                        >
+                            {(!!tokens || mensagem.provedor === 'openrouter') && (
+                                <button
+                                    data-ui="botao-icone botao-icone-tokens"
+                                    className={[
+                                        '[[data-ui~=marca]_&]:ml-auto [[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
+                                        [
+                                            'inline-flex items-center justify-center bg-transparent text-secundario',
+                                            'rounded-[6px] p-[8px]',
+                                        ].join(' '),
+                                        'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
+                                        '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
+                                        '[[data-ui~=velocidade-mensagem]_&]:inline-flex',
+                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
+                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:border-borda',
+                                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&:hover:not(:disabled)]:bg-hover',
+                                        '[[data-ui~=usuario-direita]_&]:text-secundario',
+                                        '[[data-ui~=usuario-direita]_&]:border-borda',
+                                        '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:text-principal',
+                                        '[[data-ui~=usuario-direita]_&:hover:not(:disabled)]:bg-hover',
+                                        "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
+                                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
+                                    ].join(' ')}
+                                    onClick={() => definirMostrarTokens(!mostrarTokens)}
+                                    aria-label={
+                                        mostrarTokens
+                                            ? 'Esconder informações da resposta'
+                                            : 'Mostrar informações da resposta'
+                                    }
+                                >
+                                    <InfoIcon size={14} />
+                                </button>
+                            )}
+                            {modo === 'chat' && regerar && !gerando && (
+                                <button
+                                    type="button"
+                                    aria-label="Regerar mensagem"
+                                    title="Regerar mensagem"
+                                    disabled={edicaoDesativada}
+                                    onClick={() => void regerar(mensagem.id)}
+                                    className={[
+                                        'inline-flex items-center justify-center rounded-[6px] p-[8px] text-secundario',
+                                        'hover:text-principal hover:bg-hover disabled:opacity-40',
+                                    ].join(' ')}
+                                >
+                                    <ArrowsClockwiseIcon size={14} />
+                                </button>
+                            )}
+                            {mostrarTokens && mensagem.provedor === 'openrouter' && (
+                                <span role="tooltip">
+                                    OpenRouter:{' '}
+                                    {mensagem.custoUsd === undefined
+                                        ? 'Custo não informado'
+                                        : formatarCusto(mensagem.custoUsd)}
+                                </span>
+                            )}
+                            {mostrarTokens && !!tokens && (
+                                <span role="tooltip">
+                                    {tokens.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tokens/s
+                                </span>
+                            )}
+                        </div>
+                    )}
             </div>
         </article>
     );

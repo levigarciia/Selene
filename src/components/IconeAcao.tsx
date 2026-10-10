@@ -104,6 +104,7 @@ const iconesFerramentas: Record<string, NomeIconeAcao> = {
     ler_arquivo: 'leitura',
     escrever_arquivo: 'edicao',
     editar_arquivo: 'edicao',
+    apply_patch: 'edicao',
     pesquisar_web: 'web',
     ler_pagina_web: 'web',
     controlar_navegador: 'navegador',
