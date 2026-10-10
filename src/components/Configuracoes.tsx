@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react';
-import { ChatCircleIcon, CpuIcon, StackIcon } from '@phosphor-icons/react';
+import { ChatCircleIcon, CpuIcon, StackIcon, GlobeIcon } from '@phosphor-icons/react';
 import type { Configuracao, Estado, PonteSelene, Resultado } from '../../shared/contratos';
 import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
 import { ConfiguracaoOpenRouter } from './ConfiguracaoOpenRouter';
@@ -7,9 +7,10 @@ import { CamposGeracao } from './CamposGeracao';
 import { ConfiguracaoMotor } from './ConfiguracaoMotor';
 import { ModelosConfiguracoes } from './ModelosConfiguracoes';
 import { AtualizacaoAplicativo } from './AtualizacaoAplicativo';
+import { ConfiguracaoAcessoWeb } from './ConfiguracaoAcessoWeb';
 
 export type Executar = <T>(operacao: () => Promise<Resultado<T>>) => Promise<T | undefined>;
-type Secao = 'geral' | 'modelos' | 'motor';
+type Secao = 'geral' | 'modelos' | 'motor' | 'web';
 
 /** Reúne modelos, motor e preferências com detalhes disponíveis sob demanda. */
 export function Configuracoes({
@@ -75,13 +76,14 @@ export function Configuracoes({
             <nav
                 data-ui="navegacao-configuracoes"
                 aria-label="Seções das configurações"
-                className="flex gap-1 border-b border-borda pb-3"
+                className="flex flex-wrap gap-1 border-b border-borda pb-3"
             >
                 {(
                     [
                         { id: 'modelos', nome: 'Modelos', Icone: StackIcon },
                         { id: 'motor', nome: 'Motor', Icone: CpuIcon },
                         { id: 'geral', nome: 'Geral', Icone: ChatCircleIcon },
+                        { id: 'web', nome: 'Acesso web', Icone: GlobeIcon },
                     ] as const
                 ).map(({ id, nome, Icone }) => (
                     <button
@@ -128,7 +130,9 @@ export function Configuracoes({
                 aria-label="Configurações"
                 className="overflow-y-auto min-w-0 pb-5 [&_h2]:text-base [&_h2]:font-medium [&_h2]:mb-4"
             >
-                {secao === 'modelos' ? (
+                {secao === 'web' ? (
+                    <ConfiguracaoAcessoWeb ponte={ponte} executar={executar} />
+                ) : secao === 'modelos' ? (
                     <ModelosConfiguracoes estado={estado} ponte={ponte} executar={executar} hardware={hardware} />
                 ) : (
                     <form

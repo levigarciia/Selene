@@ -47,7 +47,7 @@ test('preserva contexto e camadas explícitos no modo manual sem ajuste de memó
     expect(argumentosMemoriaMotor(configuracao, 'cpu')).toEqual(['-c', '8192', '-ngl', '0', '--fit', 'off']);
 });
 
-test('resposta usa o contexto carregado em vez do limite manual antigo', async () => {
+test('resposta automática limita a saída sem reduzir o contexto carregado', async () => {
     const conversa = esquemaConversa.parse({
         id: randomUUID(),
         titulo: 'Limites',
@@ -59,7 +59,7 @@ test('resposta usa o contexto carregado em vez do limite manual antigo', async (
         publicar: () => {},
         completar: async (corpo) => {
             const pedido = corpo as { messages: MensagemModelo[]; max_tokens: number };
-            expect(pedido.max_tokens).toBeGreaterThan(200000);
+            expect(pedido.max_tokens).toBe(8192);
             expect(pedido.max_tokens + estimarTokens(pedido.messages)).toBeLessThan(262144);
             return new Response(
                 'data: {"choices":[{"delta":{"content":"Pronto"},' + '"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',

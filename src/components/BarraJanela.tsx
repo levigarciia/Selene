@@ -13,7 +13,13 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
             ].join(' ')}
         >
             <div className="flex items-center gap-3 min-w-0">{children}</div>
-            <div data-ui="acoes-janela" className="flex items-center gap-[4px]">
+            <div
+                data-ui="acoes-janela"
+                className={[
+                    'flex items-center gap-[4px]',
+                    navigator.userAgent.includes('Electron') ? '' : 'hidden',
+                ].join(' ')}
+            >
                 <button
                     data-ui="botao-icone"
                     className={[

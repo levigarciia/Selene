@@ -108,6 +108,7 @@ const iconesFerramentas: Record<string, NomeIconeAcao> = {
     pesquisar_web: 'web',
     ler_pagina_web: 'web',
     controlar_navegador: 'navegador',
+    controlar_computador: 'computador',
     atualizar_plano: 'concluido',
 };
 

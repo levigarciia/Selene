@@ -27,27 +27,38 @@ export function MenuOpcoesEntrada({
     const raiz = useRef<HTMLDivElement>(null);
     const gatilho = useRef<HTMLButtonElement>(null);
     const menu = useRef<HTMLDivElement>(null);
+    const abertoPorToque = useRef(false);
 
     useLayoutEffect(() => {
         if (!aberto || !menu.current || !gatilho.current) return;
-        const origem = gatilho.current.getBoundingClientRect();
-        const limites = menu.current.getBoundingClientRect();
-        menu.current.style.left = `${Math.max(8, Math.min(origem.left, window.innerWidth - limites.width - 8))}px`;
-        menu.current.style.bottom = `${window.innerHeight - origem.top + 10}px`;
-        menu.current.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+        const posicionar = () => {
+            if (!menu.current || !gatilho.current) return;
+            const origem = gatilho.current.getBoundingClientRect();
+            const limites = menu.current.getBoundingClientRect();
+            const esquerda = Math.max(8, Math.min(origem.left, window.innerWidth - limites.width - 8));
+            menu.current.style.left = `${esquerda}px`;
+            menu.current.style.bottom = `${window.innerHeight - origem.top + 10}px`;
+        };
+        posicionar();
+        if (!abertoPorToque.current) {
+            menu.current.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus({ preventScroll: true });
+        }
+        window.addEventListener('resize', posicionar);
+        window.visualViewport?.addEventListener('resize', posicionar);
+        return () => {
+            window.removeEventListener('resize', posicionar);
+            window.visualViewport?.removeEventListener('resize', posicionar);
+        };
     }, [aberto]);
 
     useEffect(() => {
         if (!aberto) return;
-        const fora = (evento: MouseEvent) => {
+        const fora = (evento: PointerEvent) => {
             if (!raiz.current?.contains(evento.target as Node)) definirAberto(false);
         };
-        const fechar = () => definirAberto(false);
-        document.addEventListener('mousedown', fora);
-        window.addEventListener('resize', fechar);
+        document.addEventListener('pointerdown', fora);
         return () => {
-            document.removeEventListener('mousedown', fora);
-            window.removeEventListener('resize', fechar);
+            document.removeEventListener('pointerdown', fora);
         };
     }, [aberto]);
 
@@ -61,7 +72,7 @@ export function MenuOpcoesEntrada({
         try {
             await alterar(escolha);
             definirAberto(false);
-            gatilho.current?.focus();
+            if (!abertoPorToque.current) gatilho.current?.focus({ preventScroll: true });
         } finally {
             definirSalvando(false);
         }
@@ -78,7 +89,9 @@ export function MenuOpcoesEntrada({
             ].join(' ')}
             ref={raiz}
             onBlur={(evento) => {
-                if (!evento.currentTarget.contains(evento.relatedTarget)) definirAberto(false);
+                if (evento.relatedTarget && !evento.currentTarget.contains(evento.relatedTarget)) {
+                    definirAberto(false);
+                }
             }}
         >
             <button
@@ -94,7 +107,13 @@ export function MenuOpcoesEntrada({
                 aria-expanded={aberto}
                 aria-controls={id}
                 disabled={desativado || salvando}
-                onClick={() => definirAberto(!aberto)}
+                onPointerDown={(evento) => {
+                    abertoPorToque.current = evento.pointerType === 'touch';
+                }}
+                onClick={(evento) => {
+                    if (evento.detail === 0) abertoPorToque.current = false;
+                    definirAberto(!aberto);
+                }}
             >
                 {icone}
                 <span>{nome}</span>

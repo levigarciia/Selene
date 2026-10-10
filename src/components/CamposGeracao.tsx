@@ -23,7 +23,7 @@ export function CamposGeracao({ configuracao, ocupado, alterar }: CamposConfigur
                     '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                 ].join(' ')}
             >
-                A resposta usa automaticamente o espaço disponível no contexto.
+                No modo automático, cada resposta usa até 8.192 tokens, respeitando o contexto e o limite do modelo.
             </p>
             <div className="grid grid-cols-2 gap-5">
                 <label>

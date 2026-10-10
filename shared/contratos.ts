@@ -62,7 +62,16 @@ export const esquemaDesempenho = z.object({
     tokensPorSegundo: z.number().nonnegative(),
 });
 export type Desempenho = z.infer<typeof esquemaDesempenho>;
+export const esquemaMedicaoModelo = esquemaDesempenho.extend({
+    criadoEm: z.string().datetime(),
+    modeloId: z.string().uuid().nullable(),
+    finalidade: z.enum(['resposta', 'compactacao']),
+    contextoEstimado: z.number().int().nonnegative(),
+    limiteContexto: z.number().int().positive(),
+});
+export type MedicaoModelo = z.infer<typeof esquemaMedicaoModelo>;
 export const esquemaRegistroUso = esquemaDesempenho.extend({
+    medicoesModelo: z.array(esquemaMedicaoModelo).optional(),
     custoUsd: z.number().nonnegative().optional(),
     provedor: z.literal('openrouter').optional(),
     mensagemId: z.string().uuid(),
@@ -111,6 +120,7 @@ export const esquemaMensagem = z.object({
     inicioTextoFinal: z.number().int().nonnegative().optional(),
     concluidoEm: z.string().optional(),
     desempenho: esquemaDesempenho.optional(),
+    medicoesModelo: z.array(esquemaMedicaoModelo).optional(),
     custoUsd: z.number().nonnegative().optional(),
     provedor: z.literal('openrouter').optional(),
     modeloUsoId: z.string().uuid().optional(),
@@ -133,6 +143,16 @@ export const esquemaConversa = z.object({
     modeloId: z.string().uuid().nullable().default(null),
     nivelRaciocinio: z.enum(['desativado', 'baixo', 'medio', 'alto']).optional(),
     mensagens: z.array(esquemaMensagem).default([]),
+    enviosPendentes: z
+        .array(
+            z.object({
+                id: z.string().uuid(),
+                texto: z.string().trim().min(1).max(30000),
+                tipo: z.enum(['fila', 'direcao']),
+            }),
+        )
+        .max(20)
+        .optional(),
     atualizadoEm: z.string(),
     concluida: z.boolean().optional(),
     encerradaEm: z.string().datetime().optional(),
@@ -183,6 +203,7 @@ export const esquemaDados = z.object({
     projetosChat: z.array(esquemaProjetoChat).default([]),
     favoritosCatalogo: z.array(z.string().min(1).max(240)).default([]),
     registrosUso: z.array(esquemaRegistroUso).default([]),
+    entradasUsoDescartadas: z.array(z.string().uuid()).default([]),
 });
 export type Modelo = z.infer<typeof esquemaModelo>;
 export type Configuracao = z.infer<typeof esquemaConfiguracao>;
@@ -218,6 +239,7 @@ export type Estado = Dados & {
 };
 export type Evento =
     | { tipo: 'navegador'; previa: import('./web').PreviaNavegador }
+    | { tipo: 'computador'; previa: import('./computador').PreviaComputador }
     | { tipo: 'estado'; estado: Estado }
     | { tipo: 'erro'; erro: string }
     | {
@@ -238,6 +260,11 @@ export const esquemaAlteracao = z
     .partial();
 
 export interface PonteSelene {
+    acessoWeb(): Promise<Resultado<import('./acessoWeb').EstadoAcessoWeb>>;
+    configurarAcessoWeb(
+        configuracao: import('./acessoWeb').EntradaConfiguracaoWeb,
+    ): Promise<Resultado<import('./acessoWeb').EstadoAcessoWeb>>;
+    renovarChaveWeb(): Promise<Resultado<import('./acessoWeb').EstadoAcessoWeb>>;
     configurarOpenRouter(chave: string): Promise<Resultado<void>>;
     catalogoOpenRouter(
         atualizar?: boolean,
@@ -245,6 +272,8 @@ export interface PonteSelene {
     ): Promise<Resultado<import('./openrouter').ModeloOpenRouter[]>>;
     cadastrarModeloOpenRouter(id: string): Promise<Resultado<Modelo>>;
     previasNavegador(): Promise<Resultado<import('./web').PreviaNavegador[]>>;
+    previasComputador(): Promise<Resultado<import('./computador').PreviaComputador[]>>;
+    pararComputador(conversaId: string): Promise<Resultado<void>>;
     atualizarNavegador(conversaId: string): Promise<Resultado<import('./web').PreviaNavegador>>;
     consultarHardware(): Promise<Resultado<import('./compatibilidadeModelo').HardwareLocal>>;
     configurarModelo(id: string, perfil: PerfilModelo | null): Promise<Resultado<void>>;
@@ -283,6 +312,8 @@ export interface PonteSelene {
     pararMotor(): Promise<Resultado<void>>;
     configurar(configuracao: Configuracao): Promise<Resultado<void>>;
     enviar(id: string, texto: string, imagens?: string[]): Promise<Resultado<void>>;
+    acompanharCode(id: string, texto: string, tipo: 'fila' | 'direcao', respostaId: string): Promise<Resultado<void>>;
+    gerenciarEnvioCode(id: string, envioId: string, acao: 'remover' | 'direcao' | 'executar'): Promise<Resultado<void>>;
     editarEReenviar(id: string, mensagemId: string, texto: string): Promise<Resultado<void>>;
     regerar(id: string, mensagemId: string): Promise<Resultado<void>>;
     cancelar(): Promise<Resultado<void>>;

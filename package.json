@@ -20,6 +20,7 @@
         "build": "bun run verificar && vite build && bun run build:desktop",
         "start": "bun scripts/abrir.ts",
         "test:desktop": "bun scripts/testarDesktop.ts",
+        "test:acesso-web": "bun scripts/testarDesktop.ts scripts/validarAcessoWeb.ts",
         "test:sidebar": "bun scripts/testarDesktop.ts scripts/validarSidebar.ts",
         "test:estatisticas": "bun scripts/testarDesktop.ts scripts/validarEstatisticas.ts",
         "test:openrouter": "bun scripts/testarDesktop.ts scripts/validarOpenRouter.ts",
@@ -29,8 +30,10 @@
         "test:gerenciamento": "bun scripts/testarDesktop.ts scripts/validarGerenciamentoProjeto.ts",
         "test:projetos-chat": "bun scripts/testarDesktop.ts scripts/validarProjetosChat.ts",
         "test:contexto": "bun scripts/testarDesktop.ts scripts/validarContextoImagens.ts",
+        "test:envios-code": "bun scripts/testarDesktop.ts scripts/validarEnviosCode.ts",
         "test:web": "bun build scripts/fixtures/navegador.ts --target=node --external=electron --format=cjs --outfile=artifacts/navegador.cjs && bun scripts/testarDesktop.ts scripts/validarWeb.ts",
         "test:navegador-inline": "bun build scripts/fixtures/navegador.ts --target=node --external=electron --format=cjs --outfile=artifacts/navegador.cjs && bun scripts/testarDesktop.ts scripts/validarNavegadorInline.ts",
+        "test:computador": "bun scripts/validarControladorComputador.ts && bun build scripts/fixtures/editorComputador.ts --target=node --external=electron --format=cjs --outfile=artifacts/editorComputador.cjs && bun scripts/testarDesktop.ts scripts/validarEditorComputador.ts && bun build scripts/fixtures/computador.ts --target=node --external=electron --format=cjs --outfile=artifacts/computador.cjs && bun scripts/testarDesktop.ts scripts/validarComputador.ts",
         "formatar": "prettier --write .",
         "dist:win": "bun run build && electron-builder --win nsis --x64 --publish never",
         "dist:portable": "bun run build && electron-builder --win portable --x64 --publish never"

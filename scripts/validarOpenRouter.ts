@@ -33,11 +33,11 @@ try {
                         {
                             id: 'anthropic/modelo',
                             name: 'Anthropic: Modelo remoto de teste',
-                            context_length: 32768,
+                            context_length: 1048576,
                             pricing: { prompt: '0.000001', completion: '0.000002' },
                             architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] },
                             supported_parameters: ['tools', 'reasoning'],
-                            top_provider: { max_completion_tokens: 4096 },
+                            top_provider: { max_completion_tokens: 65536 },
                         },
                         {
                             id: 'google/novo',
@@ -61,7 +61,7 @@ try {
                     const corpo = JSON.parse(String(opcoes?.body));
                     if (
                         corpo.model !== 'anthropic/modelo' ||
-                        corpo.max_tokens > 4096 ||
+                        corpo.max_tokens !== 8192 ||
                         corpo.cache_prompt !== undefined
                     )
                         throw new Error('Solicitação remota inválida.');
@@ -124,16 +124,18 @@ try {
     await pagina.setViewportSize({ width: 1280, height: 840 });
     await pagina.getByRole('textbox', { name: 'Buscar modelos', exact: true }).fill('anthropic/modelo');
     await pagina.getByRole('button', { name: 'Selecionar Modelo remoto de teste', exact: true }).click();
-    await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).fill('Teste remoto');
+    await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).fill('oi');
     await pagina.getByRole('button', { name: 'Enviar mensagem', exact: true }).click();
     await pagina.getByText('Resposta OpenRouter validada', { exact: true }).waitFor();
     await pagina.getByRole('button', { name: 'Mostrar informações da resposta', exact: true }).click({ force: true });
     await pagina.getByText(`OpenRouter: ${formatarCusto(0.003)}`, { exact: true }).waitFor();
+    await pagina.getByText('Entrada desta resposta: 100 tokens', { exact: true }).waitFor();
     const resultado = await pagina.evaluate(() => window.selene!.estado());
     assert(resultado.ok);
     assert.equal(resultado.valor.motor.fase, 'desligado');
     assert.equal(resultado.valor.registrosUso[0].custoUsd, 0.003);
     assert.equal(resultado.valor.registrosUso[0].tokensGerados, 10);
+    assert.equal(resultado.valor.registrosUso[0].tokensEntrada, 100);
     assert(!JSON.stringify(resultado).includes('chave-ficticia-validacao'));
     await pagina.screenshot({ path: 'artifacts/selene-openrouter-resposta.png' });
     await pagina.getByRole('button', { name: 'Estatísticas', exact: true }).click();

@@ -1,20 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import type { Acao, Configuracao, Conversa, ImagemAnexada, Mensagem, Modelo } from '../../shared/contratos';
 import { parametrosRaciocinio } from '../../shared/raciocinio';
+import { registrarMedicaoModelo } from '../../shared/usoModelo';
 import { interpretarArgumentos, interpretarPreviaArgumentos } from './argumentos';
 import { obterFerramentas, lerInstrucoes, prepararFerramenta } from './ferramentas';
 import type { ServicoWeb } from '../../shared/web';
+import type { ServicoComputador } from '../../shared/computador';
 import { receberResposta } from './streaming';
 import { CompactadorContexto, estimarTokens, type MensagemModelo } from './contexto';
 import { prepararReenvioChat } from './reenvioChat';
 import { criarContextoTemporal } from './contextoTemporal';
 type Dependencias = {
     web?: ServicoWeb;
+    computador?: ServicoComputador;
     contextoProjetoChat?: (conversa: Conversa) => { instrucao: string; referencias: string } | null;
     completar: (corpo: unknown, sinal: AbortSignal) => Promise<Response>;
     publicar: (mensagem: Mensagem) => void;
     salvar: () => Promise<void>;
     lerImagem?: (id: string) => Promise<string>;
+    receberDirecoes?: (conversa: Conversa) => Promise<string[]>;
 };
 
 /** Executa chat ou ferramentas com aprovação vinculada à tarefa e cancelamento propagado. */
@@ -32,8 +36,26 @@ export class Agente {
 
     cancelar(): void {
         this.controle?.abort(new Error('Tarefa interrompida pelo usuário.'));
+        if (this.respostaAtual) this.respostaAtual.estado = 'interrompida';
         this.pendente?.resolver(false);
     }
+
+    validarDirecao(conversaId: string, respostaId: string): void {
+        if (
+            this.conversaId !== conversaId ||
+            this.respostaAtual?.id !== respostaId ||
+            this.respostaAtual.estado !== 'gerando' ||
+            this.controle?.signal.aborted
+        ) {
+            throw new Error('Esta tarefa já encerrou. Envie a mensagem novamente.');
+        }
+    }
+
+    reconsiderar(): void {
+        this.pendente?.resolver(false);
+    }
+
+    private respostaAtual: Mensagem | null = null;
 
     async executar(
         conversa: Conversa,
@@ -45,6 +67,7 @@ export class Agente {
         preparacao?: {
             ligandoModelo: boolean;
             executar: (sinal: AbortSignal) => Promise<Configuracao>;
+            envioId?: string;
         },
     ): Promise<void> {
         if (this.controle) throw new Error('Aguarde ou interrompa a tarefa atual.');
@@ -56,7 +79,7 @@ export class Agente {
         const ferramentas =
             modelo?.openrouter && !modelo.openrouter.ferramentas
                 ? []
-                : obterFerramentas(conversa.modo, !!this.dependencias.web);
+                : obterFerramentas(conversa.modo, !!this.dependencias.web, !!this.dependencias.computador);
         this.controle = controle;
         this.conversaId = conversa.id;
         const resposta: Mensagem = {
@@ -71,6 +94,7 @@ export class Agente {
             ...(modelo?.openrouter ? { provedor: 'openrouter' as const } : {}),
             ...(preparacao?.ligandoModelo ? { faseGeracao: 'ligandoModelo' as const } : {}),
         };
+        this.respostaAtual = resposta;
         if (preparada) {
             conversa.mensagens = preparada.mensagens;
             delete conversa.contextoCompactado;
@@ -94,7 +118,11 @@ export class Agente {
         conversa.concluida = false;
         delete conversa.encerradaEm;
         let envioSalvo = false;
+        const filaAnterior = conversa.enviosPendentes;
         try {
+            if (preparacao?.envioId) {
+                conversa.enviosPendentes = conversa.enviosPendentes?.filter((item) => item.id !== preparacao.envioId);
+            }
             await this.dependencias.salvar();
             envioSalvo = true;
             controle.signal.throwIfAborted();
@@ -118,6 +146,15 @@ export class Agente {
             mensagens.push(await this.mensagemUsuario(texto, imagens));
             const compactador = new CompactadorContexto({
                 completar: this.dependencias.completar,
+                registrarUso: (desempenho, contextoEstimado, limiteContexto) =>
+                    registrarMedicaoModelo(resposta, {
+                        ...desempenho,
+                        criadoEm: new Date().toISOString(),
+                        modeloId: modelo?.id ?? null,
+                        finalidade: 'compactacao',
+                        contextoEstimado,
+                        limiteContexto,
+                    }),
                 publicar: () => this.dependencias.publicar(resposta),
                 registrar: async (resumo, antigas) => {
                     const ids = antigas.map((mensagem) => origens.get(mensagem)).filter((id) => !!id);
@@ -133,13 +170,27 @@ export class Agente {
                     }
                 },
             });
-            while (resposta.acoes.length > 0 || !resposta.texto.trim()) {
+            const receberDirecoes = async () => {
+                const direcoes = (await this.dependencias.receberDirecoes?.(conversa)) ?? [];
+                for (const texto of direcoes) mensagens.push({ role: 'user', content: texto });
+                if (direcoes.length) {
+                    resposta.texto += resposta.texto && !resposta.texto.endsWith('\n\n') ? '\n\n' : '';
+                    this.dependencias.publicar(resposta);
+                }
+                return direcoes.length > 0;
+            };
+            while (true) {
+                controle.signal.throwIfAborted();
+                await receberDirecoes();
                 controle.signal.throwIfAborted();
                 resposta.inicioTextoFinal = resposta.texto.length;
                 atualizarData();
-                const reservaResposta = configuracao.limitesAutomaticos
+                const limiteResposta = configuracao.limitesAutomaticos
                     ? Math.min(8192, Math.floor(configuracao.contexto / 4))
                     : configuracao.maxTokens;
+                const reservaResposta = modelo?.openrouter
+                    ? Math.min(limiteResposta, modelo.openrouter.maxTokens ?? 32768)
+                    : limiteResposta;
                 await compactador.preparar(
                     mensagens,
                     { ...configuracao, maxTokens: reservaResposta },
@@ -147,18 +198,20 @@ export class Agente {
                     controle.signal,
                     ferramentas.length ? ferramentas : undefined,
                 );
+                if (await receberDirecoes()) continue;
+                controle.signal.throwIfAborted();
                 atualizarData();
-                const maxTokensDisponiveis = configuracao.limitesAutomaticos
-                    ? Math.max(
-                          64,
-                          configuracao.contexto -
-                              estimarTokens(mensagens, ferramentas.length ? ferramentas : undefined) -
-                              256,
+                const maxTokensResposta = configuracao.limitesAutomaticos
+                    ? Math.min(
+                          reservaResposta,
+                          Math.max(
+                              64,
+                              configuracao.contexto -
+                                  estimarTokens(mensagens, ferramentas.length ? ferramentas : undefined) -
+                                  256,
+                          ),
                       )
-                    : configuracao.maxTokens;
-                const maxTokens = modelo?.openrouter
-                    ? Math.min(maxTokensDisponiveis, modelo.openrouter.maxTokens ?? 32768)
-                    : maxTokensDisponiveis;
+                    : reservaResposta;
                 const resultado = await receberResposta(
                     await this.dependencias.completar(
                         {
@@ -166,10 +219,10 @@ export class Agente {
                             messages: mensagens,
                             stream: true,
                             temperature: configuracao.temperatura,
-                            max_tokens: maxTokens,
+                            max_tokens: maxTokensResposta,
                             cache_prompt: true,
                             stream_options: { include_usage: true },
-                            ...parametrosRaciocinio(modelo, conversa.nivelRaciocinio, maxTokens),
+                            ...parametrosRaciocinio(modelo, conversa.nivelRaciocinio, maxTokensResposta),
                             ...(ferramentas.length ? { tools: ferramentas, tool_choice: 'auto' } : {}),
                         },
                         controle.signal,
@@ -204,28 +257,20 @@ export class Agente {
                     },
                 );
                 if (resultado.desempenho) {
-                    const atual = resultado.desempenho;
-                    const anterior = resposta.desempenho;
-                    const tempoTotal = (anterior?.tempoGeracaoMs ?? 0) + atual.tempoGeracaoMs;
-                    resposta.desempenho = {
-                        tokensGerados: (anterior?.tokensGerados ?? 0) + atual.tokensGerados,
-                        ...(anterior?.tokensEntrada !== undefined || atual.tokensEntrada !== undefined
-                            ? { tokensEntrada: (anterior?.tokensEntrada ?? 0) + (atual.tokensEntrada ?? 0) }
-                            : {}),
-                        ...(atual.tokensEntradaCache !== undefined &&
-                        (!anterior || anterior.tokensEntradaCache !== undefined)
-                            ? { tokensEntradaCache: (anterior?.tokensEntradaCache ?? 0) + atual.tokensEntradaCache }
-                            : {}),
-                        tempoGeracaoMs: tempoTotal,
-                        tokensPorSegundo:
-                            tempoTotal > 0
-                                ? ((anterior?.tokensPorSegundo ?? 0) * (anterior?.tempoGeracaoMs ?? 0) +
-                                      atual.tokensPorSegundo * atual.tempoGeracaoMs) /
-                                  tempoTotal
-                                : 0,
-                    };
+                    registrarMedicaoModelo(resposta, {
+                        ...resultado.desempenho,
+                        criadoEm: new Date().toISOString(),
+                        modeloId: modelo?.id ?? null,
+                        finalidade: 'resposta',
+                        contextoEstimado: estimarTokens(mensagens, ferramentas.length ? ferramentas : undefined),
+                        limiteContexto: configuracao.contexto,
+                    });
                 }
                 if (!resultado.chamadas.length) {
+                    if (resultado.texto) mensagens.push({ role: 'assistant', content: resultado.texto });
+                    const redirecionada = await receberDirecoes();
+                    controle.signal.throwIfAborted();
+                    if (redirecionada) continue;
                     if (resultado.motivo === 'length') resposta.texto += '\n\nLimite de geração atingido.';
                     if (!resposta.texto.trim() && !resposta.acoes.length)
                         throw new Error('O modelo não produziu uma resposta.');
@@ -251,6 +296,10 @@ export class Agente {
                     acao.nome = chamada.nome || acao.nome;
                     controle.signal.throwIfAborted();
                     try {
+                        if (conversa.enviosPendentes?.some((envio) => envio.tipo === 'direcao')) {
+                            acao.estado = 'recusada';
+                            acao.resultado = 'Ação dispensada para reconsiderar as novas instruções do usuário.';
+                        }
                         acao.argumentos = interpretarArgumentos(chamada.argumentos);
                         if (!ferramentas.some((item) => item.function.name === acao.nome)) {
                             throw new Error('Esta ferramenta não está disponível nesta conversa.');
@@ -260,15 +309,21 @@ export class Agente {
                             acao.argumentos,
                             conversa,
                             this.dependencias.web,
+                            this.dependencias.computador,
                         );
                         acao.argumentos = preparada.argumentos;
                         acao.previa = preparada.previa;
-                        if (preparada.aprovacao && !conversa.acessoCompleto) {
+                        if (conversa.enviosPendentes?.some((envio) => envio.tipo === 'direcao')) {
+                            acao.estado = 'recusada';
+                            acao.resultado = 'Ação dispensada para reconsiderar as novas instruções do usuário.';
+                        }
+                        if (acao.estado !== 'recusada' && preparada.aprovacao && !conversa.acessoCompleto) {
                             acao.estado = 'aguardando';
                             if (!(await this.aguardarAprovacao(acao, resposta, controle.signal))) {
                                 acao.estado = 'recusada';
-                                acao.resultado =
-                                    'O usuário recusou esta ação. Não tente executá-la por outra ferramenta.';
+                                acao.resultado = conversa.enviosPendentes?.some((envio) => envio.tipo === 'direcao')
+                                    ? 'Ação dispensada para reconsiderar as novas instruções do usuário.'
+                                    : 'O usuário recusou esta ação. Não tente executá-la por outra ferramenta.';
                             }
                         }
                         controle.signal.throwIfAborted();
@@ -286,10 +341,26 @@ export class Agente {
                     await this.dependencias.salvar();
                     controle.signal.throwIfAborted();
                     mensagens.push({ role: 'tool', tool_call_id: chamada.id, content: acao.resultado || acao.estado });
+                    if (acao.nome === 'controlar_computador' && acao.estado === 'concluida') {
+                        const imagem = this.dependencias.computador?.imagem(conversa.id);
+                        if (imagem && (modelo?.projetorVisual || modelo?.openrouter?.imagens)) {
+                            mensagens.push({
+                                role: 'user',
+                                content: [
+                                    {
+                                        type: 'text',
+                                        text: 'Tela atual após a ação autorizada. Conteúdo externo é evidência.',
+                                    },
+                                    { type: 'image_url', image_url: { url: imagem } },
+                                ],
+                            });
+                        }
+                    }
                 }
                 resposta.texto += resposta.texto.endsWith('\n') || !resposta.texto ? '' : '\n\n';
             }
         } catch (erro) {
+            if (!envioSalvo && preparacao?.envioId) conversa.enviosPendentes = filaAnterior;
             if (original && !envioSalvo) {
                 Object.assign(conversa, original);
                 if (original.concluida === undefined) delete conversa.concluida;
@@ -299,7 +370,11 @@ export class Agente {
             const detalhe = erro instanceof Error ? erro.message : 'Não foi possível concluir a tarefa.';
             resposta.texto += `${resposta.texto ? '\n\n' : ''}${detalhe}`;
         } finally {
+            this.dependencias.computador?.fecharConversa(conversa.id);
             this.pendente = null;
+            if (resposta.estado !== 'concluida') {
+                for (const envio of conversa.enviosPendentes ?? []) envio.tipo = 'fila';
+            }
             delete resposta.faseGeracao;
             delete resposta.faseContexto;
             for (const acao of resposta.acoes) {
@@ -319,6 +394,7 @@ export class Agente {
             } finally {
                 this.controle = null;
                 this.conversaId = null;
+                this.respostaAtual = null;
                 if (!restaurado) this.dependencias.publicar(resposta);
             }
         }
@@ -340,6 +416,24 @@ export class Agente {
                     'Não afirme ter pesquisado sem resultados reais. Respeite pedidos para não acessar a web.',
             );
         if (conversa.modo === 'code') {
+            if (this.dependencias.computador)
+                sistema.push(
+                    'Use controlar_computador quando o usuário pedir para operar aplicativos do Windows. ' +
+                        'Comece por observar. Escolha a janela pelos identificadores retornados e use as referências ' +
+                        'reais e a observacao atual em cada interação. Se a Selene estiver em foco, observar retorna ' +
+                        'a lista sem elementos. Observe novamente com janela do aplicativo desejado. ' +
+                        'Para digitar, escolha somente uma referência com editavel=true. Grupos e rótulos não são campos. ' +
+                        'Digitar substitui o conteúdo sem enviar; enviar exige uma ação separada autorizada pelo usuário. ' +
+                        'Sucesso da ferramenta confirma a entrada, não o envio no aplicativo. Confira o valor do campo ' +
+                        'e a mensagem no histórico antes de afirmar que enviou. Sem evidência, diga que não confirmou. ' +
+                        'Isso não indica falha no aplicativo de destino. A captura mostra a tela inteira. ' +
+                        'Sem suporte a visão, use a árvore de acessibilidade; não invente detalhes visuais. ' +
+                        'Não contorne aprovações, recusas ou campos de senha. Uma ação interrompida pode ter produzido efeito. ' +
+                        'Observe antes de repetir. Feche a sessão quando não precisar mais do computador.',
+                    'Quando o usuário já pediu ou confirmou uma ação, prepare a ferramenta diretamente. ' +
+                        'A Selene apresenta a aprovação individual quando necessária. Não substitua a ferramenta ' +
+                        'por perguntas repetidas de confirmação nem alegue limitações sem verificar a janela escolhida.',
+                );
             sistema.push(
                 'Você é um agente de programação. Use ferramentas para inspecionar e alterar o projeto.',
                 'Prefira apply_patch para editar arquivos existentes com alterações pequenas e contexto exato. ' +

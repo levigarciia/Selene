@@ -242,5 +242,9 @@ test('acumula cache das ferramentas somente quando todas as chamadas foram medid
         await agente.executar(conversa, 'Pesquise', esquemaConfiguracao.parse({}));
         expect(conversa.mensagens.at(-1)?.desempenho?.tokensEntrada).toBe(2000);
         expect(conversa.mensagens.at(-1)?.desempenho?.tokensEntradaCache).toBe(medirSegunda ? 1800 : undefined);
+        const medicoes = conversa.mensagens.at(-1)?.medicoesModelo;
+        expect(medicoes).toHaveLength(2);
+        expect(medicoes?.map((medicao) => medicao.tokensEntrada)).toEqual([1000, 1000]);
+        expect(medicoes?.map((medicao) => medicao.tokensEntradaCache)).toEqual([900, medirSegunda ? 900 : undefined]);
     }
 });

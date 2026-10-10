@@ -233,32 +233,9 @@ export function BarraLateral({
             className={[
                 [
                     'bg-sidebar border-r border-solid border-r-borda flex flex-col',
-                    'pt-0 pb-[12px] relative isolate min-h-0 px-[10px] [@media(width<=760px)]:flex',
-                    '[@media(width<=760px)]:flex-row [@media(width<=760px)]:items-center',
-                    '[@media(width<=760px)]:gap-[8px] [@media(width<=760px)]:border-r-0',
-                    '[@media(width<=760px)]:[border-right-style:solid]',
-                    '[@media(width<=760px)]:border-r-[currentColor] [@media(width<=760px)]:border-b',
-                    '[@media(width<=760px)]:[border-bottom-style:solid]',
-                    '[@media(width<=760px)]:border-b-borda [@media(width<=760px)]:p-[10px]',
+                    'pt-0 pb-[12px] relative isolate min-h-0 px-[10px]',
                 ].join(' '),
-                recolhida
-                    ? [
-                          ' ',
-                          '[&&]:px-[10px]',
-                          '[&&]:pt-[16px]',
-                          '[@media(width<=760px)]:[&&]:flex',
-                          '[@media(width<=760px)]:[&&]:flex-row',
-                          '[@media(width<=760px)]:[&&]:items-center',
-                          '[@media(width<=760px)]:[&&]:gap-[8px]',
-                          '[@media(width<=760px)]:[&&]:border-r-[0px]',
-                          '[@media(width<=760px)]:[&&]:[border-right-style:solid]',
-                          '[@media(width<=760px)]:[&&]:border-r-[currentColor]',
-                          '[@media(width<=760px)]:[&&]:border-b-[1px]',
-                          '[@media(width<=760px)]:[&&]:[border-bottom-style:solid]',
-                          '[@media(width<=760px)]:[&&]:border-b-borda',
-                          '[@media(width<=760px)]:[&&]:p-[10px]',
-                      ].join(' ')
-                    : '',
+                recolhida ? ['[&&]:px-[10px]', '[&&]:pt-[16px]'].join(' ') : '',
             ].join(' ')}
             aria-label="Navegação principal"
         >
@@ -298,13 +275,6 @@ export function BarraLateral({
                     '[[data-ui~=sidebar-recolhida]_&]:h-auto',
                     '[[data-ui~=sidebar-recolhida]_&]:mb-[20px] [[data-ui~=sidebar-recolhida]_&]:gap-[14px]',
                     '[[data-ui~=sidebar-recolhida]_&]:mx-0 [&_button_svg]:text-[#b5a2dc]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:h-auto',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-0',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:m-[0]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&_span]:hidden',
                 ].join(' ')}
             >
                 <MoonIcon size={21} weight="fill" className="text-white" />
@@ -317,7 +287,6 @@ export function BarraLateral({
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
                         '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={alternar}
                     aria-expanded={!recolhida}
@@ -338,11 +307,6 @@ export function BarraLateral({
                     "[&_button]:border-current [&_button[aria-pressed='true']]:bg-selecionado",
                     "[&_button[aria-pressed='true']]:text-[#eff0f2] [[data-ui~=sidebar-recolhida]_&]:flex-col",
                     '[[data-ui~=sidebar-recolhida]_&]:ml-0 [[data-ui~=sidebar-recolhida]_&]:mr-0',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-1',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:m-[0]',
                 ].join(' ')}
                 aria-label="Modo da Selene"
             >
@@ -365,11 +329,9 @@ export function BarraLateral({
             </div>
             <div
                 data-ui="acoes-sidebar"
-                className={[
-                    'flex items-center gap-[2px] mb-[14px] [[data-ui~=sidebar-recolhida]_&]:flex-col',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:m-[0]',
-                ].join(' ')}
+                className={['flex items-center gap-[2px] mb-[14px] [[data-ui~=sidebar-recolhida]_&]:flex-col'].join(
+                    ' ',
+                )}
             >
                 {!recolhida && (
                     <label
@@ -378,7 +340,6 @@ export function BarraLateral({
                             'flex items-center gap-[9px] text-secundario flex-1 min-w-0 p-[8px] [&_input]:min-w-0',
                             '[&_input]:w-full [&_input]:bg-transparent [&_input]:text-[12px] [&_input]:border-0',
                             '[&_input]:border-solid [&_input]:border-current [&_input::placeholder]:text-secundario',
-                            '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:hidden',
                         ].join(' ')}
                     >
                         <MagnifyingGlassIcon size={16} />
@@ -402,7 +363,6 @@ export function BarraLateral({
                             'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
                             '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                             "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                            '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                         ].join(' ')}
                         aria-label="Projetos"
                         title="Gerenciar projetos"
@@ -433,7 +393,6 @@ export function BarraLateral({
                         '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         '[[data-ui~=sidebar]_&]:w-auto [[data-ui~=sidebar]_&]:bg-transparent',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={() => criar()}
                     aria-label="Nova conversa"
@@ -447,7 +406,6 @@ export function BarraLateral({
                 className={[
                     '[[data-ui~=sidebar-recolhida]_&]:mt-[20px] flex-1 min-h-0 overflow-y-auto mt-[8px] flex',
                     'flex-col [scrollbar-width:thin] [scrollbar-color:#303339_transparent]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:hidden',
                 ].join(' ')}
                 aria-label="Conversas"
             >
@@ -496,20 +454,6 @@ export function BarraLateral({
                     'border-b-[currentColor] border-l-0 border-l-[currentColor] rounded-[0] text-[#9298a2]',
                     'px-[2px] border-solid [&_span]:text-[12px] [&_small]:block [&_small]:text-secundario',
                     '[&_small]:text-[11px] [&_small]:mt-[4px]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:flex-row',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:gap-[0]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:p-[0]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-[0px]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-solid',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar]_&]:border-[currentColor]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:flex-row',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:gap-[0]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:p-[0]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:border-[0px]',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:border-solid',
-                    '[@media(width<=760px)]:[[data-ui~=sidebar-recolhida]_&]:border-[currentColor]',
                 ].join(' ')}
             >
                 <button
@@ -520,7 +464,6 @@ export function BarraLateral({
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
                         '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={configurar}
                     aria-label="Configurações"
@@ -537,7 +480,6 @@ export function BarraLateral({
                         'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
                         '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
                         "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                        '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                     ].join(' ')}
                     onClick={estatisticas}
                     aria-label="Estatísticas"

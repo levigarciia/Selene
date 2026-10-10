@@ -5,6 +5,7 @@ import { executarProcesso } from './processos';
 import type { Conversa } from '../../shared/contratos';
 import { esquemaPlano } from '../../shared/atividade';
 import { prepararPatch } from './patch';
+import { esquemaComputador, ferramentaComputador, type ServicoComputador } from '../../shared/computador';
 import {
     esquemaPesquisaWeb,
     esquemaLeituraWeb,
@@ -106,9 +107,10 @@ export const ferramentas = [
 ];
 
 /** Oferece pesquisa nos dois modos e controle do navegador somente no modo Code. */
-export function obterFerramentas(modo: Conversa['modo'], webDisponivel: boolean) {
+export function obterFerramentas(modo: Conversa['modo'], webDisponivel: boolean, computadorDisponivel = false) {
     const pesquisa = webDisponivel ? ferramentasPesquisa : [];
-    return modo === 'code' ? [...ferramentas, ...pesquisa, ...(webDisponivel ? [ferramentaNavegador] : [])] : pesquisa;
+    return modo === 'code' ? [...ferramentas, ...pesquisa, ...(webDisponivel ? [ferramentaNavegador] : []),
+        ...(computadorDisponivel ? [ferramentaComputador] : [])] : pesquisa;
 }
 
 async function resolverExistente(caminho: string): Promise<string> {
@@ -163,6 +165,7 @@ export async function prepararFerramenta(
     entrada: unknown,
     conversa: Conversa,
     web?: ServicoWeb,
+    computador?: ServicoComputador,
 ): Promise<FerramentaPreparada> {
     if (nome === 'pesquisar_web' || nome === 'ler_pagina_web') {
         if (!web) throw new Error('Pesquisa na web indisponível.');
@@ -184,6 +187,11 @@ export async function prepararFerramenta(
         };
     }
     if (conversa.modo !== 'code') throw new Error('Esta ferramenta está disponível somente no modo Code.');
+    if (nome === 'controlar_computador') {
+        if (!computador) throw new Error('Controle do computador indisponível.');
+        const argumentos = esquemaComputador.parse(entrada);
+        return { argumentos, aprovacao: argumentos.acao !== 'fechar', ...computador.preparar(conversa.id, argumentos) };
+    }
     if (nome === 'controlar_navegador') {
         if (!web) throw new Error('Navegador indisponível.');
         const argumentos = esquemaNavegador.parse(entrada);

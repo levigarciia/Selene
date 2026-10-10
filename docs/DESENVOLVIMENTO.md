@@ -27,6 +27,10 @@ O instalador ainda não tem assinatura digital e o Windows pode solicitar confir
 * Aprovar escritas e comandos individualmente ou ativar acesso completo em uma conversa.
 * Baixar modelos com progresso, cancelamento e verificação de integridade, ou importar seus próprios GGUF.
 * Ajustar geração, contexto e processamento por CPU, Vulkan ou ROCm nas configurações.
+* Abrir a Selene pelo navegador do celular na mesma rede, com Chat, Code e aprovações.
+
+Para acessar pelo celular, ative Configurações, Acesso web no computador e abra o endereço exibido.
+Informe a chave de acesso e mantenha o aplicativo aberto. Consulte [Acesso pelo celular](ACESSO_WEB.md).
 
 A seleção automática de processamento considera a GPU disponível. Nas Radeon compatíveis, tenta ROCm;
 se essa carga falhar, tenta Vulkan e informa a troca. Também é possível escolher o processamento manualmente.

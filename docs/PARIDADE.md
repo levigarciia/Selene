@@ -35,7 +35,16 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
 * Data atual e fuso horário do computador no contexto do Chat e Code, atualizados a cada chamada e na compactação.
   Datas antigas no histórico permanecem como fatos históricos. Decisão própria da Selene solicitada pelo usuário.
 * Estatísticas em tela ampla com consumo diário, distribuição por entrada e saída, sessões e detalhamento por modelo
-  ou dia. Filtros por modo, modelo, 24 horas, 7, 30 e 90 dias ou histórico total. O consumo inclui contexto reenviado
+  ou dia. Filtros por conversa, modo, modelo, 24 horas, 7, 30 e 90 dias ou histórico total.
+  O painel explicita o uso acumulado no período. As informações da resposta mostram sua entrada medida.
+  O agrupamento usa o modelo registrado na resposta. Mensagens antigas sem essa identificação ficam
+  como modelo não registrado, sem atribuir seu consumo ao modelo atualmente selecionado na conversa.
+  Cada nova resposta preserva medições individuais das chamadas e resumos, com entrada, cache, saída
+  e contexto estimado. As informações da resposta permitem consultar essas medições.
+  A abertura repara atribuições antigas inconsistentes e salva um backup antes de persistir a correção.
+  Uma limpeza explicitamente autorizada pode descartar entradas legadas sem medição individual ou de cache.
+  Os IDs descartados persistem para impedir que o histórico recoloque os valores no painel.
+  O consumo inclui contexto reenviado
   e permanece após apagar conversas. Entrada em cache e sem cache usam somente medições do motor;
   registros antigos preservam a entrada sem divisão medida. A sidebar permanece disponível nesta tela.
   Layout solicitado pelo usuário a partir da referência visual fornecida, como decisão própria da Selene.
@@ -233,7 +242,15 @@ atual da Selene. Esses itens não acrescentam novas metas à paridade com o Odys
   Fonte: `routes/vault/vault_routes.py`.
 * Contas e integrações: configuração inicial, autenticação, usuários, privilégios, 2FA e tokens de API.
   Fontes: `routes/auth_routes.py` e `routes/api_token_routes.py`.
-* Interface web e mobile: acesso pelo navegador, layout responsivo, instalação como PWA e gestos de toque.
+* Interface web e mobile: a Selene oferece acesso autenticado pelo navegador na rede local,
+  com Chat, Code, sidebar móvel, imagens, exportação, aprovações e sincronização com o desktop.
+  Configurações, Acesso web permite ativar, escolher porta, consultar endereços e renovar a chave.
+  A exigência de chave pode ser desativada explicitamente para uma rede de confiança e vem ativada por padrão.
+  Seletores nativos de arquivos e pastas permanecem no computador. Instalação como PWA e outros
+  gestos específicos do Odysseus permanecem fora da implementação atual.
+  Validação: `bun run test:acesso-web`, com resposta de modelo simulada e escrita real após aprovação.
+  Detalhes de operação e limites em `docs/ACESSO_WEB.md`.
+  Referências adicionais: `launcher.py`, `app.py` e `routes/auth_routes.py`.
   Fontes: `README.md`, `static/manifest.json`, `static/sw.js` e `static/js`.
 * Companion: descoberta autenticada de capacidades do servidor, listagem dos modelos do usuário e pareamento
   de um cliente por token de uso único. A ponte não contém outro motor de inferência.
@@ -327,8 +344,8 @@ O contexto é obtido automaticamente do GGUF pelo motor e confirmado pelo endpoi
 O modo automático ajusta o contexto e as camadas na GPU à memória disponível, dividindo os pesos com a RAM
 quando necessário. Mantém uma margem de 1024 MiB, ampliada para 2048 MiB quando há projetor visual na GPU.
 Falhas de alocação reduzem a reserva efetivamente tentada, até 2048 tokens. Limites manuais permanecem explícitos.
-A resposta utiliza o espaço restante
-após preparar o histórico, com compactação automática e sem exigir limites manuais na interface.
+A resposta automática usa até 8192 tokens, respeitando o espaço restante após preparar o histórico
+e o limite de saída do modelo, com compactação automática e sem exigir limites manuais na interface.
 Esse comportamento é uma decisão própria da Selene solicitada pelo usuário.
 
 Um GGUF real deve responder sem provedor externo. O histórico deve sobreviver ao reinício.
@@ -422,6 +439,13 @@ quando uma interrupção impede receber o evento de cobrança. O total não impo
 de gastos da conta OpenRouter em outros aplicativos.
 
 Referências: `https://openrouter.ai/docs/api/api-reference/models/list-all-models-and-their-properties`
+
 e `https://openrouter.ai/docs/cookbook/administration/usage-accounting`.
 Catálogo e ordenação consultados ao vivo. Envio e cobrança validados no Electron com respostas
 simuladas, sem uma solicitação paga usando credenciais reais. Validação: `bun run test:openrouter`.
+
+Envios em fila e redirecionamento no Code são recursos próprios solicitados pelo usuário,
+documentados em `docs/ENVIOS_CODE.md`. Não integram a paridade com o Odysseus.
+
+Controle nativo do Windows, preview ao vivo no mobile e efeitos de atividade são recursos próprios
+solicitados pelo usuário, documentados em [controle do computador](COMPUTADOR.md).

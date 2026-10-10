@@ -1,60 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Evento, PonteSelene } from '../shared/contratos';
+import type { Evento } from '../shared/contratos';
+import { criarPonte } from '../shared/ponte';
 
-const ponte: PonteSelene = {
-    previasNavegador: () => ipcRenderer.invoke('selene:previasNavegador'),
-    atualizarNavegador: (id) => ipcRenderer.invoke('selene:atualizarNavegador', id),
-    criarProjetoChat: (nome) => ipcRenderer.invoke('selene:criarProjetoChat', nome),
-    editarProjetoChat: (id, edicao) => ipcRenderer.invoke('selene:editarProjetoChat', id, edicao),
-    removerProjetoChat: (id) => ipcRenderer.invoke('selene:removerProjetoChat', id),
-    importarArquivosProjetoChat: (id) => ipcRenderer.invoke('selene:importarArquivosProjetoChat', id),
-    removerArquivoProjetoChat: (id, arquivoId) => ipcRenderer.invoke('selene:removerArquivoProjetoChat', id, arquivoId),
-    moverConversaProjetoChat: (id, projetoId) => ipcRenderer.invoke('selene:moverConversaProjetoChat', id, projetoId),
-    salvarIconeProjeto: (id, icone) => ipcRenderer.invoke('selene:salvarIconeProjeto', id, icone),
-    importarIconeProjeto: (id) => ipcRenderer.invoke('selene:importarIconeProjeto', id),
-    adicionarProjeto: (entrada) => ipcRenderer.invoke('selene:adicionarProjeto', entrada),
-    alterarProjeto: (id, nome) => ipcRenderer.invoke('selene:alterarProjeto', id, nome),
-    removerProjeto: (id) => ipcRenderer.invoke('selene:removerProjeto', id),
-    promoverRascunho: (entrada) => ipcRenderer.invoke('selene:promoverRascunho', entrada),
-    verificarAtualizacao: () => ipcRenderer.invoke('selene:verificarAtualizacao'),
-    reiniciarAtualizacao: () => ipcRenderer.invoke('selene:reiniciarAtualizacao'),
-    abrirRelease: (versao) => ipcRenderer.invoke('selene:abrirRelease', versao),
-    estado: () => ipcRenderer.invoke('selene:estado'),
-    consultarHardware: () => ipcRenderer.invoke('selene:consultarHardware'),
-    configurarModelo: (id, perfil) => ipcRenderer.invoke('selene:configurarModelo', id, perfil),
-    novaConversa: (modo, origemId) => ipcRenderer.invoke('selene:nova', modo, origemId),
-    alterarConversa: (id, alteracao) => ipcRenderer.invoke('selene:alterar', id, alteracao),
-    excluirConversa: (id) => ipcRenderer.invoke('selene:excluir', id),
-    excluirConcluidas: () => ipcRenderer.invoke('selene:excluirConcluidas'),
-    escolherProjeto: (id, caminho) => ipcRenderer.invoke('selene:projeto', id, caminho),
-    importarModelo: () => ipcRenderer.invoke('selene:importar'),
-    importarProjetor: (id) => ipcRenderer.invoke('selene:importarProjetor', id),
-    anexarImagens: (imagens) => ipcRenderer.invoke('selene:anexarImagens', imagens),
-    lerImagem: (id) => ipcRenderer.invoke('selene:lerImagem', id),
-    descartarImagens: (ids) => ipcRenderer.invoke('selene:descartarImagens', ids),
-    baixarModelo: (id) => ipcRenderer.invoke('selene:baixarModelo', id),
-    cancelarDownload: (id) => ipcRenderer.invoke('selene:cancelarDownload', id),
-    favoritarModelo: (id, favorito) => ipcRenderer.invoke('selene:favoritarModelo', id, favorito),
-    removerModelo: (id) => ipcRenderer.invoke('selene:removerModelo', id),
-    instalarMotor: (backend) => ipcRenderer.invoke('selene:instalar', backend),
-    carregarModelo: (id) => ipcRenderer.invoke('selene:carregar', id),
-    pararMotor: () => ipcRenderer.invoke('selene:pararMotor'),
-    configurarOpenRouter: (chave) => ipcRenderer.invoke('selene:configurarOpenRouter', chave),
-    catalogoOpenRouter: (atualizar = false, ordenacao = 'most-popular') =>
-        ipcRenderer.invoke('selene:catalogoOpenRouter', atualizar, ordenacao),
-    cadastrarModeloOpenRouter: (id) => ipcRenderer.invoke('selene:cadastrarModeloOpenRouter', id),
-    configurar: (configuracao) => ipcRenderer.invoke('selene:configurar', configuracao),
-    enviar: (id, texto, imagens = []) => ipcRenderer.invoke('selene:enviar', id, texto, imagens),
-    editarEReenviar: (id, mensagemId, texto) => ipcRenderer.invoke('selene:editarEReenviar', id, mensagemId, texto),
-    regerar: (id, mensagemId) => ipcRenderer.invoke('selene:regerar', id, mensagemId),
-    cancelar: () => ipcRenderer.invoke('selene:cancelar'),
-    aprovar: (id, aprovada) => ipcRenderer.invoke('selene:aprovar', id, aprovada),
-    exportarConversa: (id) => ipcRenderer.invoke('selene:exportar', id),
-    janela: (acao) => ipcRenderer.send('selene:janela', acao),
-    aoEvento: (callback) => {
-        const receber = (_evento: Electron.IpcRendererEvent, evento: Evento) => callback(evento);
-        ipcRenderer.on('selene:evento', receber);
-        return () => ipcRenderer.removeListener('selene:evento', receber);
-    },
-};
-contextBridge.exposeInMainWorld('selene', ponte);
+contextBridge.exposeInMainWorld(
+    'selene',
+    criarPonte({
+        invocar: (nome, ...argumentos) => ipcRenderer.invoke(`selene:${nome}`, ...argumentos),
+        janela: (acao) => ipcRenderer.send('selene:janela', acao),
+        assinar: (callback) => {
+            const receber = (_evento: Electron.IpcRendererEvent, evento: Evento) => callback(evento);
+            ipcRenderer.on('selene:evento', receber);
+            return () => ipcRenderer.removeListener('selene:evento', receber);
+        },
+    }),
+);

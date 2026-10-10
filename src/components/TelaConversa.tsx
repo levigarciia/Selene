@@ -21,6 +21,8 @@ import { TarefasConversa } from './TarefasConversa';
 import { SeletorProjeto } from './SeletorProjeto';
 import type { Conversa } from '../../shared/contratos';
 import { rolagemDiscreta } from './rolagemDiscreta';
+import { FilaCode } from './FilaCode';
+import { ComputadorConversa } from './ComputadorConversa';
 
 /** Coordena os dois modos do MVP e os controles da conversa selecionada. */
 export function TelaConversa({
@@ -55,6 +57,7 @@ export function TelaConversa({
     const texto = conversa?.rascunho ?? '';
     const modo = conversa?.modo ?? modoInicial;
     const ocupado = !!estado.conversaEmExecucao || enviando || selecionandoProjeto;
+    const codeEmExecucao = modo === 'code' && !!conversa && estado.conversaEmExecucao === conversa.id;
     const inicial = !conversa?.mensagens.length;
     const modeloId = conversa?.modeloId ?? estado.motor.modeloId ?? estado.modelos[0]?.id ?? '';
     const modelo = estado.modelos.find((item) => item.id === modeloId);
@@ -68,9 +71,7 @@ export function TelaConversa({
     const ultimaMensagemNavegador = conversa?.mensagens
         .slice()
         .reverse()
-        .find((mensagem) =>
-            mensagem.acoes.some((acao) => acao.nome === 'controlar_navegador'),
-        );
+        .find((mensagem) => mensagem.acoes.some((acao) => acao.nome === 'controlar_navegador'));
 
     useEffect(() => {
         definirCatalogoAberto(false);
@@ -96,7 +97,21 @@ export function TelaConversa({
         }
     }
 
-    async function enviar() {
+    async function enviar(tipo: 'fila' | 'direcao' = 'direcao') {
+        if (codeEmExecucao) {
+            if (!texto.trim() || enviando || anexos.importando || anexos.imagens.length || !ultimaResposta) return;
+            definirEnviando(true);
+            try {
+                await executar(async () => {
+                    const resultado = await ponte!.acompanharCode(conversa!.id, texto, tipo, ultimaResposta.id);
+                    if (resultado.ok) dados.confirmarEnvioRascunho(conversa!.id, texto);
+                    return resultado;
+                });
+            } finally {
+                definirEnviando(false);
+            }
+            return;
+        }
         if ((!texto.trim() && !anexos.imagens.length) || ocupado || motorOcupado || anexos.importando) return;
         definirEnviando(true);
         try {
@@ -283,6 +298,10 @@ export function TelaConversa({
                                 }
                             />
                         ))}
+                        {dados.previasComputador[conversa.id] && (
+                            <ComputadorConversa previa={dados.previasComputador[conversa.id]}
+                                ponte={ponte} executar={executar} />
+                        )}
                     </div>
                 )}
             </div>
@@ -313,6 +332,15 @@ export function TelaConversa({
                     <p data-ui="aviso-web" className="text-[#b5bdc8] text-[11px] mb-[12px]">
                         Prévia da interface. Execute bun run dev para usar o desktop.
                     </p>
+                )}
+                {modo === 'code' && conversa && ponte && (
+                    <FilaCode
+                        conversa={conversa}
+                        ativa={codeEmExecucao}
+                        ocupado={enviando || (!!estado.conversaEmExecucao && !codeEmExecucao)}
+                        ponte={ponte}
+                        executar={executar}
+                    />
                 )}
                 <form
                     data-ui={`entrada ${arrastando ? 'entrada-arrastando' : ''}`}
@@ -406,6 +434,11 @@ export function TelaConversa({
                             if (!ocupado && !anexos.importando) void anexos.anexar(arquivos);
                         }}
                         onKeyDown={(evento) => {
+                            if (codeEmExecucao && evento.key === 'Enter' && evento.altKey) {
+                                evento.preventDefault();
+                                void enviar('fila');
+                                return;
+                            }
                             if (evento.key === 'Enter' && !evento.shiftKey && !evento.nativeEvent.isComposing) {
                                 evento.preventDefault();
                                 void enviar();
@@ -532,6 +565,27 @@ export function TelaConversa({
                         >
                             <PaperclipIcon size={18} />
                         </button>
+                        {codeEmExecucao && (
+                            <div className="ml-auto flex items-center gap-3 text-xs">
+                                <button
+                                    type="button"
+                                    disabled={!texto.trim() || enviando || !!anexos.imagens.length}
+                                    title="Colocar na fila (Alt+Enter)"
+                                    className="text-secundario disabled:opacity-40"
+                                    onClick={() => void enviar('fila')}
+                                >
+                                    Na fila
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={!texto.trim() || enviando || !!anexos.imagens.length}
+                                    title="Redirecionar a tarefa (Enter)"
+                                    className="text-principal disabled:opacity-40"
+                                >
+                                    Redirecionar
+                                </button>
+                            </div>
+                        )}
                         {estado.conversaEmExecucao || enviando || motorOcupado ? (
                             <button
                                 data-ui="botao-enviar botao-interromper"

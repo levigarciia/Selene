@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { esquemaConversa, type Conversa, type Projeto } from '../../shared/contratos';
 import { lerRascunhos, possuiRascunho } from '../../shared/rascunhos';
+import { criarIdentificador } from '../utils/identificador';
 
 const chave = 'selene.rascunhos.v1';
 
@@ -56,7 +57,7 @@ export function useRascunhos(informarErro: (erro: string) => void) {
         );
         if (vazio) return vazio;
         const novo = esquemaConversa.parse({
-            id: crypto.randomUUID(),
+            id: criarIdentificador(),
             titulo: 'Nova conversa',
             modo,
             projeto: projeto?.caminho ?? null,

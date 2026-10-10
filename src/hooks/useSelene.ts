@@ -3,6 +3,7 @@ import { esquemaDados, type Estado, type Projeto, type Resultado } from '../../s
 import { useRascunhos } from './useRascunhos';
 import { reunirRascunhos } from '../../shared/rascunhos';
 import type { PreviaNavegador } from '../../shared/web';
+import type { PreviaComputador } from '../../shared/computador';
 
 const inicial: Estado = {
     ...esquemaDados.parse({ versao: 1, configuracao: {}, modelos: [], conversas: [] }),
@@ -20,6 +21,7 @@ export function useSelene() {
     const [estado, definirEstado] = useState<Estado>(inicial);
     const [erro, definirErro] = useState('');
     const [previasNavegador, definirPreviasNavegador] = useState<Record<string, PreviaNavegador>>({});
+    const [previasComputador, definirPreviasComputador] = useState<Record<string, PreviaComputador>>({});
     const rascunhos = useRascunhos(definirErro);
     const [carregando, definirCarregando] = useState(!!window.selene);
     useEffect(() => {
@@ -30,6 +32,14 @@ export function useSelene() {
         if (!ponte) return;
         let ativo = true;
         const remover = ponte.aoEvento((evento) => {
+            if (evento.tipo === 'computador') {
+                definirPreviasComputador((anteriores) => {
+                    const anterior = anteriores[evento.previa.conversaId];
+                    return anterior && anterior.atualizadoEm > evento.previa.atualizadoEm ? anteriores :
+                        { ...anteriores, [evento.previa.conversaId]: evento.previa };
+                });
+                return;
+            }
             if (evento.tipo === 'navegador') {
                 definirPreviasNavegador((anteriores) => ({ ...anteriores, [evento.previa.conversaId]: evento.previa }));
                 return;
@@ -79,6 +89,12 @@ export function useSelene() {
             .finally(() => {
                 if (ativo) definirCarregando(false);
             });
+        void ponte.previasComputador().then((resultado) => {
+            if (!ativo || !resultado.ok) return;
+            definirPreviasComputador((anteriores) => ({
+                ...Object.fromEntries(resultado.valor.map((previa) => [previa.conversaId, previa])), ...anteriores,
+            }));
+        }).catch(() => {});
         return () => {
             ativo = false;
             remover();
@@ -106,6 +122,7 @@ export function useSelene() {
         estado: reunirRascunhos(estado, rascunhos.rascunhos),
         estadoPersistido: estado,
         previasNavegador,
+        previasComputador,
         ...rascunhos,
         criarRascunho: (modo: 'chat' | 'code', projeto?: Projeto | null, projetoChatId: string | null = null) =>
             rascunhos.criarRascunho(

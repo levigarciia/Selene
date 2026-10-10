@@ -29,6 +29,7 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
     const [periodo, definirPeriodo] = useState<PeriodoEstatisticas>('30dias');
     const [modo, definirModo] = useState('todos');
     const [modelo, definirModelo] = useState('todos');
+    const [conversa, definirConversa] = useState('todas');
     const [agrupamento, definirAgrupamento] = useState<'modelo' | 'dia'>('modelo');
     const tela = useRef<HTMLElement>(null);
     const aoFechar = useRef(fechar);
@@ -46,10 +47,13 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
     const nomeModelo = (id: string) =>
         nomes.get(id) ?? (id === 'desconhecido' ? 'Modelo não registrado' : 'Modelo removido');
     const modelos = [...new Set(todos.map((item) => item.modeloId ?? 'desconhecido'))];
+    const conversasMedidas = new Set(todos.map((registro) => registro.conversaId));
+    const conversas = estado.conversas.filter((item) => conversasMedidas.has(item.id));
     const registros = todos.filter(
         (item) =>
             (modo === 'todos' || item.modo === modo) &&
-            (modelo === 'todos' || (item.modeloId ?? 'desconhecido') === modelo),
+            (modelo === 'todos' || (item.modeloId ?? 'desconhecido') === modelo) &&
+            (conversa === 'todas' || item.conversaId === conversa),
     );
     const dados = montarPainelEstatisticas(registros, periodo);
     const grupos = agrupamento === 'modelo' ? dados.modelos : dados.dias;
@@ -126,6 +130,19 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
                             </option>
                         ))}
                     </select>
+                    <select
+                        aria-label="Conversa das estatísticas"
+                        value={conversa}
+                        className={seletor}
+                        onChange={(evento) => definirConversa(evento.target.value)}
+                    >
+                        <option value="todas">Todas as conversas</option>
+                        {conversas.map((item) => (
+                            <option key={item.id} value={item.id}>
+                                {item.titulo}
+                            </option>
+                        ))}
+                    </select>
                     <span className="text-[11px] text-secundario">
                         {data.format(dados.inicio)} a {data.format(dados.fim)}
                     </span>
@@ -155,6 +172,12 @@ export function Estatisticas({ estado, fechar }: { estado: Estado; fechar: () =>
                         </div>
                         <p className="mt-2 text-[12px] text-secundario">
                             {dados.sessoes} sessões, {dados.respostas} respostas medidas
+                        </p>
+                        <p className="mt-2 text-[11px] text-secundario">
+                            {conversa === 'todas'
+                                ? 'Uso acumulado de todas as conversas no período, incluindo as excluídas.'
+                                : 'Uso acumulado desta conversa no período.'}{' '}
+                            A entrada inclui o contexto reenviado em cada chamada ao modelo.
                         </p>
                         <div className="mt-6 space-y-4">
                             {dados.modelos.slice(0, 4).map((item) => (

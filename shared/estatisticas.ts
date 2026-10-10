@@ -16,7 +16,9 @@ export function intervaloEstatisticas(periodo: PeriodoEstatisticas, agora = new 
 }
 
 /** Use para preservar o uso registrado mesmo após apagar conversas, sem duplicar medições da mesma resposta. */
-export function reunirRegistrosUso(dados: Pick<Dados, 'conversas' | 'registrosUso'>): RegistroUso[] {
+export function reunirRegistrosUso(
+    dados: Pick<Dados, 'conversas' | 'registrosUso'> & Partial<Pick<Dados, 'entradasUsoDescartadas'>>,
+): RegistroUso[] {
     const registros = new Map(dados.registrosUso.map((registro) => [registro.mensagemId, registro]));
     for (const conversa of dados.conversas) {
         for (const mensagem of conversa.mensagens) {
@@ -32,17 +34,25 @@ export function reunirRegistrosUso(dados: Pick<Dados, 'conversas' | 'registrosUs
                 tempoGeracaoMs: 0,
                 tokensPorSegundo: 0,
                 ...mensagem.desempenho,
+                medicoesModelo: mensagem.medicoesModelo,
                 custoUsd: mensagem.custoUsd,
                 provedor: mensagem.provedor,
                 mensagemId: mensagem.id,
                 conversaId: conversa.id,
                 modo: conversa.modo,
-                modeloId: mensagem.modeloUsoId ?? conversa.modeloId,
+                modeloId: mensagem.modeloUsoId ?? null,
                 criadoEm: new Date(data).toISOString(),
             });
         }
     }
-    return [...registros.values()];
+    const descartadas = new Set(dados.entradasUsoDescartadas ?? []);
+    return [...registros.values()].map((registro) => {
+        if (!descartadas.has(registro.mensagemId)) return registro;
+        const limpo = { ...registro };
+        delete limpo.tokensEntrada;
+        delete limpo.tokensEntradaCache;
+        return limpo;
+    });
 }
 
 /** Calcula semana civil local, mês atual ou histórico completo somente com métricas registradas pelo motor. */

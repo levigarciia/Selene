@@ -1,4 +1,4 @@
-import type { Configuracao, Mensagem } from '../../shared/contratos';
+import type { Configuracao, Desempenho, Mensagem } from '../../shared/contratos';
 import { receberResposta } from './streaming';
 import { criarContextoTemporal } from './contextoTemporal';
 
@@ -70,6 +70,7 @@ type DependenciasContexto = {
     completar: (corpo: unknown, sinal: AbortSignal) => Promise<Response>;
     registrar: (resumo: string, antigas: MensagemModelo[]) => Promise<void>;
     publicar: () => void;
+    registrarUso?: (desempenho: Desempenho, contextoEstimado: number, limiteContexto: number) => void;
 };
 
 /** Compacta antes de cada inferência, mantendo o pedido atual e pares completos de ferramentas. */
@@ -216,6 +217,12 @@ export class CompactadorContexto {
                     sinal,
                     () => {},
                 );
+                if (resultado.desempenho)
+                    this.dependencias.registrarUso?.(
+                        resultado.desempenho,
+                        estimarTokens(montarMensagens(inicio + tamanho)),
+                        configuracao.contexto,
+                    );
                 if (resultado.chamadas.length) {
                     throw new Error(
                         'O modelo solicitou ferramentas em vez de resumir. O histórico original foi preservado.',

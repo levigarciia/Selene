@@ -408,6 +408,31 @@ export const MensagemConversa = memo(function MensagemConversa({
                                     {tokens.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} tokens/s
                                 </span>
                             )}
+                            {mostrarTokens && mensagem.desempenho?.tokensEntrada !== undefined && (
+                                <span role="tooltip">
+                                    Entrada desta resposta: {mensagem.desempenho.tokensEntrada.toLocaleString('pt-BR')}{' '}
+                                    tokens
+                                </span>
+                            )}
+                            {mostrarTokens && mensagem.medicoesModelo?.length && (
+                                <details className="text-[11px] text-secundario">
+                                    <summary className="cursor-pointer">
+                                        {mensagem.medicoesModelo.length} chamadas ao modelo
+                                    </summary>
+                                    <ol className="mt-1 space-y-1">
+                                        {mensagem.medicoesModelo.map((medicao, indice) => (
+                                            <li key={indice}>
+                                                {indice + 1}:{' '}
+                                                {medicao.finalidade === 'compactacao' ? 'Resumo' : 'Resposta'}. Entrada:{' '}
+                                                {medicao.tokensEntrada?.toLocaleString('pt-BR') ?? 'sem medição'}.{' '}
+                                                Cache:{' '}
+                                                {medicao.tokensEntradaCache?.toLocaleString('pt-BR') ?? 'sem medição'}.{' '}
+                                                Saída: {medicao.tokensGerados.toLocaleString('pt-BR')} tokens.
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </details>
+                            )}
                         </div>
                     )}
             </div>

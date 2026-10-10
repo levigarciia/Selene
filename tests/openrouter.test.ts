@@ -49,6 +49,19 @@ test('OpenRouter recebe tokens, cache e raciocínio no SSE sem tempos do motor l
     expect(resultado.desempenho).toMatchObject({ tokensEntrada: 90, tokensGerados: 12, tokensEntradaCache: 20 });
 });
 
+test('eventos repetidos de uso no mesmo fluxo não multiplicam tokens de entrada', async () => {
+    const eventos = [
+        { choices: [{ delta: { content: 'Olá' } }], usage: { prompt_tokens: 50, completion_tokens: 1 } },
+        { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 50, completion_tokens: 3 } },
+        { choices: [], usage: { prompt_tokens: 50, completion_tokens: 3 } },
+    ];
+    const resposta = new Response(
+        eventos.map((evento) => `data: ${JSON.stringify(evento)}\n\n`).join('') + 'data: [DONE]\n\n',
+    );
+    const resultado = await receberResposta(resposta, new AbortController().signal, () => {});
+    expect(resultado.desempenho).toMatchObject({ tokensEntrada: 50, tokensGerados: 3 });
+});
+
 test('gastos persistem sem duplicar após reabrir, trocar modelo, editar ou excluir conversa', async () => {
     const pasta = await mkdtemp(join(tmpdir(), 'selene-openrouter-'));
     try {

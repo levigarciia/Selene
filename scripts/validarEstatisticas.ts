@@ -17,7 +17,10 @@ const agora = new Date();
 const dados = esquemaDados.parse({
     versao: 1,
     configuracao: {},
-    conversas: [],
+    conversas: [
+        { id: conversaA, titulo: 'Projeto de teste', modo: 'code', atualizadoEm: agora.toISOString() },
+        { id: conversaB, titulo: 'Chat de teste', modo: 'chat', atualizadoEm: agora.toISOString() },
+    ],
     modelos: [
         { id: modeloA, nome: 'Qwen 3.5 9B', caminho: resolve(pasta, 'qwen.gguf'), tamanho: 1024 },
         { id: modeloB, nome: 'Gemma 3 4B', caminho: resolve(pasta, 'gemma.gguf'), tamanho: 1024 },
@@ -72,6 +75,18 @@ try {
         `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(esperado.tokensRegistrados)} tokens`,
     );
     assert.equal(await tela.locator('tbody tr').count(), 2);
+    await tela.getByRole('combobox', { name: 'Conversa das estatísticas' }).selectOption(conversaB);
+    const esperadoConversa = montarPainelEstatisticas(
+        dados.registrosUso.filter((item) => item.conversaId === conversaB),
+        '30dias',
+        agora,
+    );
+    assert.equal(
+        await total.getAttribute('title'),
+        `${new Intl.NumberFormat('pt-BR').format(esperadoConversa.tokensRegistrados)} tokens`,
+    );
+    assert.equal(await tela.locator('tbody tr').count(), 1);
+    await tela.getByRole('combobox', { name: 'Conversa das estatísticas' }).selectOption('todas');
     const ponto = tela.locator('[data-ui="grafico-tokens"] [role="button"]').last();
     await ponto.focus();
     assert((await tela.locator('[aria-live="polite"]').innerText()).includes('tokens'));

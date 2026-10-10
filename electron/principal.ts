@@ -23,9 +23,11 @@ import {
 import { Persistencia } from './services/persistencia';
 import { MotorLocal } from './services/motor';
 import { Agente } from './services/agente';
+import { EnviosCode } from './services/enviosCode';
 import { OpenRouter } from './services/openrouter';
 import { esquemaOrdenacaoOpenRouter } from '../shared/openrouter';
 import { Navegador } from './services/navegador';
+import { Computador } from './services/computador';
 import { obterPedidoParaRegerarChat, prepararReenvioChat } from './services/reenvioChat';
 import { catalogoModelos, encontrarModeloLocal, type ModeloCatalogo } from '../shared/catalogo';
 import { DownloadsModelos } from './services/downloadModelos';
@@ -37,6 +39,10 @@ import { shell } from 'electron';
 import { urlRelease } from '../shared/atualizacoes';
 import { configuracaoParaModelo } from '../shared/configuracaoMotor';
 import { consultarHardware } from './services/hardwareLocal';
+import { Operacoes } from './services/operacoes';
+import { AcessoWeb } from './services/acessoWeb';
+import { esquemaConfiguracaoWeb } from '../shared/acessoWeb';
+import { exportarMarkdown } from '../shared/exportacao';
 
 app.setName('Selene');
 app.setPath('userData', join(app.getPath('appData'), 'Selene'));
@@ -46,11 +52,15 @@ let janela: BrowserWindow | null = null;
 let persistencia: Persistencia;
 let motor: MotorLocal;
 let agente: Agente;
+let enviosCode: EnviosCode;
 let openrouter: OpenRouter;
 let navegador: Navegador;
+let computador: Computador;
 let downloads: DownloadsModelos;
 let anexos: AnexosImagens;
 let atualizacoes: Atualizacoes;
+let acessoWeb: AcessoWeb;
+const operacoes = new Operacoes();
 let tarefa: Promise<void> | null = null;
 let encerramentoAutorizado = false;
 const uuid = z.string().uuid();
@@ -73,6 +83,7 @@ function estado(): Estado {
 
 function publicar(evento: Evento): void {
     if (janela && !janela.isDestroyed()) janela.webContents.send('selene:evento', evento);
+    acessoWeb?.publicar(evento);
 }
 
 function publicarEstado(): void {
@@ -95,11 +106,11 @@ function registrar<T extends z.ZodType>(
     esquema: T,
     executar: (argumentos: z.infer<T>) => Promise<unknown> | unknown,
 ): void {
+    operacoes.registrar(nome, esquema, executar);
     ipcMain.handle(`selene:${nome}`, async (evento, ...entrada): Promise<Resultado<unknown>> => {
         try {
             validarRemetente(evento);
-            const argumentos = esquema.parse(entrada);
-            return { ok: true, valor: await executar(argumentos) };
+            return await operacoes.executar(nome, entrada);
         } catch (erro) {
             return { ok: false, erro: erro instanceof Error ? erro.message : 'Operação não concluída.' };
         }
@@ -126,6 +137,7 @@ async function salvar(): Promise<void> {
 async function excluirConversas(ids: string[]): Promise<void> {
     for (const id of ids) exigirLivre(id);
     for (const id of ids) navegador?.fecharConversa(id);
+    for (const id of ids) computador?.fecharConversa(id);
     const idsImagens = [
         ...new Set(
             ids.flatMap((id) =>
@@ -179,7 +191,18 @@ async function carregarModelo(id: string): Promise<void> {
 }
 
 function registrarOperacoes(): void {
+    registrar('acessoWeb', z.tuple([]), () => acessoWeb.estado);
+    registrar('configurarAcessoWeb', z.tuple([esquemaConfiguracaoWeb]), ([configuracao]) =>
+        acessoWeb.configurar(configuracao),
+    );
+    registrar('renovarChaveWeb', z.tuple([]), () => acessoWeb.renovarChave());
     registrar('previasNavegador', z.tuple([]), () => navegador.listarPrevias());
+    registrar('previasComputador', z.tuple([]), () => computador.listarPrevias());
+    registrar('pararComputador', z.tuple([z.string().uuid()]), ([id]) => {
+        conversaPorId(id);
+        computador.fecharConversa(id);
+        if (agente.conversaId === id) agente.cancelar();
+    });
     registrar('atualizarNavegador', z.tuple([uuid]), async ([id]) => {
         if (conversaPorId(id).modo !== 'code') throw new Error('O navegador pertence ao modo Code.');
         return navegador.atualizarConversa(id);
@@ -569,7 +592,13 @@ function registrarOperacoes(): void {
         const modelo = persistencia.dados.modelos.find((item) => item.id === motor.estado.modeloId);
         motor.aplicarConfiguracao(configuracaoParaModelo(configuracao, modelo));
     });
-    async function enviarMensagem(id: string, texto: string, ids: string[], mensagemId?: string): Promise<void> {
+    async function enviarMensagem(
+        id: string,
+        texto: string,
+        ids: string[],
+        mensagemId?: string,
+        envioId?: string,
+    ): Promise<void> {
         exigirLivre();
         if (['carregando', 'instalando'].includes(motor.estado.fase)) throw new Error('Aguarde o motor local.');
         const conversa = conversaPorId(id);
@@ -594,9 +623,15 @@ function registrarOperacoes(): void {
             : -1;
         const possuiImagens =
             imagens.length || preparada.mensagens.slice(indiceResumo + 1).some((mensagem) => mensagem.imagens?.length);
+        if (envioId) {
+            if (!conversa.enviosPendentes?.some((item) => item.id === envioId)) {
+                throw new Error('Esta mensagem não está mais na fila.');
+            }
+        }
         tarefa = agente
             .executar(conversa, texto, configuracao, imagens, modelo, mensagemId, {
                 ligandoModelo: precisaLigar,
+                envioId,
                 executar: async (sinal) => {
                     sinal.throwIfAborted();
                     if (modelo.openrouter) {
@@ -628,15 +663,57 @@ function registrarOperacoes(): void {
             .catch((erro: Error) => {
                 publicar({ tipo: 'erro', erro: `Falha ao persistir a conversa: ${erro.message}` });
             })
-            .finally(() => {
+            .finally(async () => {
                 tarefa = null;
                 publicarEstado();
+                const resposta = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
+                const proxima = conversa.enviosPendentes?.[0];
+                if (encerramentoAutorizado || resposta?.estado !== 'concluida' || !proxima) return;
+                try {
+                    await enviarMensagem(id, proxima.texto, [], undefined, proxima.id);
+                } catch (erro) {
+                    publicar({ tipo: 'erro', erro: erro instanceof Error ? erro.message : 'Falha ao iniciar a fila.' });
+                }
             });
         publicarEstado();
         await anexos.descartar(ids);
     }
     registrar('enviar', z.tuple([uuid, z.string().trim().max(30000), z.array(uuid).max(4)]), ([id, texto, ids]) =>
         enviarMensagem(id, texto, ids),
+    );
+    registrar(
+        'acompanharCode',
+        z.tuple([uuid, z.string().trim().min(1).max(30000), z.enum(['fila', 'direcao']), uuid]),
+        async ([id, texto, tipo, respostaId]) => {
+            const conversa = conversaPorId(id);
+            await enviosCode.adicionar(conversa, texto, tipo, () => agente.validarDirecao(id, respostaId));
+            if (tipo === 'direcao') agente.reconsiderar();
+        },
+    );
+    registrar(
+        'gerenciarEnvioCode',
+        z.tuple([uuid, uuid, z.enum(['remover', 'direcao', 'executar'])]),
+        async ([id, envioId, acao]) => {
+            const conversa = conversaPorId(id);
+            if (acao === 'executar') {
+                exigirLivre();
+                const envio = conversa.enviosPendentes?.find((item) => item.id === envioId);
+                if (!envio) throw new Error('Esta mensagem não está mais na fila.');
+                return enviarMensagem(id, envio.texto, [], undefined, envioId);
+            }
+            await enviosCode.alterar(conversa, () => {
+                const envio = conversa.enviosPendentes?.find((item) => item.id === envioId);
+                if (!envio) throw new Error('Esta mensagem não está mais na fila.');
+                if (acao === 'remover') {
+                    conversa.enviosPendentes = conversa.enviosPendentes!.filter((item) => item.id !== envioId);
+                    return;
+                }
+                const resposta = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
+                agente.validarDirecao(id, resposta?.id ?? '');
+                envio.tipo = 'direcao';
+            });
+            if (acao === 'direcao') agente.reconsiderar();
+        },
     );
     registrar('editarEReenviar', z.tuple([uuid, uuid, z.string().trim().max(30000)]), ([id, mensagemId, texto]) =>
         enviarMensagem(id, texto, [], mensagemId),
@@ -658,17 +735,7 @@ function registrarOperacoes(): void {
             filters: [{ name: 'Markdown', extensions: ['md'] }],
         });
         if (escolha.canceled || !escolha.filePath) return;
-        const texto = [`# ${conversa.titulo}`];
-        for (const mensagem of conversa.mensagens) {
-            texto.push(`## ${mensagem.papel === 'user' ? 'Você' : 'Selene'}\n\n${mensagem.texto}`);
-            for (const imagem of mensagem.imagens ?? []) {
-                texto.push(`![${imagem.nome.replace(/[\[\]\\]/g, '')}](${await anexos.ler(imagem.id)})`);
-            }
-            texto.push(
-                mensagem.acoes.map((acao) => `### ${acao.nome}: ${acao.estado}\n\n${acao.resultado}`).join('\n\n'),
-            );
-        }
-        await writeFile(escolha.filePath, texto.join('\n\n'), 'utf8');
+        await writeFile(escolha.filePath, await exportarMarkdown(conversa, (id) => anexos.ler(id)), 'utf8');
     });
     ipcMain.on('selene:janela', (evento, acao) => {
         try {
@@ -738,16 +805,21 @@ app.whenReady()
         downloads = new DownloadsModelos(join(app.getPath('userData'), 'models'), publicarEstado, registrarDownload);
         await downloads.preparar(catalogoModelos);
         navegador = new Navegador((previa) => publicar({ tipo: 'navegador', previa }));
+        computador = new Computador((previa) => publicar({ tipo: 'computador', previa }), urlInterface);
         openrouter = new OpenRouter(app.getPath('userData'));
         await openrouter.abrir();
+        enviosCode = new EnviosCode(salvar);
         agente = new Agente({
+            receberDirecoes: (conversa) =>
+                conversa.modo === 'code' ? enviosCode.receberDirecoes(conversa) : Promise.resolve([]),
             web: navegador,
+            computador: process.platform === 'win32' ? computador : undefined,
             contextoProjetoChat: (conversa) => contextoProjetoChat(persistencia.dados, conversa),
             completar: (corpo, sinal) => {
                 const conversa = agente.conversaId ? conversaPorId(agente.conversaId) : undefined;
                 const modelo = persistencia.dados.modelos.find((item) => item.id === conversa?.modeloId);
                 if (!modelo?.openrouter) return motor.completar(corpo, sinal);
-                const mensagem = conversa!.mensagens.at(-1)!;
+                const mensagem = [...conversa!.mensagens].reverse().find((item) => item.papel === 'assistant')!;
                 return openrouter.completar(modelo.openrouter.id, corpo, sinal, async (custo) => {
                     mensagem.custoUsd = (mensagem.custoUsd ?? 0) + custo;
                     mensagem.provedor = 'openrouter';
@@ -767,6 +839,12 @@ app.whenReady()
                 if (!agente.conversaId) publicarEstado();
             },
         });
+        acessoWeb = new AcessoWeb(
+            join(app.getPath('userData'), 'acessoWeb.json'),
+            join(__dirname, '../dist'),
+            operacoes,
+            () => ({ tipo: 'estado', estado: estado() }),
+        );
         registrarOperacoes();
         atualizacoes = new Atualizacoes(
             electronUpdater.autoUpdater,
@@ -776,6 +854,7 @@ app.whenReady()
             prepararEncerramento,
         );
         await criarJanela();
+        await acessoWeb.abrir();
         atualizacoes.iniciar();
     })
     .catch((erro: Error) => {
@@ -784,9 +863,11 @@ app.whenReady()
     });
 app.on('window-all-closed', () => app.quit());
 async function prepararEncerramento(): Promise<void> {
+    await acessoWeb?.encerrar();
     atualizacoes?.encerrar();
     agente?.cancelar();
     navegador?.encerrar();
+    computador?.encerrar();
     motor?.parar();
     await downloads?.encerrar();
     await tarefa;

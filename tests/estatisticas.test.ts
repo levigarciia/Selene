@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { esquemaDados, type RegistroUso } from '../shared/contratos';
@@ -76,6 +76,140 @@ test('cache é parte da entrada e registros antigos permanecem sem divisão medi
             resultado.tokensEntradaSemMedicaoCache +
             resultado.tokensGerados,
     ).toBe(resultado.tokensRegistrados);
+});
+
+test('conversa nova não herda tokens antigos enquanto aguarda a resposta', () => {
+    const agora = new Date();
+    const antigo = { ...registro(agora), tokensEntrada: 999000 };
+    const mensagemId = randomUUID();
+    const dados = esquemaDados.parse({
+        versao: 1,
+        configuracao: {},
+        modelos: [],
+        registrosUso: [antigo],
+        conversas: [
+            {
+                id: randomUUID(),
+                titulo: 'oi',
+                modo: 'chat',
+                atualizadoEm: agora.toISOString(),
+                mensagens: [
+                    {
+                        id: mensagemId,
+                        papel: 'assistant',
+                        texto: '',
+                        estado: 'gerando',
+                        criadoEm: agora.toISOString(),
+                        provedor: 'openrouter',
+                    },
+                ],
+            },
+        ],
+    });
+    const registros = reunirRegistrosUso(dados);
+    expect(montarPainelEstatisticas(registros, 'total', agora).tokensEntrada).toBe(999000);
+    const destaConversa = registros.filter((item) => item.conversaId === dados.conversas[0].id);
+    expect(destaConversa[0].tokensEntrada).toBeUndefined();
+    expect(montarPainelEstatisticas(destaConversa, 'total', agora).tokensEntrada).toBe(0);
+    dados.conversas[0].mensagens[0].desempenho = {
+        tokensEntrada: 50,
+        tokensGerados: 3,
+        tokensPorSegundo: 3,
+        tempoGeracaoMs: 1000,
+    };
+    const medidos = reunirRegistrosUso(dados);
+    expect(montarPainelEstatisticas(medidos, 'total', agora).tokensEntrada).toBe(999050);
+    expect(medidos.find((item) => item.mensagemId === mensagemId)?.tokensEntrada).toBe(50);
+});
+
+test('trocar modelo não transfere consumo legado nem altera o modelo registrado na resposta', async () => {
+    const agora = new Date();
+    const google = randomUUID();
+    const anterior = randomUUID();
+    const legado = { ...registro(agora), tokensEntrada: 790135, modeloId: google };
+    const dados = esquemaDados.parse({
+        versao: 1,
+        configuracao: {},
+        modelos: [],
+        registrosUso: [legado],
+        conversas: [
+            {
+                id: legado.conversaId,
+                titulo: 'Histórico antigo',
+                modo: 'code',
+                modeloId: google,
+                atualizadoEm: agora.toISOString(),
+                mensagens: [
+                    {
+                        id: legado.mensagemId,
+                        papel: 'assistant',
+                        texto: 'Resposta antiga',
+                        estado: 'concluida',
+                        criadoEm: agora.toISOString(),
+                        desempenho: legado,
+                    },
+                    {
+                        id: randomUUID(),
+                        papel: 'assistant',
+                        texto: 'Resposta identificada',
+                        estado: 'concluida',
+                        criadoEm: agora.toISOString(),
+                        modeloUsoId: anterior,
+                        desempenho: { ...registro(agora), tokensEntrada: 100 },
+                    },
+                ],
+            },
+            {
+                id: randomUUID(),
+                titulo: 'oi',
+                modo: 'chat',
+                modeloId: google,
+                atualizadoEm: agora.toISOString(),
+                mensagens: [
+                    {
+                        id: randomUUID(),
+                        papel: 'assistant',
+                        texto: 'Olá',
+                        estado: 'concluida',
+                        criadoEm: agora.toISOString(),
+                        modeloUsoId: google,
+                        provedor: 'openrouter',
+                        desempenho: { ...registro(agora), tokensEntrada: 50 },
+                    },
+                ],
+            },
+        ],
+    });
+    const pasta = await mkdtemp(join(tmpdir(), 'selene-atribuicao-'));
+    try {
+        await writeFile(join(pasta, 'selene.json'), JSON.stringify(dados));
+        const persistencia = new Persistencia(pasta);
+        await persistencia.abrir();
+        const backups = (await readdir(pasta)).filter((nome) => nome.startsWith('selene.antesCorrecaoUso.'));
+        expect(backups).toHaveLength(1);
+        expect(JSON.parse(await readFile(join(pasta, backups[0]!), 'utf8')).registrosUso[0].modeloId).toBe(google);
+        expect(JSON.parse(await readFile(join(pasta, 'selene.json'), 'utf8')).registrosUso[0].modeloId).toBeNull();
+        const validar = () => {
+            const registros = reunirRegistrosUso(persistencia.dados);
+            const painel = montarPainelEstatisticas(registros, 'total', agora);
+            expect(painel.tokensEntrada).toBe(790285);
+            expect(painel.modelos.find((item) => item.id === google)?.entrada).toBe(50);
+            expect(painel.modelos.find((item) => item.id === anterior)?.entrada).toBe(100);
+            expect(painel.modelos.find((item) => item.id === 'desconhecido')?.entrada).toBe(790135);
+            expect(registros).toHaveLength(3);
+        };
+        validar();
+        persistencia.dados.conversas[0].modeloId = randomUUID();
+        await persistencia.salvar();
+        validar();
+        persistencia.dados.conversas = [];
+        await persistencia.salvar();
+        await persistencia.abrir();
+        validar();
+        expect((await readdir(pasta)).filter((nome) => nome.startsWith('selene.antesCorrecaoUso.'))).toHaveLength(1);
+    } finally {
+        await rm(pasta, { recursive: true, force: true });
+    }
 });
 
 test('migra métricas antigas antes de apagar e preserva o consumo sem duplicar após reinício', async () => {

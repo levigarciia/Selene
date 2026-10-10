@@ -16,6 +16,7 @@ const nomes: Record<string, string> = {
     pesquisar_web: 'Pesquisando',
     ler_pagina_web: 'Lendo página',
     controlar_navegador: 'Usando navegador',
+    controlar_computador: 'Usando computador',
 };
 const nomesConcluidos: Record<string, string> = {
     listar_arquivos: 'Explorou',
@@ -28,6 +29,7 @@ const nomesConcluidos: Record<string, string> = {
     pesquisar_web: 'Pesquisou',
     ler_pagina_web: 'Leu página',
     controlar_navegador: 'Usou navegador',
+    controlar_computador: 'Usou computador',
 };
 const estados: Record<Acao['estado'], string> = {
     preparando: 'Preparando ação',

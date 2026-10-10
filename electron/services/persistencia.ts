@@ -25,6 +25,7 @@ export class Persistencia {
                 await this.salvar();
             }
             for (const conversa of this.dados.conversas) {
+                for (const envio of conversa.enviosPendentes ?? []) envio.tipo = 'fila';
                 if (conversa.modo === 'chat') conversa.acessoCompleto = false;
                 for (const mensagem of conversa.mensagens) {
                     delete mensagem.faseContexto;
@@ -37,7 +38,18 @@ export class Persistencia {
                     }
                 }
             }
-            this.dados.registrosUso = reunirRegistrosUso(this.dados);
+            const corrigidos = reunirRegistrosUso(this.dados);
+            const anteriores = new Map(this.dados.registrosUso.map((registro) => [registro.mensagemId, registro]));
+            const corrigiuModelo = corrigidos.some((registro) => {
+                const anterior = anteriores.get(registro.mensagemId);
+                return anterior && anterior.modeloId !== registro.modeloId;
+            });
+            this.dados.registrosUso = corrigidos;
+            if (corrigiuModelo) {
+                const instante = new Date().toISOString().replace(/[:.]/g, '');
+                await writeFile(join(this.pasta, `selene.antesCorrecaoUso.${instante}.json`), texto, { flag: 'wx' });
+                await this.salvar();
+            }
         } catch (erro) {
             if ((erro as NodeJS.ErrnoException).code !== 'ENOENT') {
                 throw new Error('Não foi possível ler os dados locais. O arquivo original foi preservado.', {
