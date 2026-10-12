@@ -2,7 +2,7 @@
     <img src="public/icon.png" alt="Logo da Selene" width="120" />
     <h1>Selene</h1>
     <p><strong>Sua inteligência artificial. No seu computador.</strong></p>
-    <p>Converse, explore ideias e trabalhe nos seus projetos com uma assistente local.</p>
+    <p>Converse, explore ideias e trabalhe nos seus projetos com modelos locais ou provedores conectados.</p>
     <a href="https://github.com/levigarciia/Selene/releases/latest">
         <img src="https://img.shields.io/badge/Baixar_para_Windows-09090b?style=for-the-badge&amp;logo=windows&amp;logoColor=white" alt="Baixar para Windows" />
     </a>
@@ -16,16 +16,21 @@
 
 <br />
 
-A **Selene** é uma assistente de inteligência artificial que roda no seu computador.
+A **Selene** é um ambiente desktop para usar modelos de inteligência artificial no seu computador.
 Use o **Chat** para conversar, estudar e explorar ideias, ou o **Code** para trabalhar com arquivos e projetos.
 Sem assinatura de IA e sem precisar configurar uma chave de API para começar.
 
 ![Chat da Selene](public/screenshots/chat.png)
 
+As capturas mostram a interface real com conversas e dados fictícios para demonstração.
+
 ## Converse do seu jeito
 
 Faça perguntas, organize ideias, peça explicações e volte às suas conversas quando quiser.
 A Selene guarda seu histórico no computador e permite pesquisar, renomear e exportar conversas.
+
+A memória entre conversas ajuda a recuperar preferências e informações relevantes.
+Você pode consultar e gerenciar essas memórias nas configurações.
 
 Você também pode anexar imagens para conversar sobre elas com um modelo que tenha suporte visual.
 
@@ -34,14 +39,37 @@ Você também pode anexar imagens para conversar sobre elas com um modelo que te
 No modo **Code**, escolha uma pasta e peça ajuda para entender arquivos, criar código ou fazer alterações.
 Acompanhe o plano, as ações e os resultados na própria conversa.
 
+![Conversa Code com resultado e estados das tarefas](public/screenshots/code.png)
+
+Mantenha conversas separadas para cada tarefa e acompanhe o que está em execução, pronto,
+interrompido ou com erro. Conversas concluídas ficam em uma seção própria da sidebar.
+
+![Conversa Code durante a leitura de arquivos](public/screenshots/code-trabalhando.png)
+
 Você decide o que pode ser executado. A Selene pede aprovação para alterações e comandos,
 ou você pode ativar o acesso completo naquela conversa.
+
+![Comando aguardando aprovação no modo Code](public/screenshots/code-aprovacao.png)
+
+O Code também oferece terminal integrado, abertura do projeto no editor, troca de branches,
+commit, push e criação de pull requests. Git, GitHub CLI e os editores precisam estar disponíveis
+no computador para as operações correspondentes.
+
+## Pull requests e issues
+
+Consulte os itens dos repositórios dos seus projetos sem sair da Selene.
+A lista reúne pull requests e issues, com busca, filtros, ordenação e agrupamento por repositório.
+
+![Lista de pull requests com dados fictícios](public/screenshots/pull-requests.png)
 
 ## Escolha sua inteligência artificial
 
 Explore o catálogo, encontre um modelo que combine com seu computador e baixe pela própria Selene.
 Você pode acompanhar o progresso, cancelar um download e salvar seus favoritos.
 Já tem um modelo? Importe seu arquivo GGUF.
+
+Você também pode conectar o **OpenRouter** com uma chave de API ou usar **ChatGPT** e **Claude**
+pelos CLIs oficiais autenticados. Os serviços remotos seguem os custos, limites e requisitos de cada provedor.
 
 <p align="center">
     <img src="src/assets/modelos/qwen.svg" alt="Qwen" width="42" height="42" />&nbsp;&nbsp;&nbsp;
@@ -57,9 +85,11 @@ Modelos menores são uma boa opção para começar; modelos maiores precisam de 
 
 ## Tudo no seu computador
 
-As conversas e a execução dos modelos ficam no seu dispositivo.
+O histórico das conversas fica no seu dispositivo. Ao usar um modelo local, a inferência também acontece nele.
 Depois de baixar o modelo e preparar o motor, você pode conversar sem internet.
-A conexão é usada para baixar modelos, preparar o motor e receber atualizações.
+A conexão é usada para baixar modelos, preparar o motor, receber atualizações e acessar recursos online.
+Provedores remotos, pesquisas na web e a extração automática opcional de memórias pelo OpenRouter
+enviam as informações necessárias aos serviços correspondentes.
 
 ## Comece em poucos passos
 
@@ -95,3 +125,6 @@ O código está disponível para consulta, com uso pessoal, educacional e de pes
 [licença da Selene](LICENSE.md).
 
 Para informações de desenvolvimento, consulte a [documentação técnica](docs/DESENVOLVIMENTO.md).
+
+Para atualizar as capturas com os mesmos cenários fictícios, execute `bun run build` e
+`bun scripts/testarDesktop.ts scripts/capturarReadme.ts` no Windows.
