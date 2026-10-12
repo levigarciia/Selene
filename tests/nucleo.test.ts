@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { esquemaConfiguracao, type Conversa, type Mensagem } from '../shared/contratos';
@@ -398,7 +398,8 @@ describe('Ciclo do agente', () => {
         expect(conversa.mensagens.at(-1)?.acoes.every((acao) => acao.estado === 'concluida')).toBe(true);
         const terminal = conversa.mensagens.at(-1)?.acoes.find((acao) => acao.nome === 'executar_terminal');
         expect(terminal?.resultado).toContain('Código de saída: 0');
-        expect(terminal?.resultado).toContain(externo);
+        const pastaTerminal = terminal!.resultado.split('\n').slice(1).join('\n').trim();
+        expect(await realpath(pastaTerminal)).toBe(await realpath(externo));
     }, 30000);
     test('aprovação executa, enquanto acesso completo dispensa a aprovação', async () => {
         for (const acessoCompleto of [false, true]) {
