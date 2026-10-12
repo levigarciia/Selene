@@ -11,6 +11,7 @@ import {
     SearchIcon,
 } from 'lucide-react';
 import type { ItemGitHub } from '../../shared/repositorio';
+import { MenuAcoesGitHub } from './MenuAcoesGitHub';
 import type { GrupoGitHub } from './listaGitHub';
 import { tempoRelativo } from './listaGitHub';
 
@@ -57,13 +58,15 @@ function Rotulo({ nome, cor }: { nome: string; cor: string }) {
 }
 
 /** Uma linha da lista: glifo de estado, número e título, e abaixo autor, rótulos e tempo. */
-export function LinhaItemGitHub({ item, issue, abrir }: { item: ItemGitHub; issue: boolean; abrir: () => void }) {
+export function LinhaItemGitHub({ item, issue, abrir, abrirNoChat, ocupado = false }: {
+    item: ItemGitHub; issue: boolean; abrir: () => void; abrirNoChat?: () => void; ocupado?: boolean;
+}) {
     return (
-        <li>
+        <li className="group relative">
             <button
                 onClick={abrir}
                 title={`Abrir #${item.numero} no GitHub`}
-                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-hover
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 pr-11 text-left hover:bg-hover
                     focus-visible:bg-hover focus-visible:outline-none"
             >
                 <GlifoItem item={item} issue={issue} />
@@ -91,6 +94,13 @@ export function LinhaItemGitHub({ item, issue, abrir }: { item: ItemGitHub; issu
                     </span>
                 </span>
             </button>
+            <div className="absolute right-2 top-1.5">
+                <MenuAcoesGitHub rotulo={`Ações de ${issue ? 'issue' : 'PR'} #${item.numero}`} noHover acoes={[
+                    { nome: 'Abrir no chat', executar: () => abrirNoChat?.(), desativada: ocupado || !abrirNoChat },
+                    { nome: 'Abrir no GitHub', executar: abrir },
+                    { nome: 'Copiar link', executar: () => void navigator.clipboard.writeText(item.url) },
+                ]} />
+            </div>
         </li>
     );
 }

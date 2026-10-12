@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { esquemaDados, type Dados } from '../../shared/contratos';
 import { reunirRegistrosUso } from '../../shared/estatisticas';
 import { migrarProjetos } from './projetos';
+import { recuperarPullRequests } from '../../shared/pullRequests';
 
 /**
  * Remove entradas de modelos remotos gravadas sem o vínculo OpenRouter. Elas aparecem como modelos locais
@@ -45,7 +46,8 @@ export class Persistencia {
             this.dados = esquemaDados.parse(bruto);
             const projetosMigrados = migrarProjetos(this.dados);
             const modelosMigrados = removerModelosRemotosOrfaos(this.dados);
-            if (bruto.projetos === undefined || projetosMigrados || modelosMigrados) {
+            const prsMigrados = this.dados.conversas.map(recuperarPullRequests).some(Boolean);
+            if (bruto.projetos === undefined || projetosMigrados || modelosMigrados || prsMigrados) {
                 await this.salvar();
             }
             for (const conversa of this.dados.conversas) {

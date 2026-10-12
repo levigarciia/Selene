@@ -482,3 +482,26 @@ incluindo worktrees e remotos com nomes diferentes de `origin`. Os itens são ag
 sem duplicar clones do mesmo remoto. Falhas individuais preservam os resultados dos demais.
 A descoberta ignora links e pastas de dependências ou compilação, com limite de seis níveis e duas mil pastas.
 Recurso próprio solicitado pelo usuário, sem ampliar a paridade com o Odysseus.
+
+Conversas Code persistem vínculos de pull requests registrados explicitamente ou criados pelo menu do projeto.
+O histórico anterior é recuperado a partir dos resultados reais de criação, sem usar afirmações do assistente.
+Os links aparecem na sidebar e na conversa, com consulta do estado no GitHub enquanto a conversa está aberta.
+A ferramenta `vincular_pull_request` confirma o PR no GitHub e registra o vínculo de forma idempotente.
+O agente recebe instrução para chamar essa ferramenta após criar um PR ou começar a trabalhar em um existente.
+`listar_pull_requests` e `desvincular_pull_request` conferem e removem os vínculos. Vínculos removidos não são
+recriados pela migração do histórico.
+Recurso próprio solicitado pelo usuário, sem ampliar a paridade com o Odysseus.
+
+Os indicadores de PR abrem um painel lateral na Selene, com resumo, atividade, verificações, comentários e patches
+dos arquivos. O menu prepara perguntas, explicações ou correções no campo da conversa, permite remover o vínculo
+e mantém a abertura no GitHub como ação separada. A mesclagem exige confirmação da revisão exibida e respeita as
+regras do GitHub, sem apagar branches locais ou remotas.
+As listas de issues e PRs oferecem um menu no hover com abertura de uma nova conversa Code e instrução preenchida.
+A conversa usa a pasta do repositório correspondente, inclusive dentro de uma pasta agregadora. O envio da mensagem
+fica sob controle do usuário.
+O projeto agregador é preservado e a pasta do repositório fica separada no contexto da conversa, incluindo as
+ferramentas de arquivos e Git. Endereços antigos de remotos são resolvidos para o nome atual no GitHub, para que
+repositórios transferidos ou renomeados continuem associados à pasta local correta.
+Referência de comportamento: `D:/Saas/t3code-main/t3code-main/apps/web/src/components/pullRequest/`, especialmente
+`PullRequestDetailPanel.tsx`, `pullRequestDetail.logic.ts` e `PullRequestThreadLinks.tsx`. A implementação foi
+adaptada aos contratos IPC e ao motor da Selene, sem ampliar a paridade com o Odysseus.

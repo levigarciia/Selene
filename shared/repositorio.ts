@@ -80,8 +80,7 @@ export const esquemaDimensoesTerminal = z.object({
 export type DimensoesTerminal = z.infer<typeof esquemaDimensoesTerminal>;
 
 export type EventoTerminal =
-    | { tipo: 'terminalDados'; id: string; dados: string }
-    | { tipo: 'terminalFim'; id: string; codigo: number };
+    { tipo: 'terminalDados'; id: string; dados: string } | { tipo: 'terminalFim'; id: string; codigo: number };
 
 const qualificadoresEnvolvimento: Record<EnvolvimentoGitHub, string> = {
     todos: '',

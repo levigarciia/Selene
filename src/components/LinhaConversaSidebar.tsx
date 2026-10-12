@@ -15,6 +15,7 @@ import { IconeProjeto } from './IconeProjeto';
 import { obterAtividadeConversa, tempoConversa } from '../../shared/historico';
 import type { PosicaoMenuConversa } from './MenuConversa';
 import { LinhaChatSidebar } from './LinhaChatSidebar';
+import { LinkPullRequest } from './PullRequestsConversa';
 
 /** Use para mostrar a atividade da conversa e permitir encerramento sem abrir o menu. */
 export function LinhaConversaSidebar({
@@ -24,6 +25,7 @@ export function LinhaConversaSidebar({
     recolhida,
     agora,
     selecionar,
+    abrirPullRequest,
     concluir,
     abrirMenu,
 }: {
@@ -33,6 +35,7 @@ export function LinhaConversaSidebar({
     recolhida: boolean;
     agora: number;
     selecionar: (id: string) => void;
+    abrirPullRequest?: (url: string) => void;
     concluir: (conversa: Conversa) => void;
     abrirMenu: (posicao: PosicaoMenuConversa) => void;
 }) {
@@ -52,6 +55,7 @@ export function LinhaConversaSidebar({
     const atividade = obterAtividadeConversa(conversa, estado.conversaEmExecucao);
     const mensagem = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
     const modelo = estado.modelos.find((item) => item.id === conversa.modeloId);
+    const branch = conversa.pullRequests?.at(-1)?.branch;
     const projeto = estado.projetos.find((item) => item.id === conversa.projetoId || item.caminho === conversa.projeto);
     const encerrada = conversa.concluida && !atividade.ocupada;
     const pronta = !encerrada && atividade.fase === 'concluida';
@@ -133,6 +137,7 @@ export function LinhaConversaSidebar({
                             className={[
                                 '[[data-ui~=linha-sidebar-acoes]:hover_&]:opacity-[0]',
                                 '[[data-ui~=linha-sidebar-acoes]:focus-within_&]:opacity-[0]',
+                                conversa.pullRequests?.length ? 'mr-[45px]' : '',
                             ].join(' ')}
                         >
                             {tempoConversa(conversa.encerradaEm ?? conversa.atualizadoEm, agora)}
@@ -242,20 +247,20 @@ export function LinhaConversaSidebar({
                         >
                             {conversa.titulo}
                         </span>
-                        {(modelo || comando) && (
+                        {(modelo || comando || conversa.pullRequests?.length) && (
                             <span
                                 data-ui="detalhes-item-conversa"
                                 className={[
                                     [
                                         'flex items-center gap-[6px] w-full min-w-0 text-[#818792]',
-                                        'text-[10px] justify-between',
+                                        'text-[10px] justify-between min-h-[15px]',
                                     ].join(' '),
                                     '[&_>_.truncate]:max-w-[48%]',
                                 ].join(' ')}
                             >
-                                {modelo && (
-                                    <span className="truncate" title={modelo.nome}>
-                                        {modelo.nome}
+                                {(branch || modelo) && (
+                                    <span className="truncate" title={branch ?? modelo?.nome}>
+                                        {branch ?? modelo?.nome}
                                     </span>
                                 )}
                                 {comando && (
@@ -278,6 +283,16 @@ export function LinhaConversaSidebar({
                     </>
                 )}
             </button>
+            {!recolhida && !!conversa.pullRequests?.length && (
+                <div className={[
+                    'absolute right-[9px] flex max-w-[48%] items-center gap-1 overflow-x-auto',
+                    encerrada ? 'top-1/2 -translate-y-1/2' : 'bottom-[10px]',
+                ].join(' ')}>
+                    {(encerrada ? conversa.pullRequests.slice(-1) : conversa.pullRequests).map((pr) => (
+                        <LinkPullRequest key={pr.url} pr={pr} compacto abrir={abrirPullRequest} />
+                    ))}
+                </div>
+            )}
             {!!conversa.mensagens.length && !recolhida && (
                 <button
                     data-ui="botao-icone acao-hover-conversa"

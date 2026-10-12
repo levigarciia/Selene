@@ -14,6 +14,7 @@ import {
 } from '../../shared/repositorio';
 import { encerrarProcesso } from './processos';
 import { descobrirPastasRepositorios } from './descobertaRepositorios';
+import { interpretarPullRequest, esquemaPullRequest, type PullRequest } from '../../shared/pullRequests';
 
 const LIMITE_ARQUIVO_NOVO = 2 * 1024 * 1024;
 const LIMITE_SAIDA = 8 * 1024 * 1024;
@@ -80,7 +81,7 @@ async function git(pasta: string, argumentos: string[], limiteMs?: number): Prom
 const FALHA_TEMPORARIA = /HTTP 50[234]/;
 
 /** Executa o GitHub CLI. Somente leituras devem pedir `repetir`, pois escritas não são idempotentes. */
-async function gh(pasta: string, argumentos: string[], repetir = false): Promise<string> {
+export async function gh(pasta: string, argumentos: string[], repetir = false): Promise<string> {
     let resultado = await executar('gh', pasta, argumentos);
     if (repetir && resultado.codigo !== 0 && FALHA_TEMPORARIA.test(resultado.erro)) {
         await new Promise((resolver) => setTimeout(resolver, 1000));
@@ -166,8 +167,10 @@ export async function repositoriosDoProjeto(pasta: string): Promise<{
     repositorios: { pasta: string; github: string }[];
     avisos: string[];
 }> {
-    const raizGit = await tentar(pasta, ['rev-parse', '--show-toplevel']);
-    const descoberta = raizGit ? { pastas: [pasta], avisos: [] } : await descobrirPastasRepositorios(pasta);
+    const descoberta = await descobrirPastasRepositorios(pasta);
+    if (!descoberta.pastas.length && (await tentar(pasta, ['rev-parse', '--show-toplevel']))) {
+        descoberta.pastas.push(pasta);
+    }
     const repositorios: { pasta: string; github: string }[] = [];
     const avisos = [...descoberta.avisos];
     const encontrados = new Set<string>();
@@ -184,9 +187,11 @@ export async function repositoriosDoProjeto(pasta: string): Promise<{
             repositorios.push({ pasta: caminho, github });
         } catch (erro) {
             const mensagem = erro instanceof Error ? erro.message : 'Falha ao ler o repositório.';
-            avisos.push(/dubious ownership/i.test(mensagem)
-                ? `${nome}: o Git recusou o acesso por divergência de proprietário. Verifique a pasta no terminal.`
-                : `${nome}: ${mensagem}`);
+            avisos.push(
+                /dubious ownership/i.test(mensagem)
+                    ? `${nome}: o Git recusou o acesso por divergência de proprietário. Verifique a pasta no terminal.`
+                    : `${nome}: ${mensagem}`,
+            );
         }
     }
     return { repositorios, avisos };
@@ -196,20 +201,54 @@ export async function repositoriosDoProjeto(pasta: string): Promise<{
 export async function listarGitHubDoProjeto(pasta: string, consulta: ConsultaGitHub): Promise<ListaGitHub> {
     const descoberta = await repositoriosDoProjeto(pasta);
     if (!descoberta.repositorios.length) {
-        throw new Error(descoberta.avisos.join('\n') || 'Nenhum repositório com remoto no GitHub encontrado nesta pasta.');
+        throw new Error(
+            descoberta.avisos.join('\n') || 'Nenhum repositório com remoto no GitHub encontrado nesta pasta.',
+        );
     }
     const resultado: ListaGitHub = { repositorios: [], itens: [], avisos: [...descoberta.avisos] };
     for (const repositorio of descoberta.repositorios) {
         try {
-            const itens = await listarItensGitHub(repositorio.pasta, repositorio.github, consulta);
-            resultado.repositorios.push(repositorio.github);
+            const github = await resolverRepositorioGitHub(repositorio.pasta, repositorio.github);
+            if (resultado.repositorios.some((item) => item.toLowerCase() === github.toLowerCase())) continue;
+            const itens = await listarItensGitHub(repositorio.pasta, github, consulta);
+            resultado.repositorios.push(github);
             resultado.itens.push(...itens);
         } catch (erro) {
-            resultado.avisos.push(`${repositorio.github}: ${erro instanceof Error ? erro.message : 'Falha na consulta.'}`);
+            resultado.avisos.push(
+                `${repositorio.github}: ${erro instanceof Error ? erro.message : 'Falha na consulta.'}`,
+            );
         }
     }
     if (!resultado.repositorios.length) throw new Error(resultado.avisos.join('\n'));
     return resultado;
+}
+
+/** Resolve o nome atual do repositório no GitHub quando o remoto ainda usa um endereço transferido ou renomeado. */
+export async function resolverRepositorioGitHub(pasta: string, repositorio: string): Promise<string> {
+    const nome = (await gh(pasta, ['repo', 'view', repositorio, '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], true)).trim();
+    if (!/^[\w.-]+\/[\w.-]+$/.test(nome)) throw new Error('O GitHub retornou um nome de repositório inválido.');
+    return nome;
+}
+
+/** Consulta o PR pelo endereço exato, inclusive quando a conversa usa uma pasta com vários repositórios. */
+export async function lerPullRequest(pasta: string, url: string): Promise<PullRequest> {
+    const pr = interpretarPullRequest(url);
+    if (!pr) throw new Error('Endereço de pull request inválido.');
+    const bruto = JSON.parse(await gh(pasta, [
+        'pr', 'view', String(pr.numero), '--repo', pr.repositorio, '--json', 'url,title,state,headRefName',
+    ], true));
+    const estados = { OPEN: 'aberto', CLOSED: 'fechado', MERGED: 'mesclado' } as const;
+    const estado = estados[bruto.state as keyof typeof estados];
+    const canonico = typeof bruto.url === 'string' ? interpretarPullRequest(bruto.url) : null;
+    const repositorio = canonico?.url.toLowerCase() === pr.url.toLowerCase() ? pr.repositorio
+        : await resolverRepositorioGitHub(pasta, pr.repositorio);
+    if (!estado || !canonico || canonico.numero !== pr.numero
+        || canonico.repositorio.toLowerCase() !== repositorio.toLowerCase()) {
+        throw new Error('Resposta inesperada ao consultar o pull request.');
+    }
+    return esquemaPullRequest.parse({
+        ...canonico, titulo: bruto.title, branch: bruto.headRefName, estado, atualizadoEm: new Date().toISOString(),
+    });
 }
 
 /** Troca para uma branch local existente; o Git recusa a troca quando ela sobrescreveria alterações. */
@@ -301,18 +340,7 @@ export async function listarItensGitHub(
     const { estado, busca } = buscaGitHub(consulta);
     const comuns = 'number,title,url,author,state,createdAt,updatedAt,labels';
     const campos = tipo === 'pr' ? `${comuns},isDraft,headRefName,additions,deletions` : comuns;
-    const argumentos = [
-        tipo,
-        'list',
-        '--repo',
-        repositorio,
-        '--state',
-        estado,
-        '--limit',
-        '60',
-        '--json',
-        campos,
-    ];
+    const argumentos = [tipo, 'list', '--repo', repositorio, '--state', estado, '--limit', '60', '--json', campos];
     if (busca) argumentos.push('--search', busca);
     return converterItensGitHub(await gh(pasta, argumentos, true), repositorio);
 }

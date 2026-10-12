@@ -31,6 +31,7 @@
         "test:projetos-chat": "bun scripts/testarDesktop.ts scripts/validarProjetosChat.ts",
         "test:contexto": "bun scripts/testarDesktop.ts scripts/validarContextoImagens.ts",
         "test:repositorio": "bun scripts/testarDesktop.ts scripts/validarRepositorio.ts",
+        "test:prs": "bun scripts/testarDesktop.ts scripts/validarPullRequests.ts",
         "test:envios-code":"bun scripts/testarDesktop.ts scripts/validarEnviosCode.ts",
         "test:web": "bun build scripts/fixtures/navegador.ts --target=node --external=electron --format=cjs --outfile=artifacts/navegador.cjs && bun scripts/testarDesktop.ts scripts/validarWeb.ts",
         "test:navegador-inline": "bun build scripts/fixtures/navegador.ts --target=node --external=electron --format=cjs --outfile=artifacts/navegador.cjs && bun scripts/testarDesktop.ts scripts/validarNavegadorInline.ts",

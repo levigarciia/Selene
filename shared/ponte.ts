@@ -71,10 +71,19 @@ export function criarPonte(transporte: Transporte): PonteSelene {
         exportarConversa: (id) => transporte.invocar('exportar', id),
         fixarMemoria: (id, fixada) => transporte.invocar('fixarMemoria', id, fixada),
         removerMemoria: (id) => transporte.invocar('removerMemoria', id),
-        statusRepositorio: (projetoId) => transporte.invocar('statusRepositorio', projetoId),
-        trocarBranch: (projetoId, branch, criar = false) =>
-            transporte.invocar('trocarBranch', projetoId, branch, criar),
-        acaoGit: (projetoId, acao, mensagem) => transporte.invocar('acaoGit', projetoId, acao, mensagem),
+        statusRepositorio: (projetoId, conversaId) => transporte.invocar('statusRepositorio', projetoId, conversaId),
+        trocarBranch: (projetoId, branch, criar = false, conversaId) =>
+            transporte.invocar('trocarBranch', projetoId, branch, criar, conversaId),
+        acaoGit: (projetoId, acao, mensagem, conversaId) =>
+            transporte.invocar('acaoGit', projetoId, acao, mensagem, conversaId),
+        vincularPullRequest: (conversaId, url) => transporte.invocar('vincularPullRequest', conversaId, url),
+        desvincularPullRequest: (conversaId, url) => transporte.invocar('desvincularPullRequest', conversaId, url),
+        abrirItemGitHubNoChat: (entrada) => transporte.invocar('abrirItemGitHubNoChat', entrada),
+        atualizarPullRequests: (conversaId) => transporte.invocar('atualizarPullRequests', conversaId),
+        detalhesPullRequest: (conversaId, url) => transporte.invocar('detalhesPullRequest', conversaId, url),
+        arquivosPullRequest: (conversaId, url) => transporte.invocar('arquivosPullRequest', conversaId, url),
+        mesclarPullRequest: (conversaId, url, sha, metodo) =>
+            transporte.invocar('mesclarPullRequest', conversaId, url, sha, metodo),
         editoresDisponiveis: () => transporte.invocar('editoresDisponiveis'),
         abrirNoEditor: (projetoId, editor) => transporte.invocar('abrirNoEditor', projetoId, editor),
         salvarScriptsProjeto: (projetoId, scripts) => transporte.invocar('salvarScriptsProjeto', projetoId, scripts),

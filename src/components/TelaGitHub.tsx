@@ -33,7 +33,9 @@ function useBuscaAdiada(valor: string): string {
 }
 
 /** Pull requests e issues dos repositórios GitHub dos projetos Code, no formato da lista do T3. */
-export function TelaGitHub({ estado, ponte }: { estado: Estado; ponte?: PonteSelene }) {
+export function TelaGitHub({ estado, ponte, abrirConversa }: {
+    estado: Estado; ponte?: PonteSelene; abrirConversa?: (id: string) => void;
+}) {
     const projetos = estado.projetos.filter((item) => !item.oculto);
     const [preferencias, definirPreferencias] = useState(lerPreferenciasGitHub);
     const [busca, definirBusca] = useState('');
@@ -41,6 +43,8 @@ export function TelaGitHub({ estado, ponte }: { estado: Estado; ponte?: PonteSel
     const [leitura, definirLeitura] = useState<Leitura | null>(null);
     const [lendo, definirLendo] = useState(false);
     const [versao, definirVersao] = useState(0);
+    const [abrindoChat, definirAbrindoChat] = useState(false);
+    const [erroChat, definirErroChat] = useState('');
     const { tipo, estado: estadoFiltro, envolvimento, ordem } = preferencias;
     const projetoId = projetos.some((item) => item.id === preferencias.projetoId) ? preferencias.projetoId : null;
     const alvos = projetoId ? projetos.filter((item) => item.id === projetoId) : projetos;
@@ -83,20 +87,21 @@ export function TelaGitHub({ estado, ponte }: { estado: Estado; ponte?: PonteSel
         };
     }, [ponte, chaveAlvos, tipo, estadoFiltro, envolvimento, buscaAdiada, versao]);
 
-    const grupos = useMemo(
-        () => agruparItensGitHub(ordenarItensGitHub(leitura?.itens ?? [], ordem)),
-        [leitura, ordem],
-    );
+    const grupos = useMemo(() => agruparItensGitHub(ordenarItensGitHub(leitura?.itens ?? [], ordem)), [leitura, ordem]);
     const erros = Object.values(leitura?.indisponiveis ?? {});
     const todosFalharam = !!leitura && alvos.length > 0 && erros.length === alvos.length;
     const repositoriosSelecionados = projetoId ? leitura?.repositorios[projetoId] : undefined;
     const repositorioSelecionado = repositoriosSelecionados?.length === 1 ? repositoriosSelecionados[0] : undefined;
     const caminhoGitHub = tipo === 'pr' ? 'pulls' : 'issues';
     const buscaRepositorios = repositoriosSelecionados?.map((repositorio) => `repo:${repositorio}`).join(' ');
+    const parametrosBusca = new URLSearchParams({
+        q: `${buscaRepositorios ?? ''} is:${tipo}`,
+        type: tipo === 'pr' ? 'pullrequests' : 'issues',
+    });
     const urlGitHub = repositorioSelecionado
         ? `https://github.com/${repositorioSelecionado}/${caminhoGitHub}`
         : buscaRepositorios
-          ? `https://github.com/search?q=${encodeURIComponent(`${buscaRepositorios} is:${tipo}`)}&type=${tipo === 'pr' ? 'pullrequests' : 'issues'}`
+          ? `https://github.com/search?${parametrosBusca}`
           : `https://github.com/${caminhoGitHub}`;
     const opcoesProjetos = projetos.map((projeto) => ({
         valor: projeto.id,
@@ -105,10 +110,29 @@ export function TelaGitHub({ estado, ponte }: { estado: Estado; ponte?: PonteSel
     }));
     const issue = tipo === 'issue';
 
+    async function abrirNoChat(item: ItemGitHub) {
+        if (!ponte || !abrirConversa || abrindoChat) return;
+        definirAbrindoChat(true);
+        definirErroChat('');
+        try {
+            const resultado = await ponte.abrirItemGitHubNoChat({
+                url: item.url, titulo: item.titulo, ...(projetoId ? { projetoId } : {}),
+            });
+            if (resultado.ok) abrirConversa(resultado.valor.id);
+            else definirErroChat(resultado.erro);
+        } catch {
+            definirErroChat('Não foi possível abrir a conversa.');
+        } finally { definirAbrindoChat(false); }
+    }
+
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex flex-wrap items-center gap-2 px-[26px] pb-3 pt-6">
-                <div role="tablist" aria-label="Tipo" className="flex h-8 rounded-md border border-borda bg-superficie p-0.5">
+                <div
+                    role="tablist"
+                    aria-label="Tipo"
+                    className="flex h-8 rounded-md border border-borda bg-superficie p-0.5"
+                >
                     {(['pr', 'issue'] as TipoItemGitHub[]).map((opcao) => (
                         <button
                             key={opcao}
@@ -153,6 +177,7 @@ export function TelaGitHub({ estado, ponte }: { estado: Estado; ponte?: PonteSel
                 </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-auto px-[14px] pb-6">
+                {erroChat && <p role="alert" className="mx-3 mb-3 text-[12px] text-[#f0b2ae]">{erroChat}</p>}
                 {!todosFalharam &&
                     alvos
                         .filter((projeto) => leitura?.indisponiveis[projeto.id] || leitura?.avisos[projeto.id])
@@ -197,6 +222,8 @@ export function TelaGitHub({ estado, ponte }: { estado: Estado; ponte?: PonteSel
                                             item={item}
                                             issue={issue}
                                             abrir={() => void ponte?.abrirGitHub(item.url)}
+                                            abrirNoChat={abrirConversa ? () => void abrirNoChat(item) : undefined}
+                                            ocupado={abrindoChat}
                                         />
                                     ))}
                                 </ul>

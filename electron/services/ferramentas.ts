@@ -17,6 +17,8 @@ import {
 import { ferramentasMemoria, nomesFerramentasMemoria } from '../../shared/memoria';
 import type { Memorias } from './memorias';
 import { buscarConversas, esquemaBuscaConversas, ferramentaBuscaConversas } from '../../shared/buscaConversas';
+import { esquemaUrlPullRequest, vincularPullRequest, desvincularPullRequest } from '../../shared/pullRequests';
+import { lerPullRequest } from './repositorio';
 
 const texto = z.string().min(1).max(30000);
 const esquemaLer = z.object({ caminho: texto, inicio: z.number().int().min(1).default(1) });
@@ -38,6 +40,17 @@ function definir(nome: string, descricao: string, properties: object, required: 
 }
 
 export const ferramentas = [
+    definir(
+        'vincular_pull_request',
+        'Registra um PR na conversa atual. Chame imediatamente após criar um PR ou começar a trabalhar em um ' +
+            'PR existente, mesmo se ele foi criado pelo terminal. Verifica o PR no GitHub e evita vínculos duplicados.',
+        { url: { type: 'string' } },
+        ['url'],
+    ),
+    definir('listar_pull_requests', 'Lista os PRs vinculados à conversa atual, incluindo URL e último estado consultado.',
+        {}, []),
+    definir('desvincular_pull_request', 'Remove o vínculo de um PR com esta conversa. O PR continua existindo no GitHub.',
+        { url: { type: 'string' } }, ['url']),
     definir(
         'apply_patch',
         'Edite arquivos com patch contextual. Fora do acesso completo, requer aprovação individual. ' +
@@ -198,6 +211,40 @@ export async function prepararFerramenta(
     memorias?: Memorias,
     conversas?: () => readonly Conversa[],
 ): Promise<FerramentaPreparada> {
+    if (nome === 'listar_pull_requests' || nome === 'desvincular_pull_request') {
+        if (conversa.modo !== 'code') throw new Error('Pull requests pertencem às conversas Code.');
+        const argumentos = nome === 'listar_pull_requests' ? z.object({}).strict().parse(entrada)
+            : z.object({ url: esquemaUrlPullRequest }).parse(entrada);
+        return {
+            argumentos, aprovacao: false, previa: nome === 'listar_pull_requests' ? 'PRs da conversa' : 'Remover vínculo',
+            executar: async () => {
+                if ('url' in argumentos) desvincularPullRequest(conversa, argumentos.url as string);
+                return JSON.stringify({ pullRequests: conversa.pullRequests ?? [] });
+            },
+        };
+    }
+    if (nome === 'vincular_pull_request') {
+        if (conversa.modo !== 'code') throw new Error('Pull requests pertencem às conversas Code.');
+        const argumentos = z.object({ url: esquemaUrlPullRequest }).parse(entrada);
+        return {
+            argumentos,
+            aprovacao: false,
+            previa: argumentos.url,
+            executar: async () => {
+                const pr = await lerPullRequest(
+                    conversa.pastaRepositorio ?? conversa.projeto ?? conversa.pastaTrabalho ?? '.', argumentos.url);
+                conversa.pullRequests = conversa.pullRequests?.map((item) =>
+                    item.url.toLowerCase() === argumentos.url.toLowerCase() ? pr : item);
+                const novo = vincularPullRequest(conversa, pr.url);
+                conversa.pullRequests = conversa.pullRequests!.map((item) =>
+                    item.url.toLowerCase() === pr.url.toLowerCase() ? pr : item);
+                return JSON.stringify({
+                    url: pr.url, numero: pr.numero, repositorio: pr.repositorio,
+                    estado: pr.estado, jaVinculado: !novo,
+                });
+            },
+        };
+    }
     if (nome === 'buscar_conversas') {
         if (conversa.modo !== 'chat') throw new Error('A busca em conversas está disponível somente no modo Chat.');
         if (!conversas) throw new Error('Busca em conversas indisponível.');
@@ -257,7 +304,7 @@ export async function prepararFerramenta(
             executar: async () => argumentos.etapas.map((etapa) => `${etapa.estado}: ${etapa.descricao}`).join('\n'),
         };
     }
-    const pasta = conversa.projeto ?? conversa.pastaTrabalho;
+    const pasta = conversa.pastaRepositorio ?? conversa.projeto ?? conversa.pastaTrabalho;
     if (!pasta) throw new Error('A pasta de trabalho da conversa ainda não foi preparada.');
     const caminhoValidado = (caminho: string) => resolverCaminho(caminho, pasta, conversa.acessoCompleto);
     if (nome === 'apply_patch') {

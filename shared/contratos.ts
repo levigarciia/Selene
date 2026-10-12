@@ -7,6 +7,9 @@ import { esquemaModeloAssinatura, esquemaProvedorAssinatura } from './assinatura
 import { esquemaMemoria } from './memoria';
 import { esquemaScriptProjeto, type EventoTerminal } from './repositorio';
 import type * as Repositorio from './repositorio';
+import { esquemaPullRequest, type PullRequest } from './pullRequests';
+import type { ArquivoPullRequest, DetalhesPullRequest, MetodoMesclagem } from './detalhesPullRequest';
+import { esquemaItemGitHubNoChat } from './abrirItemGitHub';
 
 /** Esforços aceitos pelo OpenRouter, do mais leve ao mais intenso. */
 export const esforcosOpenRouter = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -159,10 +162,12 @@ export const esquemaConversa = z.object({
     rascunho: z.string().max(30000).optional(),
     anexosRascunho: z.number().int().min(0).max(4).optional(),
     pastaTrabalho: z.string().min(1).optional(),
+    pastaRepositorio: z.string().min(1).optional(),
     acessoCompleto: z.boolean().default(false),
     modeloId: z.string().uuid().nullable().default(null),
     nivelRaciocinio: z.enum(niveisRaciocinioTodos).optional(),
     mensagens: z.array(esquemaMensagem).default([]),
+    pullRequests: z.array(esquemaPullRequest).optional(),
     enviosPendentes: z
         .array(
             z.object({
@@ -351,9 +356,20 @@ export interface PonteSelene {
     exportarConversa(id: string): Promise<Resultado<void>>;
     fixarMemoria(id: string, fixada: boolean): Promise<Resultado<void>>;
     removerMemoria(id: string): Promise<Resultado<void>>;
-    statusRepositorio(projetoId: string): Promise<Resultado<Repositorio.StatusRepositorio>>;
-    trocarBranch(projetoId: string, branch: string, criar?: boolean): Promise<Resultado<void>>;
-    acaoGit(projetoId: string, acao: Repositorio.AcaoGit, mensagem: string): Promise<Resultado<string | null>>;
+    statusRepositorio(projetoId: string, conversaId?: string): Promise<Resultado<Repositorio.StatusRepositorio>>;
+    trocarBranch(projetoId: string, branch: string, criar?: boolean, conversaId?: string): Promise<Resultado<void>>;
+    acaoGit(
+        projetoId: string, acao: Repositorio.AcaoGit, mensagem: string, conversaId?: string,
+    ): Promise<Resultado<string | null>>;
+    vincularPullRequest(conversaId: string, url: string): Promise<Resultado<void>>;
+    desvincularPullRequest(conversaId: string, url: string): Promise<Resultado<void>>;
+    abrirItemGitHubNoChat(entrada: z.infer<typeof esquemaItemGitHubNoChat>): Promise<Resultado<Conversa>>;
+    atualizarPullRequests(conversaId: string): Promise<Resultado<PullRequest[]>>;
+    detalhesPullRequest(conversaId: string, url: string): Promise<Resultado<DetalhesPullRequest>>;
+    arquivosPullRequest(conversaId: string, url: string): Promise<Resultado<ArquivoPullRequest[]>>;
+    mesclarPullRequest(
+        conversaId: string, url: string, sha: string, metodo: MetodoMesclagem,
+    ): Promise<Resultado<DetalhesPullRequest>>;
     editoresDisponiveis(): Promise<Resultado<Repositorio.Editor[]>>;
     abrirNoEditor(projetoId: string, editor: Repositorio.Editor): Promise<Resultado<void>>;
     salvarScriptsProjeto(projetoId: string, scripts: Repositorio.ScriptProjeto[]): Promise<Resultado<void>>;

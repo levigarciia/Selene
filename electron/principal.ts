@@ -11,6 +11,7 @@ import {
     esquemaNovoProjeto,
     esquemaProjeto,
     esquemaRascunho,
+    esquemaConversa,
     esquemaAlteracao,
     esquemaBackend,
     esquemaConfiguracao,
@@ -53,9 +54,16 @@ import {
     criarBranch,
     executarAcaoGit,
     lerStatus,
+    lerPullRequest,
     listarGitHubDoProjeto,
+    repositoriosDoProjeto,
+    resolverRepositorioGitHub,
     trocarBranch,
 } from './services/repositorio';
+import { esquemaUrlPullRequest, vincularPullRequest, desvincularPullRequest } from '../shared/pullRequests';
+import { esquemaItemGitHubNoChat, instrucaoItemGitHub } from '../shared/abrirItemGitHub';
+import { esquemaMetodoMesclagem, esquemaShaPullRequest } from '../shared/detalhesPullRequest';
+import { lerDetalhesPullRequest, lerArquivosPullRequest, mesclarPullRequest } from './services/detalhesPullRequest';
 import {
     esquemaAcaoGit,
     esquemaDimensoesTerminal,
@@ -173,15 +181,94 @@ function editorPorProtocolo(editor: Editor): string | null {
 }
 
 function registrarRepositorio(): void {
+    const contextoGit = (id: string, conversaId?: string) => {
+        const projeto = projetoPorId(id);
+        const conversa = conversaId ? conversaPorId(conversaId) : undefined;
+        if (conversa && (conversa.modo !== 'code'
+            || (conversa.projetoId !== id && conversa.projeto !== projeto.caminho))) {
+            throw new Error('A conversa não pertence a este projeto Code.');
+        }
+        return { conversa, pasta: conversa?.pastaRepositorio ?? projeto.caminho };
+    };
+    registrarDesktop('desvincularPullRequest', z.tuple([uuid, esquemaUrlPullRequest]), async ([id, url]) => {
+        desvincularPullRequest(conversaPorId(id), url);
+        await salvar();
+    });
+    registrarDesktop('abrirItemGitHubNoChat', z.tuple([esquemaItemGitHubNoChat]), async ([entrada]) => {
+        const partes = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(issues|pull)\/([1-9]\d*)$/i.exec(entrada.url)!;
+        const [, repositorio, caminho, numero] = partes;
+        const projetos = entrada.projetoId ? [projetoPorId(entrada.projetoId)]
+            : persistencia.dados.projetos.filter((projeto) => !projeto.oculto);
+        for (const projeto of projetos) {
+            const descoberta = await repositoriosDoProjeto(projeto.caminho).catch(() => ({ repositorios: [], avisos: [] }));
+            let alvo = descoberta.repositorios.find((item) => item.github.toLowerCase() === repositorio.toLowerCase());
+            if (!alvo) {
+                for (const candidato of descoberta.repositorios) {
+                    const canonico = await resolverRepositorioGitHub(candidato.pasta, candidato.github).catch(() => null);
+                    if (canonico?.toLowerCase() === repositorio.toLowerCase()) { alvo = candidato; break; }
+                }
+            }
+            if (!alvo) continue;
+            const tipo = caminho.toLowerCase() === 'pull' ? 'pr' : 'issue';
+            const pr = tipo === 'pr' ? await lerPullRequest(alvo.pasta, entrada.url) : null;
+            const titulo = pr?.titulo ?? entrada.titulo ?? `Issue #${numero}`;
+            const conversa = esquemaConversa.parse({
+                id: randomUUID(), modo: 'code', projetoId: projeto.id, projeto: projeto.caminho,
+                pastaRepositorio: alvo.pasta,
+                titulo: `${tipo === 'pr' ? 'Revisar PR' : 'Investigar issue'} #${numero}`,
+                rascunho: instrucaoItemGitHub({ titulo, url: entrada.url }, tipo, alvo.pasta),
+                atualizadoEm: new Date().toISOString(),
+            });
+            if (pr) {
+                vincularPullRequest(conversa, pr.url);
+                conversa.pullRequests = [pr];
+            }
+            persistencia.dados.conversas.unshift(conversa);
+            await salvar();
+            return conversa;
+        }
+        throw new Error('Não foi encontrado um projeto local para este repositório. Adicione a pasta do projeto.');
+    });
+    const pastaDoPr = (id: string, url: string) => {
+        const conversa = conversaPorId(id);
+        if (conversa.modo !== 'code' || !conversa.pullRequests?.some((pr) =>
+            pr.url.toLowerCase() === url.toLowerCase())) {
+            throw new Error('O PR não está vinculado a esta conversa Code.');
+        }
+        return conversa.pastaRepositorio ?? conversa.projeto ?? conversa.pastaTrabalho ?? app.getPath('userData');
+    };
+    registrarDesktop('detalhesPullRequest', z.tuple([uuid, esquemaUrlPullRequest]), ([id, url]) =>
+        lerDetalhesPullRequest(pastaDoPr(id, url), url));
+    registrarDesktop('arquivosPullRequest', z.tuple([uuid, esquemaUrlPullRequest]), ([id, url]) =>
+        lerArquivosPullRequest(pastaDoPr(id, url), url));
+    registrarDesktop('mesclarPullRequest',
+        z.tuple([uuid, esquemaUrlPullRequest, esquemaShaPullRequest, esquemaMetodoMesclagem]),
+        async ([id, url, sha, metodo]) => {
+            const detalhes = await mesclarPullRequest(pastaDoPr(id, url), url, sha, metodo);
+            const conversa = conversaPorId(id);
+            conversa.pullRequests = conversa.pullRequests?.map((pr) =>
+                pr.url.toLowerCase() === url.toLowerCase() ? detalhes.pr : pr);
+            await salvar();
+            return detalhes;
+        });
     const branch = z.string().trim().min(1).max(250);
-    registrarDesktop('statusRepositorio', z.tuple([uuid]), ([id]) => lerStatus(projetoPorId(id).caminho));
-    registrarDesktop('trocarBranch', z.tuple([uuid, branch, z.boolean()]), ([id, nome, criar]) =>
-        criar ? criarBranch(projetoPorId(id).caminho, nome) : trocarBranch(projetoPorId(id).caminho, nome),
+    registrarDesktop('statusRepositorio', z.tuple([uuid, uuid.optional()]), ([id, conversaId]) =>
+        lerStatus(contextoGit(id, conversaId).pasta));
+    registrarDesktop('trocarBranch', z.tuple([uuid, branch, z.boolean(), uuid.optional()]), ([id, nome, criar, conversaId]) =>
+        criar ? criarBranch(contextoGit(id, conversaId).pasta, nome) : trocarBranch(contextoGit(id, conversaId).pasta, nome),
     );
     registrarDesktop(
         'acaoGit',
-        z.tuple([uuid, esquemaAcaoGit, z.string().max(5000)]),
-        ([id, acao, mensagem]) => executarAcaoGit(projetoPorId(id).caminho, acao, mensagem),
+        z.tuple([uuid, esquemaAcaoGit, z.string().max(5000), uuid.optional()]),
+        async ([id, acao, mensagem, conversaId]) => {
+            const { conversa, pasta } = contextoGit(id, conversaId);
+            const url = await executarAcaoGit(pasta, acao, mensagem);
+            if (url && conversa) {
+                vincularPullRequest(conversa, url);
+                await salvar();
+            }
+            return url;
+        },
     );
     registrarDesktop('editoresDisponiveis', z.tuple([]), () =>
         esquemaEditor.options.filter((editor) => {
@@ -214,6 +301,34 @@ function registrarRepositorio(): void {
     registrarDesktop('abrirGitHub', z.tuple([z.string().url().max(2000)]), async ([url]) => {
         if (new URL(url).origin !== 'https://github.com') throw new Error('Endereço do GitHub inválido.');
         await shell.openExternal(url);
+    });
+    registrarDesktop('vincularPullRequest', z.tuple([uuid, esquemaUrlPullRequest]), async ([id, url]) => {
+        const conversa = conversaPorId(id);
+        if (conversa.modo !== 'code') throw new Error('Pull requests pertencem às conversas Code.');
+        const pr = await lerPullRequest(conversa.projeto ?? app.getPath('userData'), url);
+        conversa.pullRequests = conversa.pullRequests?.map((item) =>
+            item.url.toLowerCase() === url.toLowerCase() ? pr : item);
+        vincularPullRequest(conversa, pr.url);
+        conversa.pullRequests = conversa.pullRequests!.map((item) =>
+            item.url.toLowerCase() === pr.url.toLowerCase() ? pr : item);
+        await salvar();
+    });
+    registrarDesktop('atualizarPullRequests', z.tuple([uuid]), async ([id]) => {
+        const conversa = conversaPorId(id);
+        if (conversa.modo !== 'code') throw new Error('Pull requests pertencem às conversas Code.');
+        const resultados = await Promise.allSettled((conversa.pullRequests ?? []).map(async (pr) => ({
+            anterior: pr.url, atual: await lerPullRequest(conversa.projeto ?? app.getPath('userData'), pr.url),
+        })));
+        const atualizados = resultados.flatMap((resultado) =>
+            resultado.status === 'fulfilled' ? [resultado.value] : []);
+        if (atualizados.length) {
+            conversa.pullRequests = conversa.pullRequests?.map((pr) =>
+                atualizados.find((item) => item.anterior.toLowerCase() === pr.url.toLowerCase())?.atual ?? pr);
+            conversa.pullRequests = conversa.pullRequests?.filter((pr, indice, todos) =>
+                todos.findIndex((item) => item.url.toLowerCase() === pr.url.toLowerCase()) === indice);
+            await salvar();
+        }
+        return conversa.pullRequests ?? [];
     });
     registrarDesktop(
         'abrirTerminal',
@@ -628,6 +743,7 @@ function registrarOperacoes(): void {
         const conversa = conversaPorId(id);
         if (conversa.modo !== 'code') throw new Error('Projetos estão disponíveis somente no modo Code.');
         if (caminho === null) {
+            delete conversa.pastaRepositorio;
             await prepararPastaTrabalho(conversa, app.getPath('userData'));
             conversa.projeto = null;
             conversa.projetoId = null;
@@ -642,6 +758,7 @@ function registrarOperacoes(): void {
             const projeto = await realpath(caminho);
             if (!(await stat(projeto)).isDirectory()) throw new Error('O projeto precisa ser uma pasta.');
             conversa.projeto = projeto;
+            delete conversa.pastaRepositorio;
             conversa.projetoId = persistencia.dados.projetos.find((item) => item.caminho === projeto)!.id;
             conversa.atualizadoEm = new Date().toISOString();
             await salvar();
@@ -654,6 +771,7 @@ function registrarOperacoes(): void {
         exigirLivre(id);
         if (escolha.canceled) return false;
         conversa.projeto = await realpath(escolha.filePaths[0]);
+        delete conversa.pastaRepositorio;
         conversa.projetoId = (await cadastrarProjeto(persistencia.dados, conversa.projeto)).id;
         conversa.atualizadoEm = new Date().toISOString();
         await salvar();
@@ -996,7 +1114,7 @@ app.whenReady()
                 const modelo = persistencia.dados.modelos.find((item) => item.id === conversa?.modeloId);
                 if (modelo?.assinatura) return assinaturaCompletar(modelo.assinatura, corpo, sinal, {
                         acessoCompleto: !!conversa?.acessoCompleto,
-                        pasta: conversa?.projeto,
+                        pasta: conversa?.pastaRepositorio ?? conversa?.projeto,
                         acoes: {
                             iniciar: (chamadaId, nome, argumentos) => agente.iniciarAcaoExterna(chamadaId, nome, argumentos),
                             aprovar: (chamadaId, nome, argumentos, sinalAcao) =>

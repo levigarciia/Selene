@@ -6,12 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { buscaGitHub, lerNumstat, repositorioGitHub, type ItemGitHub } from '../shared/repositorio';
 import { converterItensGitHub, repositoriosDoProjeto } from '../electron/services/repositorio';
 import { descobrirPastasRepositorios } from '../electron/services/descobertaRepositorios';
-import {
-    agruparItensGitHub,
-    ordenarItensGitHub,
-    tempoRelativo,
-    unirItensGitHub,
-} from '../src/components/listaGitHub';
+import { agruparItensGitHub, ordenarItensGitHub, tempoRelativo, unirItensGitHub } from '../src/components/listaGitHub';
 
 describe('repositorioGitHub', () => {
     test('reconhece remotos HTTPS e SSH', () => {
@@ -26,6 +21,24 @@ describe('repositorioGitHub', () => {
 });
 
 describe('descoberta de repositórios do projeto', () => {
+    test('prioriza repositórios internos quando a pasta agregadora fica dentro de outro repositório', async () => {
+        const pasta = await mkdtemp(join(tmpdir(), 'selene-agregador-'));
+        try {
+            execFileSync('git', ['init', '-q', pasta]);
+            execFileSync('git', ['-C', pasta, 'remote', 'add', 'origin', 'https://github.com/dono/pai.git']);
+            const grupo = join(pasta, 'Grupo');
+            const interno = join(grupo, 'Interno');
+            await mkdir(interno, { recursive: true });
+            execFileSync('git', ['init', '-q', interno]);
+            execFileSync('git', ['-C', interno, 'remote', 'add', 'origin', 'https://github.com/dono/interno.git']);
+            expect((await repositoriosDoProjeto(grupo)).repositorios.map((item) => item.github)).toEqual([
+                'dono/interno',
+            ]);
+        } finally {
+            await rm(pasta, { recursive: true, force: true });
+        }
+    });
+
     test('encontra repositórios internos, ignora dependências e deduplica remotos', async () => {
         const pasta = await mkdtemp(join(tmpdir(), 'selene-repositorios-'));
         const criar = async (nome: string, remoto: string | null, nomeRemoto = 'origin') => {
@@ -59,8 +72,18 @@ describe('descoberta de repositórios do projeto', () => {
             const principal = join(pasta, 'Principal');
             const worktree = join(pasta, 'Worktree');
             execFileSync('git', ['init', '-q', principal]);
-            execFileSync('git', ['-C', principal, '-c', 'user.name=Teste', '-c', 'user.email=teste@example.com',
-                'commit', '--allow-empty', '-qm', 'Inicial']);
+            execFileSync('git', [
+                '-C',
+                principal,
+                '-c',
+                'user.name=Teste',
+                '-c',
+                'user.email=teste@example.com',
+                'commit',
+                '--allow-empty',
+                '-qm',
+                'Inicial',
+            ]);
             execFileSync('git', ['-C', principal, 'remote', 'add', 'origin', 'https://github.com/dono/projeto.git']);
             execFileSync('git', ['-C', principal, 'worktree', 'add', '-qb', 'teste', worktree]);
             expect((await descobrirPastasRepositorios(pasta)).pastas).toContain(worktree);

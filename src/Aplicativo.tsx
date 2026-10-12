@@ -25,6 +25,8 @@ import { TelaProjetoChat } from './components/TelaProjetoChat';
 import { TelaGitHub } from './components/TelaGitHub';
 import { PainelTerminal, type PedidoTerminal } from './components/PainelTerminal';
 import { MenuProjetoCode } from './components/MenuProjetoCode';
+import { PullRequestsConversa } from './components/PullRequestsConversa';
+import { PainelPullRequest } from './components/PainelPullRequest';
 
 function lerSidebarRecolhida(): boolean {
     try {
@@ -59,6 +61,7 @@ export function Aplicativo() {
     const [terminalAberto, definirTerminalAberto] = useState(false);
     const [menuProjetoAberto, definirMenuProjetoAberto] = useState(false);
     const [pedidoTerminal, definirPedidoTerminal] = useState<PedidoTerminal | null>(null);
+    const [prAberto, definirPrAberto] = useState<{ conversaId: string; url: string } | null>(null);
     const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === modoInicial && item.concluida).length;
     const ativa = ativas[modoInicial];
     const conversa = estado.conversas.find((item) => item.id === ativa);
@@ -153,6 +156,8 @@ export function Aplicativo() {
     ].join(' ');
     const acoesCode = projetoCode && ponte && (
         <>
+            {conversa?.modo === 'code' && <PullRequestsConversa conversa={conversa} ponte={ponte}
+                abrir={(url) => definirPrAberto({ conversaId: conversa.id, url })} />}
             <div className="relative">
                 <button
                     className={classeAcaoBarra}
@@ -167,6 +172,8 @@ export function Aplicativo() {
                     <MenuProjetoCode
                         ponte={ponte}
                         projeto={projetoCode}
+                        conversaId={dados.estadoPersistido.conversas.some((item) => item.id === conversa?.id)
+                            ? conversa?.id : undefined}
                         fechar={() => definirMenuProjetoAberto(false)}
                         definirErro={definirErro}
                         executarScript={(comando) => {
@@ -271,6 +278,10 @@ export function Aplicativo() {
                             definirEstatisticasAbertas(true);
                         }}
                         abrirGitHub={abrirGitHub}
+                        abrirPullRequest={(conversa, url) => {
+                            selecionar(conversa.id);
+                            definirPrAberto({ conversaId: conversa.id, url });
+                        }}
                         githubAberto={githubAberto && !estatisticasAbertas}
                         atualizar={() => void executar(() => ponte!.verificarAtualizacao())}
                         reiniciarAtualizacao={() => void executar(() => ponte!.reiniciarAtualizacao())}
@@ -545,7 +556,7 @@ export function Aplicativo() {
                 )}
                 <div
                     data-ui="area-tela"
-                    className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
+                    className="relative flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
                     hidden={!conversaVisivel}
                 >
                     {(['chat', 'code'] as const).map((modo) => (
@@ -565,6 +576,19 @@ export function Aplicativo() {
                             />
                         </div>
                     ))}
+                    {conversaVisivel && ponte && prAberto && prAberto.conversaId === conversa?.id && (
+                        <PainelPullRequest key={`${prAberto.conversaId}:${prAberto.url}`}
+                            ponte={ponte} conversa={conversa} url={prAberto.url}
+                            escolher={(url) => definirPrAberto({ conversaId: conversa.id, url })}
+                            prepararMensagem={(texto) => {
+                                dados.alterarRascunho(conversa, {
+                                    rascunho: [conversa.rascunho?.trim(), texto].filter(Boolean).join('\n\n'),
+                                });
+                                requestAnimationFrame(() => [...document.querySelectorAll<HTMLTextAreaElement>(
+                                    'textarea[aria-label="Mensagem"]')].find((campo) => campo.getClientRects().length)?.focus());
+                            }}
+                            fechar={() => definirPrAberto(null)} />
+                    )}
                 </div>
                 {ponte && (
                     <PainelTerminal
@@ -577,7 +601,7 @@ export function Aplicativo() {
                     />
                 )}
                 {!estatisticasAbertas && githubAberto && (
-                    <TelaGitHub estado={estado} ponte={ponte} />
+                    <TelaGitHub estado={estado} ponte={ponte} abrirConversa={selecionar} />
                 )}
                 {estatisticasAbertas && (
                     <Estatisticas estado={estado} ponte={ponte} fechar={() => definirEstatisticasAbertas(false)} />

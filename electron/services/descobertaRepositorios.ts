@@ -2,8 +2,20 @@ import { readdir } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 const PASTAS_IGNORADAS = new Set([
-    'node_modules', 'vendor', 'target', 'dist', 'dist-electron', 'build', 'output',
-    '.git', '.next', '.cache', '.venv', 'venv', '.gradle', '.kotlin',
+    'node_modules',
+    'vendor',
+    'target',
+    'dist',
+    'dist-electron',
+    'build',
+    'output',
+    '.git',
+    '.next',
+    '.cache',
+    '.venv',
+    'venv',
+    '.gradle',
+    '.kotlin',
 ]);
 const PROFUNDIDADE_MAXIMA = 6;
 const LIMITE_PASTAS = 2000;
@@ -33,10 +45,13 @@ export async function descobrirPastasRepositorios(pasta: string): Promise<{
             pastas.push(atual.caminho);
             continue;
         }
-        const filhas = entradas.filter((entrada) => entrada.isDirectory()
-            && !entrada.isSymbolicLink() && !PASTAS_IGNORADAS.has(entrada.name.toLowerCase()));
+        const filhas = entradas.filter(
+            (entrada) =>
+                entrada.isDirectory() && !entrada.isSymbolicLink() && !PASTAS_IGNORADAS.has(entrada.name.toLowerCase()),
+        );
         if (atual.profundidade >= PROFUNDIDADE_MAXIMA) {
-            if (filhas.length) avisos.push(`${relative(pasta, atual.caminho)}: limite de profundidade da busca atingido.`);
+            if (filhas.length)
+                avisos.push(`${relative(pasta, atual.caminho)}: limite de profundidade da busca atingido.`);
             continue;
         }
         filhas.sort((a, b) => a.name.localeCompare(b.name));

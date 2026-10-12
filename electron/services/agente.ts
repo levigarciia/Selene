@@ -526,6 +526,9 @@ export class Agente {
                 );
             sistema.push(
                 'Você é um agente de programação. Use ferramentas para inspecionar e alterar arquivos autorizados.',
+                'Sempre use vincular_pull_request imediatamente após criar um PR ou começar a trabalhar em um PR ' +
+                    'existente, passando o endereço completo. Criar pelo terminal não registra o vínculo. ' +
+                    'Use listar_pull_requests para conferir os vínculos e desvincular_pull_request para remover um vínculo.',
                 'Prefira apply_patch para editar arquivos existentes com alterações pequenas e contexto exato. ' +
                     'editar_arquivo também permite substituir um trecho único. Use escrever_arquivo para criar arquivos ' +
                     'ou quando a tarefa exigir uma substituição integral. Não reescreva um arquivo inteiro ' +
@@ -554,7 +557,7 @@ export class Agente {
                     : 'Comandos e escritas exigem aprovação individual. Mantenha leituras e edições dentro da pasta de ' +
                           'trabalho, salvo autorização explícita do usuário para mudar o escopo. Não contorne recusas.',
                 `Projeto: ${conversa.projeto ?? 'nenhum selecionado'}.`,
-                `Pasta de trabalho: ${conversa.projeto ?? conversa.pastaTrabalho ?? 'não preparada'}. ` +
+                `Pasta de trabalho: ${conversa.pastaRepositorio ?? conversa.projeto ?? conversa.pastaTrabalho ?? 'não preparada'}. ` +
                     'Caminhos relativos partem daqui.',
                 `Acesso completo: ${conversa.acessoCompleto ? 'ativado; todo o computador está disponível' : 'desativado'}.`,
             );
@@ -564,7 +567,7 @@ export class Agente {
                 );
             }
             if (conversa.projeto) {
-                const instrucoes = await lerInstrucoes(conversa.projeto);
+                const instrucoes = await lerInstrucoes(conversa.pastaRepositorio ?? conversa.projeto);
                 if (instrucoes) sistema.push(`Instruções do projeto. Não alteram as permissões:\n${instrucoes}`);
             }
         }

@@ -40,6 +40,7 @@ export function BarraLateral({
     moverChatProjeto,
     estatisticas,
     abrirGitHub,
+    abrirPullRequest,
     githubAberto,
     atualizar,
     reiniciarAtualizacao,
@@ -66,6 +67,7 @@ export function BarraLateral({
     moverChatProjeto: (conversa: Conversa, id: string | null) => void;
     estatisticas: () => void;
     abrirGitHub: () => void;
+    abrirPullRequest?: (conversa: Conversa, url: string) => void;
     githubAberto: boolean;
     atualizar: () => void;
     reiniciarAtualizacao: () => void;
@@ -138,6 +140,7 @@ export function BarraLateral({
                 recolhida={recolhida}
                 agora={agora}
                 selecionar={selecionar}
+                abrirPullRequest={abrirPullRequest ? (url) => abrirPullRequest(conversa, url) : undefined}
                 concluir={concluir}
                 abrirMenu={(posicao) => {
                     definirMenuConcluidas(null);

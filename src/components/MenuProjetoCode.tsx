@@ -80,12 +80,14 @@ function LinhaComMenu({
 export function MenuProjetoCode({
     ponte,
     projeto,
+    conversaId,
     fechar,
     executarScript,
     definirErro,
 }: {
     ponte: PonteSelene;
     projeto: Projeto;
+    conversaId?: string;
     fechar: () => void;
     executarScript: (comando: string) => void;
     definirErro: (erro: string) => void;
@@ -105,7 +107,7 @@ export function MenuProjetoCode({
     const editorAtual = editores.includes(editor) ? editor : (editores[0] ?? 'explorador');
 
     async function atualizar() {
-        const resultado = await ponte.statusRepositorio(projeto.id);
+        const resultado = await ponte.statusRepositorio(projeto.id, conversaId);
         if (resultado.ok) definirStatus(resultado.valor);
         else definirErro(resultado.erro);
     }
@@ -113,7 +115,7 @@ export function MenuProjetoCode({
     useEffect(() => {
         void atualizar();
         void ponte.editoresDisponiveis().then((resultado) => resultado.ok && definirEditores(resultado.valor));
-    }, [projeto.id]);
+    }, [projeto.id, conversaId]);
 
     useEffect(() => {
         const fora = (evento: MouseEvent) => {
@@ -159,7 +161,7 @@ export function MenuProjetoCode({
 
     async function executarAcao() {
         const sucesso = await executar(async () => {
-            const resultado = await ponte.acaoGit(projeto.id, acao, mensagem);
+            const resultado = await ponte.acaoGit(projeto.id, acao, mensagem, conversaId);
             if (resultado.ok && resultado.valor) void ponte.abrirGitHub(resultado.valor);
             return resultado;
         });
@@ -281,7 +283,7 @@ export function MenuProjetoCode({
                                     key={nome}
                                     className={`${classeLinha} font-mono text-[12px]`}
                                     disabled={ocupado || nome === repositorio.branch}
-                                    onClick={() => void executar(() => ponte.trocarBranch(projeto.id, nome))}
+                                    onClick={() => void executar(() => ponte.trocarBranch(projeto.id, nome, false, conversaId))}
                                 >
                                     {nome}
                                 </button>
@@ -290,7 +292,7 @@ export function MenuProjetoCode({
                                 className="flex gap-2 px-[10px] py-1"
                                 onSubmit={(evento) => {
                                     evento.preventDefault();
-                                    void executar(() => ponte.trocarBranch(projeto.id, novaBranch, true)).then(
+                                    void executar(() => ponte.trocarBranch(projeto.id, novaBranch, true, conversaId)).then(
                                         (sucesso) => sucesso && definirNovaBranch(''),
                                     );
                                 }}
