@@ -378,10 +378,14 @@ describe('Ciclo do agente', () => {
             },
             completar: async (corpo) => {
                 contextoExterno = JSON.stringify(corpo);
+                if (rodada === 3) return respostaModelo('Arquivos externos verificados.');
                 const chamadas = [
                     { nome: 'ler_arquivo', argumentos: { caminho: lido } },
                     { nome: 'escrever_arquivo', argumentos: { caminho: escrito, conteudo: 'salvo fora' } },
-                    { nome: 'executar_terminal', argumentos: { comando: '$PWD.Path', pasta: externo } },
+                    {
+                        nome: 'executar_terminal',
+                        argumentos: { comando: process.platform === 'win32' ? '$PWD.Path' : 'pwd', pasta: externo },
+                    },
                 ][rodada]!;
                 rodada += 1;
                 return respostaModelo('', chamadas);
@@ -392,7 +396,10 @@ describe('Ciclo do agente', () => {
         expect(await readFile(lido, 'utf8')).toBe('conteúdo externo');
         expect(await readFile(escrito, 'utf8')).toBe('salvo fora');
         expect(conversa.mensagens.at(-1)?.acoes.every((acao) => acao.estado === 'concluida')).toBe(true);
-    });
+        const terminal = conversa.mensagens.at(-1)?.acoes.find((acao) => acao.nome === 'executar_terminal');
+        expect(terminal?.resultado).toContain('Código de saída: 0');
+        expect(terminal?.resultado).toContain(externo);
+    }, 30000);
     test('aprovação executa, enquanto acesso completo dispensa a aprovação', async () => {
         for (const acessoCompleto of [false, true]) {
             const pasta = await criarPasta();
