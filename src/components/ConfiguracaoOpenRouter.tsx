@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PonteSelene } from '../../shared/contratos';
 import type { Executar } from './Configuracoes';
+import { botaoSecundario, campo } from './PainelConfiguracoes';
 
 /** Permite substituir ou remover a credencial sem devolver a chave salva à interface. */
 export function ConfiguracaoOpenRouter({
@@ -34,40 +35,45 @@ export function ConfiguracaoOpenRouter({
         }
     }
     return (
-        <fieldset className="flex flex-col gap-3 border-t border-borda pt-5">
-            <legend className="text-sm">OpenRouter</legend>
-            <label>
-                Chave de API
+        <div className="flex flex-col gap-2">
+            <div className="flex gap-2 max-sm:flex-col">
                 <input
                     type="password"
+                    aria-label="Chave de API"
                     autoComplete="off"
                     value={chave}
                     disabled={ocupado || salvando}
                     placeholder={configurado ? 'Chave salva. Digite para substituir' : 'Cole sua chave de API'}
+                    className={`${campo} min-w-0 flex-1`}
                     onChange={(evento) => {
                         definirChave(evento.target.value);
                         definirSalvou(false);
                     }}
                 />
-            </label>
-            <div className="flex items-center gap-3 text-xs">
                 <button
                     type="button"
                     disabled={ocupado || salvando || !chave.trim()}
-                    className="rounded-md bg-hover px-3 py-2 disabled:opacity-40"
+                    className={botaoSecundario}
                     onClick={() => void salvar(chave.trim())}
                 >
                     Salvar chave
                 </button>
                 {configurado && (
-                    <button type="button" disabled={ocupado || salvando} onClick={() => void salvar('')}>
+                    <button
+                        type="button"
+                        className="px-2 text-xs text-secundario hover:text-[#eab1aa] disabled:opacity-40"
+                        disabled={ocupado || salvando}
+                        onClick={() => void salvar('')}
+                    >
                         Remover chave
                     </button>
                 )}
-                <span role="status" className="text-secundario">
-                    {salvando ? 'Salvando' : salvou ? 'Chave atualizada' : configurado ? 'Configurado' : ''}
-                </span>
             </div>
-        </fieldset>
+            {(salvando || salvou) && (
+                <span role="status" className="text-xs text-discreto">
+                    {salvando ? 'Salvando' : 'Chave atualizada'}
+                </span>
+            )}
+        </div>
     );
 }

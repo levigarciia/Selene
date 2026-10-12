@@ -34,24 +34,7 @@ export function ProjetosChatSidebar({
                 className="mb-3"
                 aria-label={`Projeto de Chat ${projeto.nome}`}
             >
-                <div className="flex items-center gap-1 px-1 py-1">
-                    {!recolhida && (
-                        <button
-                            className="rounded p-1 text-discreto hover:text-principal"
-                            aria-label={`Conversas de ${projeto.nome}`}
-                            aria-expanded={aberto}
-                            onClick={() =>
-                                definirFechados((anteriores) => {
-                                    const novos = new Set(anteriores);
-                                    if (novos.has(projeto.id)) novos.delete(projeto.id);
-                                    else novos.add(projeto.id);
-                                    return novos;
-                                })
-                            }
-                        >
-                            <CaretDownIcon size={12} className={aberto ? '' : '-rotate-90'} />
-                        </button>
-                    )}
+                <div data-movimento-sidebar className="flex items-center gap-1 px-1 py-1">
                     <button
                         className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-2 text-left
                     text-xs text-secundario hover:bg-hover hover:text-principal"
@@ -69,6 +52,29 @@ export function ProjetosChatSidebar({
                             onClick={() => criar(projeto.id)}
                         >
                             <PlusIcon size={15} />
+                        </button>
+                    )}
+                    {!recolhida && (
+                        <button
+                            className="rounded p-1 text-discreto hover:text-principal"
+                            aria-label={`Conversas de ${projeto.nome}`}
+                            aria-expanded={aberto}
+                            onClick={() =>
+                                definirFechados((anteriores) => {
+                                    const novos = new Set(anteriores);
+                                    if (novos.has(projeto.id)) novos.delete(projeto.id);
+                                    else novos.add(projeto.id);
+                                    return novos;
+                                })
+                            }
+                        >
+                            <CaretDownIcon
+                                size={12}
+                                className={[
+                                    'transition-transform duration-150 ease-out motion-reduce:transition-none',
+                                    aberto ? '' : '-rotate-90',
+                                ].join(' ')}
+                            />
                         </button>
                     )}
                 </div>

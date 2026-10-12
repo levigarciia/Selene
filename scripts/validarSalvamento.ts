@@ -30,20 +30,22 @@ export async function validarSalvamento(pagina: Page, aplicativo: ElectronApplic
     const pid = await pidMotor(aplicativo);
     await pagina.getByRole('button', { name: 'Configurações', exact: true }).click();
     const secoes = pagina.getByRole('navigation', { name: 'Seções das configurações' });
-    await secoes.getByRole('button', { name: 'Geral', exact: true }).click();
+    await secoes.getByRole('button', { name: 'Provedores', exact: true }).click();
     await pagina.getByLabel('Temperatura', { exact: true }).fill('0.3');
-    await pagina.getByRole('button', { name: 'Salvar', exact: true }).click();
-    await pagina.getByText('Configurações salvas', { exact: true }).waitFor();
+    await pagina.waitForFunction(async () => {
+        const estado = await window.selene!.estado();
+        return estado.ok && estado.valor.configuracao.temperatura === 0.3;
+    });
     assert.equal(await pidMotor(aplicativo), pid, 'Salvar temperatura deve manter o mesmo processo.');
     const geracaoSalva = await pagina.evaluate(() => window.selene!.estado());
     assert.ok(geracaoSalva.ok);
     assert.equal(geracaoSalva.valor.motor.recarregamentoPendente, false);
-    await secoes.getByRole('button', { name: 'Motor', exact: true }).click();
-    await pagina.getByText('Avançado', { exact: true }).click();
     await pagina.getByLabel('Ajustar memória automaticamente', { exact: true }).uncheck();
     await pagina.getByLabel('Contexto', { exact: true }).fill('4096');
-    await pagina.getByRole('button', { name: 'Salvar', exact: true }).click();
-    await pagina.getByText('Configurações salvas', { exact: true }).waitFor();
+    await pagina.waitForFunction(async () => {
+        const estado = await window.selene!.estado();
+        return estado.ok && estado.valor.configuracao.contexto === 4096;
+    });
     const resultado = await pagina.evaluate(() => window.selene!.estado());
     assert.ok(resultado.ok);
     assert.equal(resultado.valor.motor.fase, 'pronto');

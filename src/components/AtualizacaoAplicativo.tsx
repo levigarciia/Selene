@@ -1,8 +1,9 @@
 import type { PonteSelene } from '../../shared/contratos';
 import { descreverAtualizacao, type EstadoAtualizacao } from '../../shared/atualizacoes';
 import type { Executar } from './Configuracoes';
+import { Linha, botaoSecundario } from './PainelConfiguracoes';
 
-/** Use na área Geral para consultar a versão e o andamento das atualizações automáticas. */
+/** Versão instalada e andamento das atualizações automáticas. */
 export function AtualizacaoAplicativo({
     estado,
     ponte,
@@ -12,47 +13,33 @@ export function AtualizacaoAplicativo({
     ponte?: PonteSelene;
     executar: Executar;
 }) {
-    if (!estado) return null;
+    if (!estado)
+        return <Linha id="config-versao" titulo="Versão" descricao="Atualizações indisponíveis neste ambiente." />;
     const ocupado = ['desativada', 'verificando', 'baixando', 'reiniciando'].includes(estado.fase);
     return (
-        <div className="flex items-center justify-between gap-4">
-            <div className="flex flex-col gap-1">
-                <span>Selene {estado.versaoAtual}</span>
-                <span
-                    data-ui="texto-secundario"
-                    className={[
-                        'text-secundario text-[12px] leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                        '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                        '[[data-ui~=usuario-direita]_&]:text-secundario',
-                        '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                        '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                    ].join(' ')}
-                    role="status"
+        <Linha
+            id="config-versao"
+            titulo={
+                <>
+                    Selene
+                    <code className="text-xs font-normal text-discreto">v{estado.versaoAtual}</code>
+                </>
+            }
+            descricao={<span role="status">{descreverAtualizacao(estado)}</span>}
+            controle={
+                <button
+                    type="button"
+                    className={botaoSecundario}
+                    disabled={!ponte || ocupado}
+                    onClick={() =>
+                        void executar(() =>
+                            estado.fase === 'pronta' ? ponte!.reiniciarAtualizacao() : ponte!.verificarAtualizacao(),
+                        )
+                    }
                 >
-                    {descreverAtualizacao(estado)}
-                </span>
-            </div>
-            <button
-                type="button"
-                data-ui="botao"
-                className={[
-                    'inline-flex items-center justify-center gap-[9px] bg-superficie rounded-[8px]',
-                    'whitespace-nowrap px-[14px] py-[9px] border border-solid border-borda',
-                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=lista-projetos]_>_&]:mb-[12px]',
-                    '[[data-ui~=lista-projetos]_>_&]:justify-start [[data-ui~=lista-projetos]_>_&]:gap-[8px]',
-                    '[@media(width<=600px)]:[[data-ui~=lista-projetos]_>_&]:m-[0]',
-                ].join(' ')}
-                disabled={!ponte || ocupado}
-                onClick={() =>
-                    void executar(() =>
-                        estado.fase === 'pronta' ? ponte!.reiniciarAtualizacao() : ponte!.verificarAtualizacao(),
-                    )
-                }
-            >
-                {estado.fase === 'pronta' ? 'Reiniciar e atualizar' : 'Buscar atualização'}
-            </button>
-        </div>
+                    {estado.fase === 'pronta' ? 'Reiniciar e atualizar' : 'Buscar atualização'}
+                </button>
+            }
+        />
     );
 }

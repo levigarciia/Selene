@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import {
     ArrowDownIcon,
+    ArrowBendUpRightIcon,
     ArrowUpIcon,
     BrainIcon,
+    QueueIcon,
     MoonIcon,
     LockSimpleIcon,
     LockSimpleOpenIcon,
@@ -24,6 +26,23 @@ import { rolagemDiscreta } from './rolagemDiscreta';
 import { FilaCode } from './FilaCode';
 import { ComputadorConversa } from './ComputadorConversa';
 
+const chaveUltimoModelo = 'selene.ultimoModelo';
+
+/** Lê o último modelo escolhido pelo usuário para servir de padrão em novos rascunhos. */
+function lerUltimoModelo(): string | null {
+    try {
+        return localStorage.getItem(chaveUltimoModelo);
+    } catch {
+        return null;
+    }
+}
+
+function salvarUltimoModelo(id: string) {
+    try {
+        localStorage.setItem(chaveUltimoModelo, id);
+    } catch {}
+}
+
 /** Coordena os dois modos do MVP e os controles da conversa selecionada. */
 export function TelaConversa({
     dados,
@@ -43,6 +62,7 @@ export function TelaConversa({
     const { estado, executar, ponte } = dados;
     const [catalogoAberto, definirCatalogoAberto] = useState(false);
     const [enviando, definirEnviando] = useState(false);
+    const [ctrlPressionado, definirCtrlPressionado] = useState(false);
     const [selecionandoProjeto, definirSelecionandoProjeto] = useState(false);
     const rolagem = useRef<HTMLDivElement>(null);
     const acompanhar = useRef(true);
@@ -59,9 +79,15 @@ export function TelaConversa({
     const ocupado = !!estado.conversaEmExecucao || enviando || selecionandoProjeto;
     const codeEmExecucao = modo === 'code' && !!conversa && estado.conversaEmExecucao === conversa.id;
     const inicial = !conversa?.mensagens.length;
-    const modeloId = conversa?.modeloId ?? estado.motor.modeloId ?? estado.modelos[0]?.id ?? '';
+    const ultimoModeloId = lerUltimoModelo();
+    const modeloId =
+        conversa?.modeloId ??
+        estado.modelos.find((item) => item.id === ultimoModeloId)?.id ??
+        estado.motor.modeloId ??
+        estado.modelos[0]?.id ??
+        '';
     const modelo = estado.modelos.find((item) => item.id === modeloId);
-    const niveis = niveisRaciocinio(modelo);
+    const niveis = modelo?.assinatura ? [] : niveisRaciocinio(modelo);
     const nivel = resolverNivelRaciocinio(modelo, conversa?.nivelRaciocinio);
     const motorOcupado = ['carregando', 'instalando'].includes(estado.motor.fase);
     const ultimaResposta = conversa?.mensagens
@@ -184,6 +210,7 @@ export function TelaConversa({
     }
 
     async function alterarOpcoes(alteracao: Partial<Conversa>) {
+        if (alteracao.modeloId) salvarUltimoModelo(alteracao.modeloId);
         const atual = conversa ?? dados.criarRascunho(modo);
         if (dados.estadoPersistido.conversas.some((item) => item.id === atual.id)) {
             await executar(() => ponte!.alterarConversa(atual.id, alteracao));
@@ -299,8 +326,11 @@ export function TelaConversa({
                             />
                         ))}
                         {dados.previasComputador[conversa.id] && (
-                            <ComputadorConversa previa={dados.previasComputador[conversa.id]}
-                                ponte={ponte} executar={executar} />
+                            <ComputadorConversa
+                                previa={dados.previasComputador[conversa.id]}
+                                ponte={ponte}
+                                executar={executar}
+                            />
                         )}
                     </div>
                 )}
@@ -433,15 +463,17 @@ export function TelaConversa({
                             evento.preventDefault();
                             if (!ocupado && !anexos.importando) void anexos.anexar(arquivos);
                         }}
+                        onKeyUp={(evento) => definirCtrlPressionado(evento.ctrlKey || evento.metaKey)}
+                        onBlur={() => definirCtrlPressionado(false)}
                         onKeyDown={(evento) => {
-                            if (codeEmExecucao && evento.key === 'Enter' && evento.altKey) {
-                                evento.preventDefault();
-                                void enviar('fila');
-                                return;
-                            }
+                            definirCtrlPressionado(evento.ctrlKey || evento.metaKey);
                             if (evento.key === 'Enter' && !evento.shiftKey && !evento.nativeEvent.isComposing) {
                                 evento.preventDefault();
-                                void enviar();
+                                if (codeEmExecucao) {
+                                    void enviar(evento.ctrlKey || evento.metaKey ? 'direcao' : 'fila');
+                                } else {
+                                    void enviar();
+                                }
                             }
                         }}
                     />
@@ -565,28 +597,27 @@ export function TelaConversa({
                         >
                             <PaperclipIcon size={18} />
                         </button>
-                        {codeEmExecucao && (
-                            <div className="ml-auto flex items-center gap-3 text-xs">
-                                <button
-                                    type="button"
-                                    disabled={!texto.trim() || enviando || !!anexos.imagens.length}
-                                    title="Colocar na fila (Alt+Enter)"
-                                    className="text-secundario disabled:opacity-40"
-                                    onClick={() => void enviar('fila')}
-                                >
-                                    Na fila
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={!texto.trim() || enviando || !!anexos.imagens.length}
-                                    title="Redirecionar a tarefa (Enter)"
-                                    className="text-principal disabled:opacity-40"
-                                >
-                                    Redirecionar
-                                </button>
-                            </div>
-                        )}
-                        {estado.conversaEmExecucao || enviando || motorOcupado ? (
+                        {codeEmExecucao && texto.trim() ? (
+                            <button
+                                data-ui="botao-enviar"
+                                className={[
+                                    'flex items-center justify-center w-[33px] h-[33px] rounded-full',
+                                    ctrlPressionado ? 'bg-[#b5a2dc] text-[#251b38]' : 'bg-[#e0d8ef] text-[#251b38]',
+                                    'shrink-0 border-0 border-solid border-current',
+                                ].join(' ')}
+                                type="button"
+                                aria-label={ctrlPressionado ? 'Redirecionar a tarefa' : 'Colocar na fila'}
+                                title={ctrlPressionado ? 'Redirecionar (Ctrl+Enter)' : 'Fila (Enter) · Ctrl+Enter redireciona'}
+                                disabled={enviando || !!anexos.imagens.length}
+                                onClick={(evento) => void enviar(evento.ctrlKey || ctrlPressionado ? 'direcao' : 'fila')}
+                            >
+                                {ctrlPressionado ? (
+                                    <ArrowBendUpRightIcon size={20} weight="bold" />
+                                ) : (
+                                    <QueueIcon size={20} weight="bold" />
+                                )}
+                            </button>
+                        ) : estado.conversaEmExecucao || enviando || motorOcupado ? (
                             <button
                                 data-ui="botao-enviar botao-interromper"
                                 className={[

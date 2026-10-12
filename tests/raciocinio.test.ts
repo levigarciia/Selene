@@ -24,6 +24,16 @@ test('oferece somente níveis compatíveis e resolve a escolha ao trocar o model
     expect(resolverNivelRaciocinio(llama, 'alto')).toBe('desativado');
 });
 
+test('modelos de assinatura não expõem controle de raciocínio nem enviam parâmetros locais', () => {
+    const assinatura: Modelo = {
+        ...qwen,
+        catalogoId: undefined,
+        assinatura: { provedor: 'chatgpt', id: 'gpt-5.4' },
+    };
+    expect(niveisRaciocinio(assinatura)).toEqual([]);
+    expect(parametrosRaciocinio(assinatura, 'alto', 1024)).toEqual({});
+});
+
 test('mostra os esforços informados pelo OpenRouter e envia o valor exato', () => {
     const remoto = (esforcos: NonNullable<Modelo['openrouter']>['esforcos']): Modelo => ({
         ...qwen,

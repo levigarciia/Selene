@@ -44,7 +44,7 @@ export type GrupoHistorico = {
     itens: Conversa[];
 };
 
-/** Use para separar modos e organizar Code em atuais, trabalhando e encerradas, sem agrupar por projeto. */
+/** Use para separar modos e organizar conversas atuais, em execução e encerradas. */
 export function agruparHistorico(
     conversas: Conversa[],
     modo: 'chat' | 'code',
@@ -72,16 +72,9 @@ export function agruparHistorico(
         });
     for (const conversa of ordenadas) {
         const atividade = obterAtividadeConversa(conversa, execucao);
-        const indice =
-            modo === 'chat'
-                ? 0
-                : atividade.ocupada
-                  ? atividade.fase === 'aprovacao'
-                      ? 0
-                      : 1
-                  : conversa.concluida
-                    ? 2
-                    : 0;
+        const indice = atividade.ocupada
+            ? atividade.fase === 'aprovacao' || modo === 'chat' ? 0 : 1
+            : conversa.concluida ? 2 : 0;
         grupos[indice].itens.push(conversa);
     }
     return grupos.filter((grupo) => grupo.itens.length > 0);

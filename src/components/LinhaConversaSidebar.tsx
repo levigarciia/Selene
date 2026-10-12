@@ -44,6 +44,7 @@ export function LinhaConversaSidebar({
                 selecionada={selecionada}
                 recolhida={recolhida}
                 selecionar={selecionar}
+                concluir={concluir}
                 abrirMenu={abrirMenu}
             />
         );

@@ -30,6 +30,15 @@ test('renomear ou concluir não introduz valores padrão para modelo e permissã
     expect(esquemaAlteracao.parse({ modeloId: null })).toEqual({ modeloId: null });
 });
 
+test('chats ocultos ficam em concluídas e retornam às atuais durante a execução', () => {
+    const atual = { ...conversa(), modo: 'chat' as const };
+    const oculta = { ...conversa(), modo: 'chat' as const, concluida: true };
+    const grupos = agruparHistorico([atual, oculta], 'chat', null);
+    expect(grupos.map((grupo) => grupo.chave)).toEqual(['atuais', 'concluidas']);
+    expect(grupos[1].itens).toEqual([oculta]);
+    expect(agruparHistorico([oculta], 'chat', oculta.id)[0].chave).toBe('atuais');
+});
+
 test('categorias vazias não aparecem no histórico', () => {
     expect(agruparHistorico([], 'code', null)).toEqual([]);
     const atual = conversa();

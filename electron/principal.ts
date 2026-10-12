@@ -25,6 +25,8 @@ import { MotorLocal } from './services/motor';
 import { Agente } from './services/agente';
 import { EnviosCode } from './services/enviosCode';
 import { OpenRouter } from './services/openrouter';
+import { Memorias } from './services/memorias';
+import { modeloExtracaoMemoria } from '../shared/memoria';
 import { esforcosDoProvedor, esquemaOrdenacaoOpenRouter, nomeModeloOpenRouter } from '../shared/openrouter';
 import { Navegador } from './services/navegador';
 import { Computador } from './services/computador';
@@ -43,10 +45,31 @@ import { Operacoes } from './services/operacoes';
 import { AcessoWeb } from './services/acessoWeb';
 import { esquemaConfiguracaoWeb } from '../shared/acessoWeb';
 import { exportarMarkdown } from '../shared/exportacao';
+import { assinaturaCompletar, listarModelosAssinatura, verificarAssinatura } from './services/assinaturas';
+import { esquemaNovoModeloAssinatura } from '../shared/assinaturas';
+import { consultarLimites } from './services/limitesAssinatura';
+import { Terminais } from './services/terminais';
+import {
+    criarBranch,
+    executarAcaoGit,
+    lerStatus,
+    listarGitHubDoProjeto,
+    trocarBranch,
+} from './services/repositorio';
+import {
+    esquemaAcaoGit,
+    esquemaDimensoesTerminal,
+    esquemaEditor,
+    esquemaConsultaGitHub,
+    esquemaScriptProjeto,
+    type Editor,
+} from '../shared/repositorio';
 
 app.setName('Selene');
 app.setPath('userData', join(app.getPath('appData'), 'Selene'));
 const pastaTeste = process.env.SELENE_TESTE_DADOS;
+/** Janela usada pela Selene para compactar o histórico enviado às inscrições, que não informam o limite real. */
+const contextoAssinatura = 200_000;
 if (pastaTeste && process.env.SELENE_TESTE === '1') app.setPath('userData', pastaTeste);
 let janela: BrowserWindow | null = null;
 let persistencia: Persistencia;
@@ -54,6 +77,7 @@ let motor: MotorLocal;
 let agente: Agente;
 let enviosCode: EnviosCode;
 let openrouter: OpenRouter;
+let memorias: Memorias;
 let navegador: Navegador;
 let computador: Computador;
 let downloads: DownloadsModelos;
@@ -61,6 +85,9 @@ let anexos: AnexosImagens;
 let atualizacoes: Atualizacoes;
 let acessoWeb: AcessoWeb;
 const operacoes = new Operacoes();
+const terminais = new Terminais((evento) => {
+    if (janela && !janela.isDestroyed()) janela.webContents.send('selene:evento', evento);
+});
 let tarefa: Promise<void> | null = null;
 let encerramentoAutorizado = false;
 const uuid = z.string().uuid();
@@ -115,6 +142,92 @@ function registrar<T extends z.ZodType>(
             return { ok: false, erro: erro instanceof Error ? erro.message : 'Operação não concluída.' };
         }
     });
+}
+
+/** Expõe a operação somente à janela do desktop, fora do acesso web, para ações que executam processos. */
+function registrarDesktop<T extends z.ZodType>(
+    nome: string,
+    esquema: T,
+    executar: (argumentos: z.infer<T>) => Promise<unknown> | unknown,
+): void {
+    ipcMain.handle(`selene:${nome}`, async (evento, ...entrada): Promise<Resultado<unknown>> => {
+        try {
+            validarRemetente(evento);
+            return { ok: true, valor: await executar(esquema.parse(entrada)) };
+        } catch (erro) {
+            return { ok: false, erro: erro instanceof Error ? erro.message : 'Operação não concluída.' };
+        }
+    });
+}
+
+function projetoPorId(id: string) {
+    const projeto = persistencia.dados.projetos.find((item) => item.id === id);
+    if (!projeto) throw new Error('Projeto não encontrado.');
+    return projeto;
+}
+
+function editorPorProtocolo(editor: Editor): string | null {
+    if (editor === 'vscode') return 'vscode';
+    if (editor === 'cursor') return 'cursor';
+    return null;
+}
+
+function registrarRepositorio(): void {
+    const branch = z.string().trim().min(1).max(250);
+    registrarDesktop('statusRepositorio', z.tuple([uuid]), ([id]) => lerStatus(projetoPorId(id).caminho));
+    registrarDesktop('trocarBranch', z.tuple([uuid, branch, z.boolean()]), ([id, nome, criar]) =>
+        criar ? criarBranch(projetoPorId(id).caminho, nome) : trocarBranch(projetoPorId(id).caminho, nome),
+    );
+    registrarDesktop(
+        'acaoGit',
+        z.tuple([uuid, esquemaAcaoGit, z.string().max(5000)]),
+        ([id, acao, mensagem]) => executarAcaoGit(projetoPorId(id).caminho, acao, mensagem),
+    );
+    registrarDesktop('editoresDisponiveis', z.tuple([]), () =>
+        esquemaEditor.options.filter((editor) => {
+            const protocolo = editorPorProtocolo(editor);
+            return !protocolo || !!app.getApplicationNameForProtocol(`${protocolo}://`);
+        }),
+    );
+    registrarDesktop('abrirNoEditor', z.tuple([uuid, esquemaEditor]), async ([id, editor]) => {
+        const pasta = projetoPorId(id).caminho;
+        const protocolo = editorPorProtocolo(editor);
+        if (!protocolo) {
+            const erro = await shell.openPath(pasta);
+            if (erro) throw new Error(erro);
+            return;
+        }
+        await shell.openExternal(`${protocolo}://file/${pasta.replaceAll('\\', '/')}`);
+    });
+    registrarDesktop(
+        'salvarScriptsProjeto',
+        z.tuple([uuid, z.array(esquemaScriptProjeto).max(20)]),
+        async ([id, scripts]) => {
+            projetoPorId(id).scripts = scripts;
+            await salvar();
+        },
+    );
+    registrarDesktop('listarGitHub', z.tuple([uuid, esquemaConsultaGitHub]), async ([id, consulta]) => {
+        const pasta = projetoPorId(id).caminho;
+        return listarGitHubDoProjeto(pasta, consulta);
+    });
+    registrarDesktop('abrirGitHub', z.tuple([z.string().url().max(2000)]), async ([url]) => {
+        if (new URL(url).origin !== 'https://github.com') throw new Error('Endereço do GitHub inválido.');
+        await shell.openExternal(url);
+    });
+    registrarDesktop(
+        'abrirTerminal',
+        z.tuple([uuid, esquemaDimensoesTerminal, z.string().max(2000).optional()]),
+        ([id, dimensoes, comando]) => terminais.abrir(id, projetoPorId(id).caminho, dimensoes, comando),
+    );
+    registrarDesktop('historicoTerminal', z.tuple([uuid]), ([id]) => terminais.historico(id));
+    registrarDesktop('escreverTerminal', z.tuple([uuid, z.string().max(100000)]), ([id, dados]) =>
+        terminais.escrever(id, dados),
+    );
+    registrarDesktop('redimensionarTerminal', z.tuple([uuid, esquemaDimensoesTerminal]), ([id, dimensoes]) =>
+        terminais.redimensionar(id, dimensoes),
+    );
+    registrarDesktop('fecharTerminal', z.tuple([uuid]), ([id]) => terminais.fechar(id));
 }
 
 function conversaPorId(id: string) {
@@ -185,7 +298,7 @@ async function registrarDownload(item: ModeloCatalogo, caminho: string): Promise
 async function carregarModelo(id: string): Promise<void> {
     const modelo = persistencia.dados.modelos.find((item) => item.id === id);
     if (!modelo) throw new Error('Modelo não encontrado.');
-    if (modelo.openrouter) throw new Error('Selecione o modelo OpenRouter na conversa para enviar mensagens.');
+    if (modelo.openrouter || modelo.assinatura) throw new Error('Modelo remoto não pode ser carregado no motor local.');
     const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
     await motor.carregar(modelo, configuracao);
 }
@@ -245,6 +358,47 @@ function registrarOperacoes(): void {
             publicarEstado();
         },
     );
+    registrar('verificarAssinaturas', vazio, async () => {
+        const [chatgpt, claude] = await Promise.all([
+            verificarAssinatura('chatgpt'),
+            verificarAssinatura('claude'),
+        ]);
+        return { chatgpt, claude };
+    });
+    const idsCatalogoOpenRouter = async () => (await openrouter.modelos()).map((modelo) => modelo.id);
+    registrar('modelosAssinatura', vazio, () => listarModelosAssinatura(idsCatalogoOpenRouter));
+    registrar('limitesAssinaturas', vazio, async () => {
+        const [chatgpt, claude] = await Promise.all([consultarLimites('chatgpt'), consultarLimites('claude')]);
+        return { chatgpt, claude };
+    });
+    registrar('adicionarModeloAssinatura', z.tuple([esquemaNovoModeloAssinatura]), async ([entrada]) => {
+        exigirLivre();
+        const cadastrado = (await listarModelosAssinatura(idsCatalogoOpenRouter))[entrada.assinatura.provedor].find(
+            (modelo) => modelo.id === entrada.assinatura.id,
+        );
+        if (!cadastrado) throw new Error('Modelo de assinatura desconhecido.');
+        const existente = persistencia.dados.modelos.find(
+            (modelo) =>
+                modelo.assinatura?.provedor === entrada.assinatura.provedor &&
+                modelo.assinatura.id === entrada.assinatura.id,
+        );
+        if (existente) return existente;
+        const modelo = {
+            id: randomUUID(),
+            nome: entrada.nome,
+            caminho: `${entrada.assinatura.provedor}:${entrada.assinatura.id}`,
+            tamanho: 0,
+            assinatura: entrada.assinatura,
+        };
+        persistencia.dados.modelos.push(modelo);
+        try {
+            await salvar();
+        } catch (erro) {
+            persistencia.dados.modelos = persistencia.dados.modelos.filter((item) => item.id !== modelo.id);
+            throw erro;
+        }
+        return modelo;
+    });
     registrar('catalogoOpenRouter', z.tuple([z.boolean(), esquemaOrdenacaoOpenRouter]), ([atualizar, ordenacao]) =>
         openrouter.modelos(atualizar, ordenacao),
     );
@@ -392,6 +546,7 @@ function registrarOperacoes(): void {
         const projeto = persistencia.dados.projetos.find((item) => item.id === id);
         if (!projeto) throw new Error('Projeto não encontrado.');
         projeto.oculto = true;
+        terminais.fecharProjeto(id);
         await salvar();
     });
     registrar('promoverRascunho', z.tuple([esquemaRascunho]), async ([entrada]) => {
@@ -450,9 +605,6 @@ function registrarOperacoes(): void {
         if (alteracao.modeloId && !persistencia.dados.modelos.some((modelo) => modelo.id === alteracao.modeloId)) {
             throw new Error('Modelo não encontrado.');
         }
-        if (alteracao.concluida !== undefined && conversa.modo !== 'code') {
-            throw new Error('Somente conversas Code podem ser encerradas.');
-        }
         Object.assign(conversa, alteracao, { atualizadoEm: new Date().toISOString() });
         if (alteracao.concluida !== undefined) {
             if (alteracao.concluida) conversa.encerradaEm = conversa.atualizadoEm;
@@ -464,9 +616,9 @@ function registrarOperacoes(): void {
     registrar('excluir', z.tuple([uuid]), async ([id]) => {
         await excluirConversas([id]);
     });
-    registrar('excluirConcluidas', vazio, async () => {
+    registrar('excluirConcluidas', z.tuple([z.enum(['chat', 'code']).optional()]), async ([modo = 'code']) => {
         const ids = persistencia.dados.conversas
-            .filter((conversa) => conversa.modo === 'code' && conversa.concluida)
+            .filter((conversa) => conversa.modo === modo && conversa.concluida)
             .map((conversa) => conversa.id);
         await excluirConversas(ids);
         return ids;
@@ -615,9 +767,16 @@ function registrarOperacoes(): void {
         }
         const modelo = persistencia.dados.modelos.find((item) => item.id === conversa.modeloId);
         if (!modelo) throw new Error('Modelo não encontrado.');
+        if (
+            modelo.assinatura &&
+            (imagens.length || preparada.mensagens.some((mensagem) => mensagem.imagens?.length))
+        ) {
+            throw new Error('Os provedores de assinatura aceitam apenas mensagens de texto nesta versão.');
+        }
         const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
         const precisaLigar =
             !modelo.openrouter &&
+            !modelo.assinatura &&
             (motor.estado.fase !== 'pronto' ||
                 motor.estado.modeloId !== modelo.id ||
                 motor.precisaRecarregar(configuracao, modelo));
@@ -647,7 +806,9 @@ function registrarOperacoes(): void {
                             maxTokens: Math.min(configuracao.maxTokens, modelo.openrouter.maxTokens ?? 32768),
                         };
                     }
-                    if (precisaLigar) await carregarModelo(modelo.id);
+                    // Inscrições rodam no próprio harness, que gerencia o contexto; o motor local não participa.
+                    if (modelo.assinatura) return { ...configuracao, contexto: contextoAssinatura };
+                    if (precisaLigar || !motor.estado.contextoDisponivel) await carregarModelo(modelo.id);
                     sinal.throwIfAborted();
                     if (possuiImagens && !motor.estado.suportaImagens) {
                         throw new Error(
@@ -670,6 +831,8 @@ function registrarOperacoes(): void {
                 tarefa = null;
                 publicarEstado();
                 const resposta = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
+                if (resposta?.estado === 'concluida' && modelo.openrouter && openrouter.configurado)
+                    void memorias.extrair(conversa);
                 const proxima = conversa.enviosPendentes?.[0];
                 if (encerramentoAutorizado || resposta?.estado !== 'concluida' || !proxima) return;
                 try {
@@ -740,6 +903,8 @@ function registrarOperacoes(): void {
         if (escolha.canceled || !escolha.filePath) return;
         await writeFile(escolha.filePath, await exportarMarkdown(conversa, (id) => anexos.ler(id)), 'utf8');
     });
+    registrar('fixarMemoria', z.tuple([uuid, z.boolean()]), ([id, fixada]) => memorias.fixar(id, fixada));
+    registrar('removerMemoria', z.tuple([uuid]), ([id]) => memorias.remover(id));
     ipcMain.on('selene:janela', (evento, acao) => {
         try {
             validarRemetente(evento);
@@ -812,7 +977,15 @@ app.whenReady()
         openrouter = new OpenRouter(app.getPath('userData'));
         await openrouter.abrir();
         enviosCode = new EnviosCode(salvar);
+        memorias = new Memorias({
+            dados: () => persistencia.dados,
+            salvar,
+            completarExtracao: (mensagens, sinal) =>
+                openrouter.completarTexto(modeloExtracaoMemoria, mensagens, sinal),
+        });
         agente = new Agente({
+            memorias,
+            conversas: () => persistencia.dados.conversas,
             receberDirecoes: (conversa) =>
                 conversa.modo === 'code' ? enviosCode.receberDirecoes(conversa) : Promise.resolve([]),
             web: navegador,
@@ -821,6 +994,16 @@ app.whenReady()
             completar: (corpo, sinal) => {
                 const conversa = agente.conversaId ? conversaPorId(agente.conversaId) : undefined;
                 const modelo = persistencia.dados.modelos.find((item) => item.id === conversa?.modeloId);
+                if (modelo?.assinatura) return assinaturaCompletar(modelo.assinatura, corpo, sinal, {
+                        acessoCompleto: !!conversa?.acessoCompleto,
+                        pasta: conversa?.projeto,
+                        acoes: {
+                            iniciar: (chamadaId, nome, argumentos) => agente.iniciarAcaoExterna(chamadaId, nome, argumentos),
+                            aprovar: (chamadaId, nome, argumentos, sinalAcao) =>
+                                agente.aprovarAcaoExterna(chamadaId, nome, argumentos, sinalAcao),
+                            concluir: (chamadaId, resultado, erro) => agente.concluirAcaoExterna(chamadaId, resultado, erro),
+                        },
+                    });
                 if (!modelo?.openrouter) return motor.completar(corpo, sinal);
                 const mensagem = [...conversa!.mensagens].reverse().find((item) => item.papel === 'assistant')!;
                 return openrouter.completar(modelo.openrouter.id, corpo, sinal, async (custo) => {
@@ -849,6 +1032,7 @@ app.whenReady()
             () => ({ tipo: 'estado', estado: estado() }),
         );
         registrarOperacoes();
+        registrarRepositorio();
         atualizacoes = new Atualizacoes(
             electronUpdater.autoUpdater,
             app.isPackaged && process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_DIR,
@@ -871,6 +1055,7 @@ async function prepararEncerramento(): Promise<void> {
     agente?.cancelar();
     navegador?.encerrar();
     computador?.encerrar();
+    terminais.encerrar();
     motor?.parar();
     await downloads?.encerrar();
     await tarefa;

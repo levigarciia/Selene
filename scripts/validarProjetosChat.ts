@@ -9,11 +9,26 @@ await mkdir('.teste-dados', { recursive: true });
 await mkdir('artifacts', { recursive: true });
 const pasta = await mkdtemp(resolve('.teste-dados', 'projetos-chat-'));
 const conversaId = randomUUID();
+const codeId = randomUUID();
 const dados = esquemaDados.parse({
     versao: 1,
     configuracao: {},
     modelos: [],
     conversas: [
+        {
+            id: codeId,
+            titulo: 'Code concluído preservado',
+            modo: 'code',
+            concluida: true,
+            atualizadoEm: new Date().toISOString(),
+            mensagens: [{
+                id: randomUUID(),
+                papel: 'assistant',
+                texto: 'Histórico Code preservado',
+                estado: 'concluida',
+                criadoEm: new Date().toISOString(),
+            }],
+        },
         {
             id: conversaId,
             titulo: 'Chat existente',
@@ -75,12 +90,37 @@ try {
     assert.equal(await opcoes.evaluate((elemento) => getComputedStyle(elemento).opacity), '0');
     await chat.hover();
     assert.equal(await opcoes.evaluate((elemento) => getComputedStyle(elemento).opacity), '1');
+    const ocultar = pagina.getByRole('button', { name: 'Ocultar chat: Chat existente', exact: true });
+    assert.equal(await ocultar.evaluate((elemento) => getComputedStyle(elemento).opacity), '1');
+    const posicaoOcultar = await ocultar.boundingBox();
+    const posicaoOpcoes = await opcoes.boundingBox();
+    assert.ok(posicaoOcultar && posicaoOpcoes);
+    assert.ok(posicaoOcultar.x + posicaoOcultar.width <= posicaoOpcoes.x, JSON.stringify({
+        ocultar: posicaoOcultar, opcoes: posicaoOpcoes,
+    }));
+    assert.equal(posicaoOcultar.y, posicaoOpcoes.y);
     await opcoes.click();
     await pagina.getByRole('menuitem', { name: 'Mover para Estudos', exact: true }).click();
     await pagina
         .getByRole('region', { name: 'Projeto de Chat Estudos', exact: true })
         .getByRole('button', { name: 'Chat existente', exact: true })
         .waitFor();
+    const grupoProjeto = pagina.getByRole('region', { name: 'Projeto de Chat Estudos', exact: true });
+    const recolher = grupoProjeto.getByRole('button', { name: 'Conversas de Estudos', exact: true });
+    const botaoProjeto = grupoProjeto.getByRole('button', { name: 'Abrir projeto Estudos', exact: true });
+    const posicaoRecolher = await recolher.boundingBox();
+    const posicaoProjeto = await botaoProjeto.boundingBox();
+    assert.ok(posicaoRecolher && posicaoProjeto);
+    assert.ok(posicaoRecolher.x > posicaoProjeto.x + posicaoProjeto.width);
+    await recolher.click();
+    await grupoProjeto.getByRole('button', { name: 'Chat existente', exact: true }).waitFor({ state: 'hidden' });
+    await recolher.click();
+    await pagina.getByRole('button', { name: 'Ocultar chat: Chat existente', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Concluídas', exact: true }).waitFor();
+    await pagina.getByRole('button', { name: 'Chat existente', exact: true }).waitFor({ state: 'hidden' });
+    await pagina.getByRole('button', { name: 'Concluídas', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Retomar conversa: Chat existente', exact: true }).click();
+    await grupoProjeto.getByRole('button', { name: 'Chat existente', exact: true }).waitFor();
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     assert.equal(await pagina.getByRole('button', { name: 'Abrir projeto Estudos', exact: true }).count(), 0);
     await pagina.getByRole('button', { name: 'Chat', exact: true }).click();
@@ -88,6 +128,7 @@ try {
         .locator('[data-ui~="sidebar"]')
         .getByRole('button', { name: 'Abrir projeto Estudos', exact: true })
         .click();
+    await grupoProjeto.getByRole('button', { name: 'Chat existente', exact: true }).hover();
     await pagina.screenshot({ path: 'artifacts/selene-projetos-chat.png' });
     const estado = await pagina.evaluate(() => window.selene!.estado());
     assert.ok(estado.ok);
@@ -110,7 +151,22 @@ try {
     );
     await pagina.getByRole('button', { name: 'Chat existente', exact: true }).click();
     assert.equal(await pagina.getByText('Histórico preservado', { exact: true }).count(), 1);
-    await pagina.locator('[data-ui~="breadcrumb-projeto-chat"]').click();
+    await pagina.getByRole('button', { name: 'Ocultar chat: Chat existente', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Concluídas', exact: true }).click({ button: 'right' });
+    await pagina.getByRole('menuitem', { name: 'Apagar todos os chats concluídos', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    let persistidos = JSON.parse(await readFile(resolve(pasta, 'selene.json'), 'utf8'));
+    assert.ok(persistidos.conversas.find((item: { id: string }) => item.id === conversaId)?.concluida);
+    await pagina.getByRole('button', { name: 'Concluídas', exact: true }).click({ button: 'right' });
+    await pagina.getByRole('menuitem', { name: 'Apagar todos os chats concluídos', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Apagar todos', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Concluídas', exact: true }).waitFor({ state: 'hidden' });
+    persistidos = JSON.parse(await readFile(resolve(pasta, 'selene.json'), 'utf8'));
+    assert.equal(persistidos.conversas.some((item: { id: string }) => item.id === conversaId), false);
+    assert.ok(persistidos.conversas.some((item: { id: string }) => item.id === codeId));
+    await pagina.locator('[data-ui~="sidebar"]').getByRole('button', {
+        name: 'Abrir projeto Estudos', exact: true,
+    }).click();
     await pagina.getByRole('button', { name: 'Remover arquivo referencia.md', exact: true }).click();
     await pagina.getByText('referencia.md', { exact: true }).waitFor({ state: 'hidden' });
     assert.equal(await readFile(referencia, 'utf8'), 'O projeto estuda astronomia.');

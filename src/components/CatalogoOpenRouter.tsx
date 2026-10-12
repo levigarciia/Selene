@@ -86,7 +86,7 @@ export function CatalogoOpenRouter({
             </div>
             {!estado.openrouterConfigurado && (
                 <p className="px-3 py-2 text-secundario">
-                    Salve sua chave de API em Configurações, Geral, OpenRouter para enviar mensagens.
+                    Salve sua chave de API em Configurações, Provedores, OpenRouter para enviar mensagens.
                 </p>
             )}
             {carregando && (

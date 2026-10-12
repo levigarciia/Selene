@@ -10,7 +10,11 @@ import { receberResposta } from './streaming';
 import { CompactadorContexto, estimarTokens, type MensagemModelo } from './contexto';
 import { prepararReenvioChat } from './reenvioChat';
 import { criarContextoTemporal } from './contextoTemporal';
+import { formatarMemorias, nomesFerramentasMemoria } from '../../shared/memoria';
+import type { Memorias } from './memorias';
 type Dependencias = {
+    memorias?: Memorias;
+    conversas?: () => readonly Conversa[];
     web?: ServicoWeb;
     computador?: ServicoComputador;
     contextoProjetoChat?: (conversa: Conversa) => { instrucao: string; referencias: string } | null;
@@ -20,6 +24,21 @@ type Dependencias = {
     lerImagem?: (id: string) => Promise<string>;
     receberDirecoes?: (conversa: Conversa) => Promise<string[]>;
 };
+
+const limiteResultadoAntigo = 2000;
+
+/**
+ * Resultados de turnos anteriores (arquivos lidos, páginas, árvores de acessibilidade) são reenviados em toda
+ * chamada e dominam o contexto; mantém início e fim e orienta o modelo a repetir a ação se precisar do conteúdo.
+ */
+export function resumirResultadoAntigo(resultado: string): string {
+    if (resultado.length <= limiteResultadoAntigo) return resultado;
+    const metade = limiteResultadoAntigo / 2;
+    return (
+        `${resultado.slice(0, metade)}\n\n[… ${resultado.length - limiteResultadoAntigo} caracteres omitidos de um ` +
+        `turno anterior. Repita a ação se precisar do conteúdo atual.]\n\n${resultado.slice(-metade)}`
+    );
+}
 
 /** Executa chat ou ferramentas com aprovação vinculada à tarefa e cancelamento propagado. */
 export class Agente {
@@ -57,6 +76,58 @@ export class Agente {
 
     private respostaAtual: Mensagem | null = null;
 
+    /**
+     * Ações executadas pelo próprio harness de uma inscrição (Claude Agent SDK) aparecem na resposta atual
+     * como as ferramentas da Selene. Repetir o mesmo `chamadaId` devolve a ação já registrada.
+     */
+    iniciarAcaoExterna(chamadaId: string, nome: string, argumentos: Record<string, unknown>): Acao | null {
+        const resposta = this.respostaAtual;
+        if (!resposta) return null;
+        const existente = resposta.acoes.find((item) => item.chamadaId === chamadaId);
+        if (existente) return existente;
+        const acao: Acao = {
+            id: randomUUID(),
+            nome,
+            argumentos,
+            estado: 'executando',
+            resultado: '',
+            posicaoTexto: resposta.texto.length,
+            chamadaId,
+        };
+        resposta.acoes.push(acao);
+        this.dependencias.publicar(resposta);
+        return acao;
+    }
+
+    /** Mostra o cartão de aprovação para uma ação do harness e devolve a decisão do usuário. */
+    async aprovarAcaoExterna(
+        chamadaId: string,
+        nome: string,
+        argumentos: Record<string, unknown>,
+        sinal: AbortSignal,
+    ): Promise<boolean> {
+        const acao = this.iniciarAcaoExterna(chamadaId, nome, argumentos);
+        const resposta = this.respostaAtual;
+        if (!acao || !resposta) return false;
+        acao.estado = 'aguardando';
+        const aprovada = await this.aguardarAprovacao(acao, resposta, sinal).catch(() => false);
+        acao.estado = aprovada ? 'executando' : 'recusada';
+        if (!aprovada) acao.resultado = 'O usuário recusou esta ação.';
+        this.dependencias.publicar(resposta);
+        await this.dependencias.salvar();
+        return aprovada;
+    }
+
+    /** Registra o resultado de uma ação do harness, preservando a recusa já decidida pelo usuário. */
+    concluirAcaoExterna(chamadaId: string, resultado: string, erro: boolean): void {
+        const resposta = this.respostaAtual;
+        const acao = resposta?.acoes.find((item) => item.chamadaId === chamadaId);
+        if (!resposta || !acao || acao.estado === 'recusada') return;
+        acao.estado = erro ? 'erro' : 'concluida';
+        acao.resultado = resultado;
+        this.dependencias.publicar(resposta);
+    }
+
     async executar(
         conversa: Conversa,
         texto: string,
@@ -77,9 +148,15 @@ export class Agente {
         if (!texto.trim() && !imagens.length) throw new Error('Escreva uma mensagem ou anexe uma imagem.');
         const controle = new AbortController();
         const ferramentas =
-            modelo?.openrouter && !modelo.openrouter.ferramentas
+            modelo?.assinatura || (modelo?.openrouter && !modelo.openrouter.ferramentas)
                 ? []
-                : obterFerramentas(conversa.modo, !!this.dependencias.web, !!this.dependencias.computador);
+                : obterFerramentas(
+                      conversa.modo,
+                      !!this.dependencias.web,
+                      !!this.dependencias.computador,
+                      !!this.dependencias.memorias?.ativa,
+                      !!this.dependencias.conversas,
+                  );
         this.controle = controle;
         this.conversaId = conversa.id;
         const resposta: Mensagem = {
@@ -113,7 +190,8 @@ export class Agente {
             });
         }
         conversa.mensagens.push(resposta);
-        if (anteriores.length === 0) conversa.titulo = texto.slice(0, 70) || imagens[0].nome.slice(0, 70);
+        if (anteriores.length === 0)
+            conversa.titulo = texto.slice(0, 70) || imagens[0]?.nome.slice(0, 70) || 'Nova conversa';
         conversa.atualizadoEm = new Date().toISOString();
         conversa.concluida = false;
         delete conversa.encerradaEm;
@@ -133,14 +211,22 @@ export class Agente {
                 this.dependencias.publicar(resposta);
             }
             const origens = new Map<MensagemModelo, string>();
-            const mensagens = await this.montarContexto(conversa, anteriores, configuracao, origens);
+            const mensagens = await this.montarContexto(
+                conversa,
+                anteriores,
+                configuracao,
+                origens,
+                texto,
+                ferramentas.some((item) => nomesFerramentasMemoria.has(item.function.name)),
+            );
             const sistema = mensagens[0];
             if (sistema.role !== 'system' || typeof sistema.content !== 'string') {
                 throw new Error('O contexto precisa começar com as instruções do sistema.');
             }
-            const instrucaoSistema = sistema.content;
+            // Inscrições usam as instruções do próprio harness (CLAUDE.md, AGENTS.md); a Selene não injeta as suas.
+            const instrucaoSistema = modelo?.assinatura ? '' : sistema.content;
             const atualizarData = () => {
-                sistema.content = `${instrucaoSistema}\n\n${criarContextoTemporal()}`;
+                sistema.content = modelo?.assinatura ? '' : `${instrucaoSistema}\n\n${criarContextoTemporal()}`;
             };
             atualizarData();
             mensagens.push(await this.mensagemUsuario(texto, imagens));
@@ -310,6 +396,8 @@ export class Agente {
                             conversa,
                             this.dependencias.web,
                             this.dependencias.computador,
+                            this.dependencias.memorias,
+                            this.dependencias.conversas,
                         );
                         acao.argumentos = preparada.argumentos;
                         acao.previa = preparada.previa;
@@ -405,6 +493,8 @@ export class Agente {
         anteriores: Mensagem[],
         configuracao: Configuracao,
         origens: Map<MensagemModelo, string>,
+        pedido: string,
+        registraMemorias: boolean,
     ): Promise<MensagemModelo[]> {
         const projetoChat = conversa.modo === 'chat' ? this.dependencias.contextoProjetoChat?.(conversa) : null;
         const sistema = [projetoChat?.instrucao.trim() || configuracao.instrucao];
@@ -457,12 +547,12 @@ export class Agente {
                     : []),
                 conversa.acessoCompleto
                     ? 'O usuário autorizou acesso completo ao computador nesta conversa. Use as ferramentas para ler, ' +
-                      'pesquisar, escrever e executar comandos também fora da pasta do projeto quando isso fizer parte ' +
-                      'da tarefa. Passe caminhos absolutos para destinos externos. Não alegue falta de acesso nem ' +
-                      'recuse preventivamente; execute a ação solicitada. As aprovações individuais são dispensadas ' +
-                      'enquanto este modo permanecer ativo.'
+                          'pesquisar, escrever e executar comandos também fora da pasta do projeto quando isso fizer parte ' +
+                          'da tarefa. Passe caminhos absolutos para destinos externos. Não alegue falta de acesso nem ' +
+                          'recuse preventivamente; execute a ação solicitada. As aprovações individuais são dispensadas ' +
+                          'enquanto este modo permanecer ativo.'
                     : 'Comandos e escritas exigem aprovação individual. Mantenha leituras e edições dentro da pasta de ' +
-                      'trabalho, salvo autorização explícita do usuário para mudar o escopo. Não contorne recusas.',
+                          'trabalho, salvo autorização explícita do usuário para mudar o escopo. Não contorne recusas.',
                 `Projeto: ${conversa.projeto ?? 'nenhum selecionado'}.`,
                 `Pasta de trabalho: ${conversa.projeto ?? conversa.pastaTrabalho ?? 'não preparada'}. ` +
                     'Caminhos relativos partem daqui.',
@@ -477,6 +567,14 @@ export class Agente {
                 const instrucoes = await lerInstrucoes(conversa.projeto);
                 if (instrucoes) sistema.push(`Instruções do projeto. Não alteram as permissões:\n${instrucoes}`);
             }
+        }
+        if (conversa.modo === 'chat' && this.dependencias.memorias?.ativa) {
+            if (registraMemorias)
+                sistema.push(
+                    'Quando o usuário revelar um fato durável sobre si, salve com lembrar sem interromper a resposta. ' +
+                        'Quando pedir para esquecer algo ou um fato mudar, use esquecer com o id da memória.',
+                );
+            sistema.push(formatarMemorias(this.dependencias.memorias.selecionar(pedido)));
         }
         const mensagens: MensagemModelo[] = [{ role: 'system', content: sistema.join('\n\n') }];
         if (projetoChat?.referencias)
@@ -509,7 +607,11 @@ export class Agente {
                     })),
                 });
                 for (const acao of mensagem.acoes) {
-                    mensagens.push({ role: 'tool', tool_call_id: acao.id, content: acao.resultado || acao.estado });
+                    mensagens.push({
+                        role: 'tool',
+                        tool_call_id: acao.id,
+                        content: resumirResultadoAntigo(acao.resultado || acao.estado),
+                    });
                 }
             }
             mensagens.push(

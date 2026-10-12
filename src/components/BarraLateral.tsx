@@ -10,6 +10,7 @@ import {
     SidebarSimpleIcon,
     CaretDownIcon,
     ChartBarIcon,
+    GitPullRequestIcon,
     TrashIcon,
 } from '@phosphor-icons/react';
 import type { Conversa, Estado } from '../../shared/contratos';
@@ -20,6 +21,7 @@ import { LinhaConversaSidebar } from './LinhaConversaSidebar';
 import { possuiRascunho } from '../../shared/rascunhos';
 import { AtualizacaoSidebar } from './AtualizacaoSidebar';
 import { ProjetosChatSidebar } from './ProjetosChatSidebar';
+import { useMovimentoListaSidebar } from '../hooks/useMovimentoListaSidebar';
 
 /** Use para separar os modos, navegar pelo histórico e acompanhar as tarefas do agente. */
 export function BarraLateral({
@@ -37,6 +39,8 @@ export function BarraLateral({
     criarChatProjeto,
     moverChatProjeto,
     estatisticas,
+    abrirGitHub,
+    githubAberto,
     atualizar,
     reiniciarAtualizacao,
     abrirRelease,
@@ -61,6 +65,8 @@ export function BarraLateral({
     criarChatProjeto: (id: string) => void;
     moverChatProjeto: (conversa: Conversa, id: string | null) => void;
     estatisticas: () => void;
+    abrirGitHub: () => void;
+    githubAberto: boolean;
     atualizar: () => void;
     reiniciarAtualizacao: () => void;
     abrirRelease: (versao?: string) => void;
@@ -77,6 +83,7 @@ export function BarraLateral({
     const [fechados, definirFechados] = useState<Set<string>>(new Set(['concluidas']));
     const [expandidos, definirExpandidos] = useState<Set<string>>(new Set());
     const [agora, definirAgora] = useState(Date.now);
+    const historico = useMovimentoListaSidebar<HTMLElement>();
     const fecharMenus = useCallback(() => {
         definirMenu(null);
         definirMenuConcluidas(null);
@@ -101,11 +108,11 @@ export function BarraLateral({
                     .includes(termo)),
     );
     const grupos = agruparHistorico(
-        conversas.filter((item) => modo === 'code' || !item.projetoChatId),
+        conversas.filter((item) => modo === 'code' || !item.projetoChatId || item.concluida),
         modo,
         estado.conversaEmExecucao,
     );
-    const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === 'code' && item.concluida).length;
+    const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === modo && item.concluida).length;
 
     function alternarGrupo(chave: string) {
         definirFechados((anterior) => {
@@ -166,6 +173,7 @@ export function BarraLateral({
             >
                 {!recolhida && grupo.nome && (
                     <button
+                        data-movimento-sidebar
                         data-ui="rotulo-grupo separador-historico"
                         className={[
                             'text-[11px] text-secundario flex items-center gap-[7px] flex-1 min-w-0 bg-transparent',
@@ -206,13 +214,17 @@ export function BarraLateral({
                         <CaretDownIcon
                             size={12}
                             data-ui={!aberta ? 'grupo-fechado' : ''}
-                            className={!aberta ? '[&&]:[transform:rotate(-90deg)]' : ''}
+                            className={[
+                                'transition-transform duration-150 ease-out motion-reduce:transition-none',
+                                !aberta ? '[&&]:[transform:rotate(-90deg)]' : '',
+                            ].join(' ')}
                         />
                     </button>
                 )}
                 {visiveis.map(renderizarConversa)}
                 {aberta && !recolhida && !todos && grupo.itens.length > itens.length && (
                     <button
+                        data-movimento-sidebar
                         data-ui="mostrar-conversas"
                         className={[
                             'flex items-center gap-[8px] text-secundario bg-transparent text-[11px] px-[10px] py-[9px]',
@@ -239,32 +251,7 @@ export function BarraLateral({
             ].join(' ')}
             aria-label="Navegação principal"
         >
-            <div
-                data-ui="ceu-sidebar"
-                className={[
-                    'absolute z-[-1] top-0 right-0 bottom-[auto] left-0 h-20 overflow-hidden',
-                    'pointer-events-none',
-                    'bg-linear-135 from-ceu-inicio via-ceu-meio to-ceu-fim',
-                    '[mask-image:linear-gradient(#000_35%,_transparent_100%)] [&_i]:absolute [&_i]:w-[1.5px]',
-                    '[&_i]:h-[1.5px] [&_i]:rounded-full [&_i]:bg-[#c9d3eb] [&_i]:shadow-[0_0_2px_#c0d6ff22]',
-                    '[&_i:nth-of-type(9n)]:w-[3px] [&_i:nth-of-type(9n)]:h-[3px] [&_i:nth-of-type(9n)]:bg-[#f5f7ff]',
-                    '[&_i:nth-of-type(9n)]:shadow-[0_0_3px_#dae7ff44]',
-                ].join(' ')}
-                aria-hidden="true"
-            >
-                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_72%_20%,#493caf66,transparent_65%)]" />
-                <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_90%_0%,#451b6c55,transparent_70%)]" />
-                {Array.from({ length: 38 }, (_, indice) => (
-                    <i
-                        key={indice}
-                        style={{
-                            left: ((indice * 37 + 7) % 100) + '%',
-                            top: ((indice * indice * 17 + 8) % 65) + '%',
-                            opacity: 0.12 + (indice % 5) * 0.07,
-                        }}
-                    />
-                ))}
-            </div>
+            <CeuSidebar />
             <div
                 data-ui="marca"
                 className={[
@@ -402,17 +389,18 @@ export function BarraLateral({
                 </button>
             </div>
             <nav
+                ref={historico}
                 data-ui="historico"
                 className={[
-                    '[[data-ui~=sidebar-recolhida]_&]:mt-[20px] flex-1 min-h-0 overflow-y-auto mt-[8px] flex',
-                    'flex-col [scrollbar-width:thin] [scrollbar-color:#303339_transparent]',
+                    '[[data-ui~=sidebar-recolhida]_&]:mt-[20px] relative flex-1 min-h-0 overflow-y-auto mt-[8px] flex',
+                    'flex-col overflow-x-hidden [scrollbar-width:none]',
                 ].join(' ')}
                 aria-label="Conversas"
             >
                 {modo === 'chat' && (
                     <ProjetosChatSidebar
                         projetos={estado.projetosChat}
-                        conversas={conversas}
+                        conversas={conversas.filter((item) => !item.concluida || item.id === estado.conversaEmExecucao)}
                         recolhida={recolhida}
                         termo={termo}
                         abrir={abrirProjetoChat}
@@ -423,6 +411,7 @@ export function BarraLateral({
                 {grupos.filter((grupo) => grupo.chave === 'atuais').map(renderizarGrupo)}
                 {conversas.length === 0 && !recolhida && (
                     <p
+                        data-movimento-sidebar
                         data-ui="historico-vazio texto-secundario"
                         className={[
                             'text-[12px] leading-[1.7] text-secundario p-[12px]',
@@ -437,7 +426,7 @@ export function BarraLateral({
                         {busca ? 'Nenhuma conversa encontrada.' : 'Seu histórico aparecerá aqui.'}
                     </p>
                 )}
-                {modo === 'code' && (
+                {grupos.some((grupo) => grupo.chave !== 'atuais') && (
                     <div data-ui="prateleiras-historico" className="mt-auto shrink-0">
                         {grupos.filter((grupo) => grupo.chave !== 'atuais').map(renderizarGrupo)}
                     </div>
@@ -487,6 +476,22 @@ export function BarraLateral({
                 >
                     <ChartBarIcon size={19} />
                 </button>
+                {modo === 'code' && (
+                    <button
+                        data-ui="botao-icone"
+                        className={[
+                            'inline-flex items-center justify-center bg-transparent text-secundario rounded-[6px]',
+                            'p-[8px] border-0 [&:hover:not(:disabled)]:text-principal [&:hover:not(:disabled)]:bg-hover',
+                            "[&[aria-current='page']]:text-[#b5a2dc]",
+                        ].join(' ')}
+                        onClick={abrirGitHub}
+                        aria-label="Pull requests e issues"
+                        title="Pull requests e issues"
+                        aria-current={githubAberto ? 'page' : undefined}
+                    >
+                        <GitPullRequestIcon size={19} />
+                    </button>
+                )}
                 <AtualizacaoSidebar
                     estado={estado.atualizacao}
                     verificar={atualizar}
@@ -529,5 +534,37 @@ export function BarraLateral({
                 </MenuContexto>
             )}
         </aside>
+    );
+}
+
+/** Céu estrelado no topo das sidebars. */
+export function CeuSidebar() {
+    return (
+        <div
+            data-ui="ceu-sidebar"
+            className={[
+                'absolute z-[-1] top-0 right-0 bottom-[auto] left-0 h-20 overflow-hidden',
+                'pointer-events-none',
+                'bg-linear-135 from-ceu-inicio via-ceu-meio to-ceu-fim',
+                '[mask-image:linear-gradient(#000_35%,_transparent_100%)] [&_i]:absolute [&_i]:w-[1.5px]',
+                '[&_i]:h-[1.5px] [&_i]:rounded-full [&_i]:bg-[#c9d3eb] [&_i]:shadow-[0_0_2px_#c0d6ff22]',
+                '[&_i:nth-of-type(9n)]:w-[3px] [&_i:nth-of-type(9n)]:h-[3px] [&_i:nth-of-type(9n)]:bg-[#f5f7ff]',
+                '[&_i:nth-of-type(9n)]:shadow-[0_0_3px_#dae7ff44]',
+            ].join(' ')}
+            aria-hidden="true"
+        >
+            <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_72%_20%,#493caf66,transparent_65%)]" />
+            <span className="absolute inset-0 bg-[radial-gradient(ellipse_at_90%_0%,#451b6c55,transparent_70%)]" />
+            {Array.from({ length: 38 }, (_, indice) => (
+                <i
+                    key={indice}
+                    style={{
+                        left: ((indice * 37 + 7) % 100) + '%',
+                        top: ((indice * indice * 17 + 8) % 65) + '%',
+                        opacity: 0.12 + (indice % 5) * 0.07,
+                    }}
+                />
+            ))}
+        </div>
     );
 }

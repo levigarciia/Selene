@@ -15,9 +15,11 @@ export async function validarNavegacao(pagina: Page, aplicativo: ElectronApplica
     await pagina.screenshot({ path: 'artifacts/selene-sidebar-recolhida.png' });
     await pagina.getByRole('button', { name: 'Expandir sidebar' }).click();
     await pagina.getByRole('button', { name: 'Configurações', exact: true }).click();
-    await pagina.getByRole('heading', { name: 'Configurações', exact: true }).waitFor();
+    const secoes = pagina.getByRole('navigation', { name: 'Seções das configurações' });
+    await secoes.waitFor();
     assert.equal(await pagina.getByRole('dialog').count(), 0);
-    await pagina.getByRole('button', { name: 'Instalados', exact: true }).waitFor();
+    await secoes.getByRole('button', { name: 'Modelos', exact: true }).click();
+    await pagina.getByRole('heading', { name: 'Modelos locais', exact: true }).waitFor();
     await pagina.screenshot({ path: 'artifacts/selene-configuracoes.png' });
     await aplicativo.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(840, 620));
     await pagina.waitForFunction(() => window.innerWidth === 840);
@@ -25,18 +27,9 @@ export async function validarNavegacao(pagina: Page, aplicativo: ElectronApplica
     await pagina.screenshot({ path: 'artifacts/selene-configuracoes-compacta.png' });
     await aplicativo.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1280, 840));
     await pagina.waitForFunction(() => window.innerWidth === 1280);
-    const secoes = pagina.getByRole('navigation', { name: 'Seções das configurações' });
-    await secoes.getByRole('button', { name: 'Modelos', exact: true }).click();
-    await pagina.getByRole('button', { name: 'Catálogo', exact: true }).click();
-    const catalogo = pagina.getByRole('region', { name: 'Catálogo de modelos' });
-    await catalogo.waitFor();
-    await catalogo.getByRole('textbox', { name: 'Buscar modelos' }).fill('9B');
-    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), 1);
-    await pagina.screenshot({ path: 'artifacts/selene-configuracoes-modelos.png' });
-    await secoes.getByRole('button', { name: 'Motor', exact: true }).click();
+    await secoes.getByRole('button', { name: 'Provedores', exact: true }).click();
     await pagina.getByRole('heading', { name: 'Motor', exact: true }).waitFor();
     await pagina.screenshot({ path: 'artifacts/selene-configuracoes-motor.png' });
-    await secoes.getByRole('button', { name: 'Geral', exact: true }).click();
     await pagina.getByLabel('Temperatura', { exact: true }).fill('0.6');
     await pagina.getByRole('button', { name: 'Voltar à conversa' }).click();
     assert.equal(

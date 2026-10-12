@@ -75,6 +75,14 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
   Fontes da referência: `src/builtin_mcp.py`, `src/browser_observation.py`, `src/browser_identity.py` e
   `src/agent_tools/web_tools.py`. A visualização inline segue `static/js/chat.js`,
   `static/js/chatRenderer.js` e `static/css/03-agent-chat.css`. A implementação da Selene é própria.
+* Provedores em Configurações, com quatro entradas: Selene (modelos locais), OpenRouter (chave de API),
+  ChatGPT e Claude. A tela verifica os CLIs oficiais e permite adicionar os modelos de inscrição ao seletor.
+  O envio de texto usa `codex exec` ou `claude -p`, com prompt pela entrada padrão e cancelamento propagado;
+  a Selene não lê nem guarda credenciais. Ferramentas do agente são desativadas nesses provedores; imagens não são aceitas.
+  O fluxo do ChatGPT usa sandbox de leitura e o do Claude usa os argumentos documentados de print/stream-json.
+  Validação automatizada: `tests/assinaturas.test.ts`; uma chamada real depende de CLI autenticado e cota disponível.
+  Decisão própria da Selene, solicitada pelo usuário, com base no modelo de integração por CLI do T3 Code
+  (`docs/user/providers-codex.md` e `docs/user/providers-claude.md`).
 * Configurações em tela própria, separadas em Geral, Modelos e Motor, com catálogo integrado.
   A tela abre em Modelos, com biblioteca e catálogo na mesma área, opções inline e limites avançados recolhidos.
   Perfis tipados por GGUF guardam processamento, contexto e camadas na GPU, sem alterar preferências de geração.
@@ -90,6 +98,11 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
   `static/js/cookbookRunning.js` e `static/js/cookbook-diagnosis.js`. A implementação da Selene é própria.
 * Sidebar recolhível e exportação ou exclusão pelo menu de contexto da conversa.
 * Históricos Chat e Code separados, com seletor na sidebar e rascunhos independentes por modo.
+  No Chat, o botão de check ao lado dos três pontinhos permite ocultar chats com um clique.
+  Nas concluídas, o botão de retomar devolve o chat à lista, preservando seu projeto.
+  Chats ocultos ficam em Concluídas, recolhida inicialmente. O menu dessa categoria permite apagar todos
+  após confirmação, preservando conversas Code e estatísticas. O botão de recolher o projeto fica à direita.
+  Decisão própria da Selene solicitada pelo usuário, sem ampliar a paridade com o Odysseus.
   No Code, conversas atuais ficam no topo, tarefas em execução em Trabalhando e conversas encerradas em Concluídas.
   Aprovação pendente volta ao topo. Encerrar e retomar pelo menu preserva o histórico e sobrevive ao reinício.
   O projeto é informação da conversa, sem agrupar a lista por pasta. O topo tem um céu estrelado discreto.
@@ -107,6 +120,16 @@ O primeiro marco implementado cobre parte de conversas, modelos locais e ferrame
   O histórico original permanece disponível; resumo e posição no histórico são persistidos para os próximos envios.
   O pedido atual, as instruções vigentes e os pares completos de ferramentas são preservados no contexto ativo.
   Fonte da paridade: `src/context_compactor.py`, chamado pelo fluxo em `src/agent_loop.py`.
+* Memória persistente parcial, somente no modo Chat; o Code recebe apenas suas instruções. O modelo principal registra fatos com as ferramentas `lembrar` e `esquecer`, sem
+  uma segunda chamada. Cada envio recebe as memórias fixadas e as 5 mais relevantes por BM25, marcadas como dado.
+  Duplicatas são descartadas por sobreposição de palavras e os primeiros fatos de identidade são fixados.
+  Em conversas OpenRouter, uma extração com `openrouter/free` revisa as últimas mensagens a cada 4 envios.
+  A área Memória permite desligar, fixar e apagar. Pendentes: busca vetorial, curadoria periódica e skills.
+  Fontes da paridade: `services/memory/memory_extractor.py`, `_hybrid_retrieve` em `src/chat_processor.py`
+  e `manage_memory` em `src/tool_schemas.py`.
+* Busca em conversas anteriores no modo Chat com a ferramenta `buscar_conversas`, por BM25 sobre título e
+  mensagens. Retorna até 5 conversas com data e 2 trechos cada, sem incluir a atual nem conversas Code.
+  Fonte da paridade: `search_chats` em `src/tool_schemas.py` e `src/tools/search.py`.
 
 As áreas do catálogo abaixo continuam pendentes, exceto pelos recursos desse primeiro marco.
 Essa cobertura parcial não representa paridade concluída em nenhuma área.
@@ -453,3 +476,9 @@ documentados em `docs/ENVIOS_CODE.md`. Não integram a paridade com o Odysseus.
 
 Controle nativo do Windows, preview ao vivo no mobile e efeitos de atividade são recursos próprios
 solicitados pelo usuário, documentados em [controle do computador](COMPUTADOR.md).
+
+A listagem de issues e pull requests reconhece pastas agregadoras com repositórios Git internos,
+incluindo worktrees e remotos com nomes diferentes de `origin`. Os itens são agrupados por repositório,
+sem duplicar clones do mesmo remoto. Falhas individuais preservam os resultados dos demais.
+A descoberta ignora links e pastas de dependências ou compilação, com limite de seis níveis e duas mil pastas.
+Recurso próprio solicitado pelo usuário, sem ampliar a paridade com o Odysseus.

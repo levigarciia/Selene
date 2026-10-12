@@ -1,5 +1,5 @@
-﻿import { useState } from 'react';
-import { PlusIcon } from '@phosphor-icons/react';
+import { useState } from 'react';
+import { CaretRightIcon, PlusIcon } from '@phosphor-icons/react';
 import type { Estado, Modelo, PonteSelene } from '../../shared/contratos';
 import { formatarTamanho, catalogoModelos, encontrarModeloLocal } from '../../shared/catalogo';
 import { configuracaoParaModelo } from '../../shared/configuracaoMotor';
@@ -7,13 +7,10 @@ import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
 import { estimarVelocidadeModelo } from '../../shared/velocidadeModelo';
 import type { Executar } from './Configuracoes';
 import { Modal } from './Modal';
-import { CatalogoModelos } from './CatalogoModelos';
 import { PerfilModelo } from './PerfilModelo';
+import { Cartao, Linha, Ponto, botaoPequeno, botaoSecundario } from './PainelConfiguracoes';
 
-const botao =
-    'rounded-md border border-borda px-3 py-2 text-xs hover:bg-hover aria-pressed:bg-hover disabled:opacity-40';
-
-/** Gerencia modelos com ações contextuais e perfis disponíveis na própria lista. */
+/** Modelos locais instalados, com perfil por modelo disponível na própria linha. */
 export function ModelosConfiguracoes({
     estado,
     ponte,
@@ -25,73 +22,28 @@ export function ModelosConfiguracoes({
     executar: Executar;
     hardware?: HardwareLocal;
 }) {
-    const [catalogo, definirCatalogo] = useState(false);
     const [removendo, definirRemovendo] = useState<Modelo | null>(null);
     const ocupado = !!estado.conversaEmExecucao || ['instalando', 'carregando'].includes(estado.motor.fase);
+    const locais = estado.modelos.filter((modelo) => !modelo.openrouter && !modelo.assinatura);
     return (
         <>
-            <div className="flex flex-wrap justify-between items-center gap-4 mb-5">
-                <div className="flex gap-1" aria-label="Biblioteca de modelos">
-                    <button className={botao} aria-pressed={!catalogo} onClick={() => definirCatalogo(false)}>
-                        Instalados
-                    </button>
-                    <button className={botao} aria-pressed={catalogo} onClick={() => definirCatalogo(true)}>
-                        Catálogo
+            <section id="config-modelos" tabIndex={-1} className="flex flex-col gap-2.5 outline-none">
+                <div className="flex min-h-7 items-center justify-between gap-4 px-4 max-sm:px-3">
+                    <h2 className="text-sm font-normal text-principal/70">Modelos locais</h2>
+                    <button className={botaoPequeno} onClick={() => executar(() => ponte!.importarModelo())}>
+                        <PlusIcon size={13} />
+                        Importar GGUF
                     </button>
                 </div>
-                <button
-                    className="flex items-center gap-2 text-xs text-secundario hover:text-principal"
-                    onClick={() => executar(() => ponte!.importarModelo())}
-                >
-                    <PlusIcon size={15} />
-                    Importar GGUF
-                </button>
-            </div>
-            {catalogo ? (
-                <CatalogoModelos
-                    estado={estado}
-                    ponte={ponte}
-                    executar={executar}
-                    embutido
-                    modeloId={estado.motor.modeloId ?? ''}
-                    aberto
-                    definirAberto={() => {}}
-                    hardware={hardware}
-                    selecionar={async (id) => {
-                        if (!estado.modelos.find((modelo) => modelo.id === id)?.openrouter)
-                            await executar(() => ponte!.carregarModelo(id));
-                    }}
-                />
-            ) : (
-                <div data-ui="lista-modelos" className="flex flex-col">
-                    {estado.modelos
-                        .filter((modelo) => modelo.openrouter)
-                        .map((modelo) => (
-                            <div key={modelo.id} className="flex items-center gap-4 border-b border-borda py-3 text-xs">
-                                <div className="min-w-0 flex-1">
-                                    <strong className="block truncate font-medium">{modelo.nome}</strong>
-                                    <span className="mt-1 block text-secundario">
-                                        OpenRouter. Disponível na conversa.
-                                    </span>
-                                </div>
-                                <button
-                                    type="button"
-                                    disabled={ocupado}
-                                    className={botao}
-                                    onClick={() => definirRemovendo(modelo)}
-                                >
-                                    Remover da lista
-                                </button>
-                            </div>
-                        ))}
-                    {!estado.modelos.length && (
-                        <p className="text-xs text-secundario py-5">
-                            Importe um GGUF ou escolha um modelo no catálogo.
-                        </p>
-                    )}
-                    {estado.modelos
-                        .filter((modelo) => !modelo.openrouter)
-                        .map((modelo) => {
+                <Cartao>
+                    <div data-ui="lista-modelos" className="flex flex-col divide-y divide-white/[0.06]">
+                        {!locais.length && (
+                            <Linha
+                                titulo="Nenhum modelo"
+                                descricao="Importe um GGUF ou baixe um modelo pelo seletor de modelos da conversa."
+                            />
+                        )}
+                        {locais.map((modelo) => {
                             const item = catalogoModelos.find((item) => encontrarModeloLocal(item, [modelo]));
                             const configuracao = configuracaoParaModelo(estado.configuracao, modelo);
                             const estimativa = estimarVelocidadeModelo({
@@ -105,22 +57,20 @@ export function ModelosConfiguracoes({
                             });
                             const carregado = estado.motor.modeloId === modelo.id && estado.motor.fase === 'pronto';
                             return (
-                                <div key={modelo.id} data-ui="linha-modelo" className="border-b border-borda py-3">
+                                <div key={modelo.id} data-ui="linha-modelo" className="px-4 py-3 max-sm:px-3">
                                     <div className="flex items-center gap-4">
                                         <div className="min-w-0 flex-1">
-                                            <strong className="block truncate text-xs font-medium">
-                                                {modelo.nome}
-                                            </strong>
-                                            <span
-                                                className="block mt-1 text-xs text-secundario"
-                                                title={estimativa.detalhe}
-                                            >
-                                                {formatarTamanho(modelo.tamanho)}. {estimativa.rotulo}
-                                                {carregado ? '. Carregado' : ''}
-                                            </span>
+                                            <h3 className="flex items-center gap-2 truncate text-sm font-medium">
+                                                {carregado && <Ponto tom="ok" />}
+                                                <span className="truncate">{modelo.nome}</span>
+                                            </h3>
+                                            <p className="mt-1 text-xs text-discreto" title={estimativa.detalhe}>
+                                                {formatarTamanho(modelo.tamanho)} · {estimativa.rotulo}
+                                                {carregado ? ' · Carregado' : ''}
+                                            </p>
                                         </div>
                                         <button
-                                            className={botao}
+                                            className={botaoSecundario}
                                             disabled={ocupado}
                                             aria-label={`${carregado ? 'Descarregar' : 'Carregar'} ${modelo.nome}`}
                                             onClick={() =>
@@ -132,12 +82,24 @@ export function ModelosConfiguracoes({
                                             {carregado ? 'Descarregar' : 'Carregar'}
                                         </button>
                                     </div>
-                                    <details className="mt-2 text-xs">
-                                        <summary className="cursor-pointer text-secundario py-1">
+                                    <details className="group mt-1.5 text-xs">
+                                        <summary className="flex w-fit cursor-pointer list-none items-center gap-1 py-1 text-secundario hover:text-principal [&::-webkit-details-marker]:hidden">
+                                            <CaretRightIcon
+                                                size={11}
+                                                className="transition-transform group-open:rotate-90"
+                                            />
                                             Opções de {modelo.nome}
                                         </summary>
-                                        <div className="flex flex-col gap-4 pt-3 max-w-[580px]">
-                                            <p className="text-secundario">{estimativa.detalhe}</p>
+                                        <div
+                                            className="mt-2 flex flex-col gap-4 rounded-lg border border-white/[0.06] bg-fundo/60 p-3
+                                                    [&_label]:flex [&_label]:flex-col [&_label]:gap-2
+                                                    [&_input:not([type=checkbox])]:h-8 [&_input:not([type=checkbox])]:rounded-lg
+                                                    [&_input:not([type=checkbox])]:border [&_input:not([type=checkbox])]:border-borda
+                                                    [&_input:not([type=checkbox])]:bg-fundo [&_input:not([type=checkbox])]:px-2.5
+                                                    [&_select]:h-8 [&_select]:rounded-lg [&_select]:border [&_select]:border-borda
+                                                    [&_select]:bg-fundo [&_select]:px-2.5"
+                                        >
+                                            <p className="text-discreto">{estimativa.detalhe}</p>
                                             <PerfilModelo
                                                 modelo={modelo}
                                                 configuracao={estado.configuracao}
@@ -145,9 +107,9 @@ export function ModelosConfiguracoes({
                                                 ponte={ponte}
                                                 executar={executar}
                                             />
-                                            <div className="flex flex-wrap items-center gap-3">
+                                            <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.06] pt-3">
                                                 <button
-                                                    className={botao}
+                                                    className={botaoSecundario}
                                                     disabled={ocupado}
                                                     onClick={() => executar(() => ponte!.importarProjetor(modelo.id))}
                                                 >
@@ -155,8 +117,11 @@ export function ModelosConfiguracoes({
                                                         ? 'Trocar projetor visual'
                                                         : 'Importar projetor visual'}
                                                 </button>
+                                                {modelo.projetorVisual && (
+                                                    <span className="text-discreto">Projetor visual vinculado.</span>
+                                                )}
                                                 <button
-                                                    className="text-secundario hover:text-[#eab1aa]"
+                                                    className={`${botaoPequeno} ml-auto hover:text-[#eab1aa]`}
                                                     aria-label={`${
                                                         modelo.catalogoId ? 'Excluir download de' : 'Remover da lista'
                                                     } ${modelo.nome}`}
@@ -166,16 +131,14 @@ export function ModelosConfiguracoes({
                                                     {modelo.catalogoId ? 'Excluir download' : 'Remover da lista'}
                                                 </button>
                                             </div>
-                                            {modelo.projetorVisual && (
-                                                <p className="text-secundario">Projetor visual vinculado.</p>
-                                            )}
                                         </div>
                                     </details>
                                 </div>
                             );
                         })}
-                </div>
-            )}
+                    </div>
+                </Cartao>
+            </section>
             {removendo && (
                 <Modal
                     titulo={`${removendo.catalogoId ? 'Excluir' : 'Remover'} ${removendo.nome}?`}
@@ -187,12 +150,12 @@ export function ModelosConfiguracoes({
                             ? 'O arquivo baixado será excluído.'
                             : 'O arquivo importado será preservado.'}
                     </p>
-                    <div className="flex justify-end gap-3 mt-5">
-                        <button className={botao} onClick={() => definirRemovendo(null)}>
+                    <div className="mt-5 flex justify-end gap-3">
+                        <button className={botaoSecundario} onClick={() => definirRemovendo(null)}>
                             Cancelar
                         </button>
                         <button
-                            className={botao}
+                            className={botaoSecundario}
                             disabled={ocupado}
                             onClick={async () => {
                                 await executar(async () => {

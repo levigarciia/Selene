@@ -52,6 +52,7 @@ export function useSelene() {
                 definirEstado(evento.estado);
                 return;
             }
+            if (evento.tipo !== 'mensagem') return;
             definirEstado((anterior) => ({
                 ...anterior,
                 conversas: anterior.conversas.map((conversa) =>

@@ -77,6 +77,25 @@ export class OpenRouter {
         return { creditos, usado, restante: creditos - usado };
     }
 
+    /** Solicitação curta sem streaming, usada em tarefas de apoio como a extração de memórias. */
+    async completarTexto(
+        modelo: string,
+        mensagens: { role: string; content: string }[],
+        sinal: AbortSignal,
+    ): Promise<string> {
+        if (!this.chave) throw new Error('Configure a chave de API do OpenRouter nas configurações.');
+        const resposta = await solicitarOpenRouter({
+            method: 'POST',
+            signal: sinal,
+            headers: { Authorization: `Bearer ${this.chave}`, 'Content-Type': 'application/json', 'X-Title': 'Selene' },
+            body: JSON.stringify({ model: modelo, messages: mensagens, temperature: 0.1, max_tokens: 4096 }),
+        });
+        const dados = (await resposta.json()) as { choices?: { message?: { content?: unknown } }[] };
+        const conteudo = dados.choices?.[0]?.message?.content;
+        if (typeof conteudo !== 'string') throw new Error('O OpenRouter retornou uma resposta sem texto.');
+        return conteudo;
+    }
+
     async completar(
         modelo: string,
         corpo: unknown,
@@ -101,7 +120,12 @@ export class OpenRouter {
             method: 'POST',
             signal: sinal,
             headers: { Authorization: `Bearer ${this.chave}`, 'Content-Type': 'application/json', 'X-Title': 'Selene' },
-            body: JSON.stringify({ ...parametros, model: modelo }),
+            // Modelos Anthropic só reaproveitam o prefixo com cache_control explícito; sem ele, cada chamada paga o histórico inteiro.
+            body: JSON.stringify({
+                ...parametros,
+                model: modelo,
+                ...(modelo.startsWith('anthropic/') ? { cache_control: { type: 'ephemeral' } } : {}),
+            }),
         });
         if (!resposta.body) throw new Error('O OpenRouter retornou uma resposta vazia.');
         const decodificador = new TextDecoder();

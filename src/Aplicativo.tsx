@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeftIcon, CaretRightIcon, ListIcon, PlusIcon, XIcon } from '@phosphor-icons/react';
+import {
+    ArrowLeftIcon,
+    CaretRightIcon,
+    GitBranchIcon,
+    ListIcon,
+    PlusIcon,
+    TerminalWindowIcon,
+    XIcon,
+} from '@phosphor-icons/react';
 import type { Conversa } from '../shared/contratos';
 import { useSelene } from './hooks/useSelene';
 import { BarraLateral } from './components/BarraLateral';
+import { BarraConfiguracoes } from './components/BarraConfiguracoes';
+import { nomeSecao, type SecaoConfiguracoes } from './components/secoesConfiguracoes';
 import { BarraJanela } from './components/BarraJanela';
 import { Configuracoes } from './components/Configuracoes';
 import { TelaConversa } from './components/TelaConversa';
@@ -12,6 +22,9 @@ import type { Projeto } from '../shared/contratos';
 import { TelaProjetos } from './components/TelaProjetos';
 import { IconeProjeto } from './components/IconeProjeto';
 import { TelaProjetoChat } from './components/TelaProjetoChat';
+import { TelaGitHub } from './components/TelaGitHub';
+import { PainelTerminal, type PedidoTerminal } from './components/PainelTerminal';
+import { MenuProjetoCode } from './components/MenuProjetoCode';
 
 function lerSidebarRecolhida(): boolean {
     try {
@@ -29,7 +42,10 @@ export function Aplicativo() {
     const [modoInicial, definirModoInicial] = useState<'chat' | 'code'>('chat');
     const [configurando, definirConfigurando] = useState(false);
     const [configuracoesMontadas, definirConfiguracoesMontadas] = useState(false);
-    const [recolhida, definirRecolhida] = useState(lerSidebarRecolhida);
+    const [secaoConfig, definirSecaoConfig] = useState<SecaoConfiguracoes>('geral');
+    const [alvoConfig, definirAlvoConfig] = useState<string | null>(null);
+    const [recolhidaPreferida, definirRecolhida] = useState(lerSidebarRecolhida);
+    const recolhida = recolhidaPreferida && !configurando;
     const [menuMovel, definirMenuMovel] = useState(false);
     const [excluindo, definirExcluindo] = useState<Conversa | null>(null);
     const [excluindoConcluidas, definirExcluindoConcluidas] = useState(false);
@@ -39,7 +55,11 @@ export function Aplicativo() {
     const [gerenciandoProjetos, definirGerenciandoProjetos] = useState(false);
     const [projetoGerenciadoId, definirProjetoGerenciadoId] = useState<string | null>(null);
     const [projetoChatAbertoId, definirProjetoChatAbertoId] = useState<string | null>(null);
-    const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === 'code' && item.concluida).length;
+    const [githubAberto, definirGithubAberto] = useState(false);
+    const [terminalAberto, definirTerminalAberto] = useState(false);
+    const [menuProjetoAberto, definirMenuProjetoAberto] = useState(false);
+    const [pedidoTerminal, definirPedidoTerminal] = useState<PedidoTerminal | null>(null);
+    const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === modoInicial && item.concluida).length;
     const ativa = ativas[modoInicial];
     const conversa = estado.conversas.find((item) => item.id === ativa);
     const projetoAtual = estado.projetos.find(
@@ -52,21 +72,27 @@ export function Aplicativo() {
         const novo = dados.criarRascunho(modoInicial);
         definirAtivas((anteriores) => ({ ...anteriores, [modoInicial]: novo.id }));
     }, [carregando, modoInicial, ativas]);
-    function configurar() {
+    function fecharTelas() {
         definirMenuMovel(false);
         definirEstatisticasAbertas(false);
         definirProjetoChatAbertoId(null);
         definirAdicionandoProjeto(false);
         definirGerenciandoProjetos(false);
+        definirGithubAberto(false);
+    }
+    function configurar() {
+        fecharTelas();
         definirConfiguracoesMontadas(true);
         definirConfigurando(true);
     }
+    function abrirGitHub() {
+        fecharTelas();
+        definirConfigurando(false);
+        definirModoInicial('code');
+        definirGithubAberto(true);
+    }
     function selecionar(id: string) {
-        definirMenuMovel(false);
-        definirEstatisticasAbertas(false);
-        definirProjetoChatAbertoId(null);
-        definirAdicionandoProjeto(false);
-        definirGerenciandoProjetos(false);
+        fecharTelas();
         const escolhida = estado.conversas.find((item) => item.id === id);
         const modo = escolhida?.modo ?? modoInicial;
         definirModoInicial(modo);
@@ -74,21 +100,14 @@ export function Aplicativo() {
         definirConfigurando(false);
     }
     function criar(projeto?: Projeto | null, modo: 'chat' | 'code' = modoInicial) {
-        definirMenuMovel(false);
-        definirEstatisticasAbertas(false);
-        definirProjetoChatAbertoId(null);
-        definirAdicionandoProjeto(false);
-        definirGerenciandoProjetos(false);
+        fecharTelas();
         const novo = dados.criarRascunho(modo, projeto);
         definirModoInicial(modo);
         definirAtivas((anteriores) => ({ ...anteriores, [modo]: novo.id }));
         definirConfigurando(false);
     }
     function abrirProjetos(id: string | null = projetoAtual?.id ?? null) {
-        definirMenuMovel(false);
-        definirEstatisticasAbertas(false);
-        definirProjetoChatAbertoId(null);
-        definirAdicionandoProjeto(false);
+        fecharTelas();
         definirProjetoGerenciadoId(id);
         definirConfigurando(false);
         definirGerenciandoProjetos(true);
@@ -102,22 +121,17 @@ export function Aplicativo() {
         if (!estado.projetos.length) definirGerenciandoProjetos(false);
     }
     function abrirProjetoChat(id: string) {
-        definirMenuMovel(false);
-        definirEstatisticasAbertas(false);
+        fecharTelas();
         definirConfigurando(false);
-        definirGerenciandoProjetos(false);
         definirModoInicial('chat');
         definirProjetoChatAbertoId(id);
     }
     function criarChatProjeto(id: string) {
-        definirMenuMovel(false);
-        definirEstatisticasAbertas(false);
+        fecharTelas();
         const nova = dados.criarRascunho('chat', null, id);
         definirModoInicial('chat');
         definirAtivas((anteriores) => ({ ...anteriores, chat: nova.id }));
         definirConfigurando(false);
-        definirGerenciandoProjetos(false);
-        definirProjetoChatAbertoId(null);
     }
     async function moverChatProjeto(conversa: Conversa, id: string | null) {
         if (conversa.modo !== 'chat') return;
@@ -130,6 +144,49 @@ export function Aplicativo() {
         }
         dados.alterarRascunho(conversa, { projetoChatId: id, contextoCompactado: undefined });
     }
+    const conversaVisivel =
+        !configurando && !estatisticasAbertas && !gerenciandoProjetos && !githubAberto && projetoChatAbertoId === null;
+    const projetoCode = modoInicial === 'code' && conversaVisivel ? projetoAtual : undefined;
+    const classeAcaoBarra = [
+        'inline-flex items-center justify-center rounded-[6px] p-[8px] text-secundario',
+        'hover:bg-hover hover:text-principal aria-pressed:text-principal aria-expanded:bg-hover',
+    ].join(' ');
+    const acoesCode = projetoCode && ponte && (
+        <>
+            <div className="relative">
+                <button
+                    className={classeAcaoBarra}
+                    aria-label="Ações do projeto"
+                    title="Ações do projeto"
+                    aria-expanded={menuProjetoAberto}
+                    onClick={() => definirMenuProjetoAberto((anterior) => !anterior)}
+                >
+                    <GitBranchIcon size={16} />
+                </button>
+                {menuProjetoAberto && (
+                    <MenuProjetoCode
+                        ponte={ponte}
+                        projeto={projetoCode}
+                        fechar={() => definirMenuProjetoAberto(false)}
+                        definirErro={definirErro}
+                        executarScript={(comando) => {
+                            definirTerminalAberto(true);
+                            definirPedidoTerminal({ chave: Date.now(), projetoId: projetoCode.id, comando });
+                        }}
+                    />
+                )}
+            </div>
+            <button
+                className={classeAcaoBarra}
+                aria-label="Terminal"
+                title="Terminal"
+                aria-pressed={terminalAberto}
+                onClick={() => definirTerminalAberto((anterior) => !anterior)}
+            >
+                <TerminalWindowIcon size={16} />
+            </button>
+        </>
+    );
     if (carregando)
         return (
             <div data-ui="tela-carregando" className="grid place-items-center h-dvh text-[#b5bbc4]">
@@ -169,64 +226,84 @@ export function Aplicativo() {
                     menuMovel ? '' : 'max-[760px]:hidden',
                 ].join(' ')}
             >
-                <BarraLateral
-                    estado={estado}
-                    modo={modoInicial}
-                    alterarModo={(modo) => {
-                        definirEstatisticasAbertas(false);
-                        definirProjetoChatAbertoId(null);
-                        definirAdicionandoProjeto(false);
-                        definirGerenciandoProjetos(false);
-                        definirModoInicial(modo);
-                        definirConfigurando(false);
-                    }}
-                    concluir={(item) => {
-                        void executar(() => ponte!.alterarConversa(item.id, { concluida: !item.concluida }));
-                    }}
-                    ativa={ativa}
-                    selecionar={selecionar}
-                    configurar={configurar}
-                    gerenciarProjetos={() => abrirProjetos()}
-                    abrirProjetoChat={abrirProjetoChat}
-                    criarProjetoChat={() => abrirProjetoChat('novo')}
-                    criarChatProjeto={criarChatProjeto}
-                    moverChatProjeto={(conversa, id) =>
-                        void moverChatProjeto(conversa, id).catch((erro: Error) => definirErro(erro.message))
-                    }
-                    estatisticas={() => {
-                        definirMenuMovel(false);
-                        definirEstatisticasAbertas(true);
-                    }}
-                    atualizar={() => void executar(() => ponte!.verificarAtualizacao())}
-                    reiniciarAtualizacao={() => void executar(() => ponte!.reiniciarAtualizacao())}
-                    abrirRelease={(versao) => void executar(() => ponte!.abrirRelease(versao))}
-                    excluirConcluidas={() => definirExcluindoConcluidas(true)}
-                    configurando={configurando || gerenciandoProjetos || projetoChatAbertoId !== null}
-                    recolhida={menuMovel ? false : recolhida}
-                    alternar={() => {
-                        if (window.matchMedia('(max-width: 760px)').matches) {
+                {configurando && !estatisticasAbertas ? (
+                    <BarraConfiguracoes
+                        secao={secaoConfig}
+                        selecionar={(secao) => {
                             definirMenuMovel(false);
-                            return;
+                            definirSecaoConfig(secao);
+                        }}
+                        abrirItem={(item) => {
+                            definirMenuMovel(false);
+                            definirSecaoConfig(item.secao);
+                            definirAlvoConfig(item.id);
+                        }}
+                        voltar={() => {
+                            definirMenuMovel(false);
+                            definirConfigurando(false);
+                        }}
+                        alertaMotor={estado.motor.fase === 'erro'}
+                    />
+                ) : (
+                    <BarraLateral
+                        estado={estado}
+                        modo={modoInicial}
+                        alterarModo={(modo) => {
+                            fecharTelas();
+                            definirModoInicial(modo);
+                            definirConfigurando(false);
+                        }}
+                        concluir={(item) => {
+                            void executar(() => ponte!.alterarConversa(item.id, { concluida: !item.concluida }));
+                        }}
+                        ativa={ativa}
+                        selecionar={selecionar}
+                        configurar={configurar}
+                        gerenciarProjetos={() => abrirProjetos()}
+                        abrirProjetoChat={abrirProjetoChat}
+                        criarProjetoChat={() => abrirProjetoChat('novo')}
+                        criarChatProjeto={criarChatProjeto}
+                        moverChatProjeto={(conversa, id) =>
+                            void moverChatProjeto(conversa, id).catch((erro: Error) => definirErro(erro.message))
                         }
-                        definirRecolhida((anterior) => {
-                            try {
-                                localStorage.setItem('selene.sidebarRecolhida', String(!anterior));
-                            } catch {}
-                            return !anterior;
-                        });
-                    }}
-                    criar={(origemId) => {
-                        const origem = estado.conversas.find((item) => item.id === origemId);
-                        const projeto = estado.projetos.find(
-                            (item) => item.id === origemId || item.caminho === (origem?.projeto ?? conversa?.projeto),
-                        );
-                        criar(projeto, origemId ? 'code' : modoInicial);
-                    }}
-                    exportar={(id) => {
-                        void executar(() => ponte!.exportarConversa(id));
-                    }}
-                    excluir={definirExcluindo}
-                />
+                        estatisticas={() => {
+                            definirMenuMovel(false);
+                            definirEstatisticasAbertas(true);
+                        }}
+                        abrirGitHub={abrirGitHub}
+                        githubAberto={githubAberto && !estatisticasAbertas}
+                        atualizar={() => void executar(() => ponte!.verificarAtualizacao())}
+                        reiniciarAtualizacao={() => void executar(() => ponte!.reiniciarAtualizacao())}
+                        abrirRelease={(versao) => void executar(() => ponte!.abrirRelease(versao))}
+                        excluirConcluidas={() => definirExcluindoConcluidas(true)}
+                        configurando={configurando || gerenciandoProjetos || projetoChatAbertoId !== null}
+                        recolhida={menuMovel ? false : recolhida}
+                        alternar={() => {
+                            if (window.matchMedia('(max-width: 760px)').matches) {
+                                definirMenuMovel(false);
+                                return;
+                            }
+                            definirRecolhida((anterior) => {
+                                try {
+                                    localStorage.setItem('selene.sidebarRecolhida', String(!anterior));
+                                } catch {}
+                                return !anterior;
+                            });
+                        }}
+                        criar={(origemId) => {
+                            const origem = estado.conversas.find((item) => item.id === origemId);
+                            const projeto = estado.projetos.find(
+                                (item) =>
+                                    item.id === origemId || item.caminho === (origem?.projeto ?? conversa?.projeto),
+                            );
+                            criar(projeto, origemId ? 'code' : modoInicial);
+                        }}
+                        exportar={(id) => {
+                            void executar(() => ponte!.exportarConversa(id));
+                        }}
+                        excluir={definirExcluindo}
+                    />
+                )}
             </div>
             <main data-ui="area-principal" className="flex flex-col min-h-0 min-w-0 bg-fundo">
                 <div className="flex items-center justify-between gap-3 border-b border-borda px-3 py-2 min-[761px]:hidden">
@@ -243,11 +320,9 @@ export function Aplicativo() {
                                 key={modo}
                                 aria-pressed={modoInicial === modo}
                                 onClick={() => {
+                                    fecharTelas();
                                     definirModoInicial(modo);
                                     definirConfigurando(false);
-                                    definirEstatisticasAbertas(false);
-                                    definirGerenciandoProjetos(false);
-                                    definirProjetoChatAbertoId(null);
                                 }}
                                 className="rounded-md px-3 py-2 text-secundario hover:bg-hover
                                     aria-pressed:bg-hover aria-pressed:text-principal"
@@ -265,10 +340,10 @@ export function Aplicativo() {
                         <PlusIcon size={22} />
                     </button>
                 </div>
-                <BarraJanela ponte={ponte}>
+                <BarraJanela ponte={ponte} acoes={acoesCode}>
                     {estatisticasAbertas ? (
                         <span className="text-[13px] font-medium">Estatísticas</span>
-                    ) : gerenciandoProjetos || projetoChatAbertoId !== null ? (
+                    ) : gerenciandoProjetos || githubAberto || projetoChatAbertoId !== null ? (
                         <>
                             <button
                                 data-ui="botao-icone"
@@ -289,6 +364,7 @@ export function Aplicativo() {
                                 aria-label="Voltar à conversa"
                                 onClick={() => {
                                     definirGerenciandoProjetos(false);
+                                    definirGithubAberto(false);
                                     definirProjetoChatAbertoId(null);
                                 }}
                             >
@@ -298,39 +374,30 @@ export function Aplicativo() {
                                 data-ui="titulo-tela"
                                 className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] m-0"
                             >
-                                {projetoChatAbertoId !== null ? 'Projeto de Chat' : 'Projetos'}
+                                {projetoChatAbertoId !== null
+                                    ? 'Projeto de Chat'
+                                    : githubAberto
+                                      ? 'Pull requests e issues'
+                                      : 'Projetos'}
                             </h1>
                         </>
                     ) : configurando ? (
-                        <>
+                        <nav
+                            data-ui="breadcrumbs-configuracoes"
+                            aria-label="Localização nas configurações"
+                            className="flex min-w-0 items-center gap-2 text-[13px] [-webkit-app-region:no-drag]"
+                        >
                             <button
-                                data-ui="botao-icone"
-                                className={[
-                                    [
-                                        '[[data-ui~=marca]_&]:ml-auto',
-                                        '[[data-ui~=sidebar-recolhida]_[data-ui~=marca]_&]:m-0',
-                                    ].join(' '),
-                                    [
-                                        'inline-flex items-center justify-center bg-transparent',
-                                        'text-secundario rounded-[6px] p-[8px]',
-                                    ].join(' '),
-                                    'border-0 border-solid border-current [&:hover:not(:disabled)]:text-principal',
-                                    '[&:hover:not(:disabled)]:bg-hover [[data-ui~=rodape-entrada]_&]:p-0',
-                                    "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
-                                    '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
-                                ].join(' ')}
-                                aria-label="Voltar à conversa"
-                                onClick={() => definirConfigurando(false)}
-                            >
-                                <ArrowLeftIcon size={18} />
-                            </button>
-                            <h1
-                                data-ui="titulo-tela"
-                                className="text-[13px] leading-[1.3] font-medium tracking-[-0.7px] m-0"
+                                className="text-discreto hover:text-principal"
+                                onClick={() => definirSecaoConfig('geral')}
                             >
                                 Configurações
+                            </button>
+                            <span className="text-discreto">/</span>
+                            <h1 data-ui="titulo-tela" className="m-0 truncate font-medium text-principal">
+                                {nomeSecao(secaoConfig)}
                             </h1>
-                        </>
+                        </nav>
                     ) : conversa ? (
                         <nav
                             data-ui="breadcrumbs-conversa"
@@ -479,7 +546,7 @@ export function Aplicativo() {
                 <div
                     data-ui="area-tela"
                     className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
-                    hidden={estatisticasAbertas || configurando || gerenciandoProjetos || projetoChatAbertoId !== null}
+                    hidden={!conversaVisivel}
                 >
                     {(['chat', 'code'] as const).map((modo) => (
                         <div
@@ -493,18 +560,25 @@ export function Aplicativo() {
                                 modoInicial={modo}
                                 ativa={ativas[modo]}
                                 selecionar={selecionar}
-                                visivel={
-                                    !configurando &&
-                                    !estatisticasAbertas &&
-                                    !gerenciandoProjetos &&
-                                    projetoChatAbertoId === null &&
-                                    modo === modoInicial
-                                }
+                                visivel={conversaVisivel && modo === modoInicial}
                                 adicionarProjeto={adicionarProjeto}
                             />
                         </div>
                     ))}
                 </div>
+                {ponte && (
+                    <PainelTerminal
+                        ponte={ponte}
+                        projetoId={projetoCode?.id ?? null}
+                        aberto={terminalAberto}
+                        pedido={pedidoTerminal}
+                        fechar={() => definirTerminalAberto(false)}
+                        definirErro={definirErro}
+                    />
+                )}
+                {!estatisticasAbertas && githubAberto && (
+                    <TelaGitHub estado={estado} ponte={ponte} />
+                )}
                 {estatisticasAbertas && (
                     <Estatisticas estado={estado} ponte={ponte} fechar={() => definirEstatisticasAbertas(false)} />
                 )}
@@ -537,7 +611,14 @@ export function Aplicativo() {
                         className="flex-1 min-h-0 flex min-w-0 [&[hidden]]:hidden"
                         hidden={!configurando || estatisticasAbertas}
                     >
-                        <Configuracoes estado={estado} ponte={ponte} executar={executar} />
+                        <Configuracoes
+                            estado={estado}
+                            ponte={ponte}
+                            executar={executar}
+                            secao={secaoConfig}
+                            alvo={alvoConfig}
+                            concluirAlvo={() => definirAlvoConfig(null)}
+                        />
                     </div>
                 )}
             </main>
@@ -560,7 +641,8 @@ export function Aplicativo() {
                             '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
                         ].join(' ')}
                     >
-                        {quantidadeConcluidas} conversas Code serão apagadas. As estatísticas de uso serão preservadas.
+                        {quantidadeConcluidas} conversas {modoInicial === 'chat' ? 'Chat' : 'Code'} serão apagadas.
+                        {' '}As estatísticas de uso serão preservadas.
                     </p>
                     <div className="flex justify-end gap-3">
                         <button
@@ -597,7 +679,7 @@ export function Aplicativo() {
                             onClick={async () => {
                                 definirApagando(true);
                                 try {
-                                    const ids = await executar(() => ponte!.excluirConcluidas());
+                                    const ids = await executar(() => ponte!.excluirConcluidas(modoInicial));
                                     if (!ids) return;
                                     const removidas = new Set(ids);
                                     definirAtivas((anteriores) => ({

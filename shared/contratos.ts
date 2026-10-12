@@ -2,6 +2,11 @@ import { z } from 'zod';
 import type { EstadoAtualizacao } from './atualizacoes';
 import { esquemaIconeProjeto, type IconeDeProjeto } from './iconesProjetos';
 import { esquemaProjetoChat, type ProjetoChat, type EdicaoProjetoChat } from './projetosChat';
+import { esquemaNovoModeloAssinatura } from './assinaturas';
+import { esquemaModeloAssinatura, esquemaProvedorAssinatura } from './assinaturas';
+import { esquemaMemoria } from './memoria';
+import { esquemaScriptProjeto, type EventoTerminal } from './repositorio';
+import type * as Repositorio from './repositorio';
 
 /** Esforços aceitos pelo OpenRouter, do mais leve ao mais intenso. */
 export const esforcosOpenRouter = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -20,6 +25,8 @@ export const esquemaConfiguracao = z.object({
     temperatura: z.number().min(0).max(2).default(0.7),
     maxTokens: z.number().int().min(64).max(32768).default(2048),
     instrucao: z.string().max(20000).default('Responda em português brasileiro. Seja claro e preciso.'),
+    memoria: z.boolean().default(true),
+    extracaoMemoria: z.boolean().default(true),
 });
 export const esquemaPerfilModelo = esquemaConfiguracao
     .pick({
@@ -50,6 +57,12 @@ export const esquemaModelo = z.object({
     catalogoId: z.string().max(120).optional(),
     projetorVisual: z.any().optional(),
     perfil: esquemaPerfilModelo.optional(),
+    assinatura: z
+        .object({
+            provedor: esquemaProvedorAssinatura,
+            id: esquemaModeloAssinatura,
+        })
+        .optional(),
 });
 export const esquemaAcao = z.object({
     id: z.string(),
@@ -180,8 +193,9 @@ export const esquemaProjeto = z.object({
     icone: esquemaIconeProjeto.nullable().optional(),
     criadoEm: z.string().datetime(),
     aviso: z.string().optional(),
+    scripts: z.array(esquemaScriptProjeto).max(20).optional(),
 });
-export type Projeto = z.infer<typeof esquemaProjeto>;
+export type Projeto =z.infer<typeof esquemaProjeto>;
 export const esquemaNovoProjeto = z.discriminatedUnion('tipo', [
     z.object({ tipo: z.literal('pasta') }),
     z.object({ tipo: z.literal('criar'), nome: esquemaProjeto.shape.nome }),
@@ -211,6 +225,7 @@ export const esquemaDados = z.object({
     favoritosCatalogo: z.array(z.string().min(1).max(240)).default([]),
     registrosUso: z.array(esquemaRegistroUso).default([]),
     entradasUsoDescartadas: z.array(z.string().uuid()).default([]),
+    memorias: z.array(esquemaMemoria).max(2000).default([]),
 });
 export type Modelo = z.infer<typeof esquemaModelo>;
 export type Configuracao = z.infer<typeof esquemaConfiguracao>;
@@ -249,6 +264,7 @@ export type Evento =
     | { tipo: 'computador'; previa: import('./computador').PreviaComputador }
     | { tipo: 'estado'; estado: Estado }
     | { tipo: 'erro'; erro: string }
+    | EventoTerminal
     | {
           tipo: 'mensagem';
           conversaId: string;
@@ -273,6 +289,12 @@ export interface PonteSelene {
     ): Promise<Resultado<import('./acessoWeb').EstadoAcessoWeb>>;
     renovarChaveWeb(): Promise<Resultado<import('./acessoWeb').EstadoAcessoWeb>>;
     configurarOpenRouter(chave: string): Promise<Resultado<void>>;
+    adicionarModeloAssinatura(entrada: z.infer<typeof esquemaNovoModeloAssinatura>): Promise<Resultado<Modelo>>;
+    verificarAssinaturas(): Promise<Resultado<Record<import('./assinaturas').ProvedorAssinatura, import('./assinaturas').EstadoAssinatura>>>;
+    modelosAssinatura(): Promise<Resultado<import('./assinaturas').ModelosAssinatura>>;
+    limitesAssinaturas(): Promise<
+        Resultado<Record<import('./assinaturas').ProvedorAssinatura, import('./limites').LimitesAssinatura>>
+    >;
     catalogoOpenRouter(
         atualizar?: boolean,
         ordenacao?: import('./openrouter').OrdenacaoOpenRouter,
@@ -304,7 +326,7 @@ export interface PonteSelene {
     novaConversa(modo: 'chat' | 'code', origemId?: string): Promise<Resultado<Conversa>>;
     alterarConversa(id: string, alteracao: z.infer<typeof esquemaAlteracao>): Promise<Resultado<void>>;
     excluirConversa(id: string): Promise<Resultado<void>>;
-    excluirConcluidas(): Promise<Resultado<string[]>>;
+    excluirConcluidas(modo?: 'chat' | 'code'): Promise<Resultado<string[]>>;
     escolherProjeto(id: string, caminho?: string | null): Promise<Resultado<boolean>>;
     importarModelo(): Promise<Resultado<void>>;
     importarProjetor(id: string): Promise<Resultado<void>>;
@@ -327,6 +349,28 @@ export interface PonteSelene {
     cancelar(): Promise<Resultado<void>>;
     aprovar(acaoId: string, aprovada: boolean): Promise<Resultado<void>>;
     exportarConversa(id: string): Promise<Resultado<void>>;
+    fixarMemoria(id: string, fixada: boolean): Promise<Resultado<void>>;
+    removerMemoria(id: string): Promise<Resultado<void>>;
+    statusRepositorio(projetoId: string): Promise<Resultado<Repositorio.StatusRepositorio>>;
+    trocarBranch(projetoId: string, branch: string, criar?: boolean): Promise<Resultado<void>>;
+    acaoGit(projetoId: string, acao: Repositorio.AcaoGit, mensagem: string): Promise<Resultado<string | null>>;
+    editoresDisponiveis(): Promise<Resultado<Repositorio.Editor[]>>;
+    abrirNoEditor(projetoId: string, editor: Repositorio.Editor): Promise<Resultado<void>>;
+    salvarScriptsProjeto(projetoId: string, scripts: Repositorio.ScriptProjeto[]): Promise<Resultado<void>>;
+    listarGitHub(
+        projetoId: string,
+        consulta: Repositorio.ConsultaGitHub,
+    ): Promise<Resultado<Repositorio.ListaGitHub>>;
+    abrirGitHub(url: string): Promise<Resultado<void>>;
+    abrirTerminal(
+        projetoId: string,
+        dimensoes: Repositorio.DimensoesTerminal,
+        comando?: string,
+    ): Promise<Resultado<string>>;
+    historicoTerminal(id: string): Promise<Resultado<string>>;
+    escreverTerminal(id: string, dados: string): Promise<Resultado<void>>;
+    redimensionarTerminal(id: string, dimensoes: Repositorio.DimensoesTerminal): Promise<Resultado<void>>;
+    fecharTerminal(id: string): Promise<Resultado<void>>;
     janela(acao: 'minimizar' | 'maximizar' | 'fechar'): void;
     aoEvento(callback: (evento: Evento) => void): () => void;
 }
