@@ -67,7 +67,6 @@ const instrucaoResumo = [
 ].join('\n');
 
 /** Modelos de janela enorme (ex.: 1M) não devem acumular histórico até o limite: cada chamada reenvia tudo e o cache expira em ~5 min. */
-const tetoContextoOperacional = 100_000;
 
 type DependenciasContexto = {
     completar: (corpo: unknown, sinal: AbortSignal) => Promise<Response>;
@@ -88,7 +87,7 @@ export class CompactadorContexto {
         ferramentas?: unknown,
     ): Promise<void> {
         sinal.throwIfAborted();
-        const contexto = Math.min(configuracao.contexto, tetoContextoOperacional);
+        const contexto = configuracao.contexto;
         const limite = contexto - configuracao.maxTokens - 256;
         const antes = estimarTokens(mensagens, ferramentas);
         if (antes <= limite * 0.85) {
