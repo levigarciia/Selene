@@ -8,10 +8,14 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
-            img-src 'self' data:; connect-src 'self' ws://127.0.0.1:5173; object-src 'none'; base-uri 'self'"
+            content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline';
+            img-src 'self' data: https://github.com https://avatars.githubusercontent.com; font-src 'self' data:; connect-src 'self' data: ws://127.0.0.1:5173;
+            object-src 'none'; base-uri 'self'"
         />
         <title>Selene</title>
+        <link rel="icon" type="image/png" href="/icon.png" />
+        <link rel="icon" href="/selene.ico" sizes="any" />
+        <link rel="apple-touch-icon" href="/icon.png" />
     </head>
     <body
         class="touch-manipulation max-[760px]:[&_input]:text-[16px]! max-[760px]:[&_textarea]:text-[16px]! max-[760px]:[&_select]:text-[16px]!"

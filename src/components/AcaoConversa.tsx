@@ -17,6 +17,9 @@ const nomes: Record<string, string> = {
     ler_pagina_web: 'Lendo página',
     controlar_navegador: 'Usando navegador',
     controlar_computador: 'Usando computador',
+    lembrar: 'Salvando memória',
+    buscar_conversas: 'Buscando conversas',
+    esquecer: 'Apagando memória',
 };
 const nomesConcluidos: Record<string, string> = {
     listar_arquivos: 'Explorou',
@@ -30,6 +33,9 @@ const nomesConcluidos: Record<string, string> = {
     ler_pagina_web: 'Leu página',
     controlar_navegador: 'Usou navegador',
     controlar_computador: 'Usou computador',
+    lembrar: 'Memória salva',
+    buscar_conversas: 'Buscou conversas',
+    esquecer: 'Memória apagada',
 };
 const estados: Record<Acao['estado'], string> = {
     preparando: 'Preparando ação',
@@ -58,6 +64,7 @@ export function AcaoConversa({
         acao.argumentos.caminho ??
         acao.argumentos.consulta ??
         acao.argumentos.url ??
+        acao.argumentos.texto ??
         acao.argumentos.acao;
     const escrita = ['escrever_arquivo', 'editar_arquivo', 'apply_patch'].includes(acao.nome);
     const conteudo = acao.argumentos.conteudo ?? acao.argumentos.novo ?? acao.argumentos.patch;

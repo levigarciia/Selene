@@ -4,6 +4,29 @@ import { esquemaDados, type Dados } from '../../shared/contratos';
 import { reunirRegistrosUso } from '../../shared/estatisticas';
 import { migrarProjetos } from './projetos';
 
+/**
+ * Remove entradas de modelos remotos gravadas sem o vínculo OpenRouter. Elas aparecem como modelos locais
+ * porque não têm arquivo nem catálogo; conversas que as usavam passam ao cadastro OpenRouter equivalente.
+ */
+export function removerModelosRemotosOrfaos(dados: Dados): boolean {
+    const orfaos = dados.modelos.filter(
+        (modelo) => !modelo.openrouter && !modelo.assinatura && !modelo.catalogoId && modelo.tamanho === 0,
+    );
+    if (!orfaos.length) return false;
+    const substitutos = new Map<string, string>();
+    for (const orfao of orfaos) {
+        const cadastrado = dados.modelos.find((modelo) => modelo.openrouter && modelo.caminho === orfao.caminho);
+        if (cadastrado) substitutos.set(orfao.id, cadastrado.id);
+    }
+    const removidos = new Set(orfaos.map((orfao) => orfao.id));
+    for (const conversa of dados.conversas) {
+        if (!conversa.modeloId || !removidos.has(conversa.modeloId)) continue;
+        conversa.modeloId = substitutos.get(conversa.modeloId) ?? null;
+    }
+    dados.modelos = dados.modelos.filter((modelo) => !removidos.has(modelo.id));
+    return true;
+}
+
 /** Mantém os dados pessoais em arquivo validado, com gravações atômicas e sequenciais. */
 export class Persistencia {
     dados: Dados = esquemaDados.parse({ versao: 1, configuracao: {}, modelos: [], conversas: [] });
@@ -21,7 +44,8 @@ export class Persistencia {
             }
             this.dados = esquemaDados.parse(bruto);
             const projetosMigrados = migrarProjetos(this.dados);
-            if (bruto.projetos === undefined || projetosMigrados) {
+            const modelosMigrados = removerModelosRemotosOrfaos(this.dados);
+            if (bruto.projetos === undefined || projetosMigrados || modelosMigrados) {
                 await this.salvar();
             }
             for (const conversa of this.dados.conversas) {

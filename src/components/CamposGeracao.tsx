@@ -1,4 +1,5 @@
 import type { Configuracao } from '../../shared/contratos';
+import { Linha, Secao, campo } from './PainelConfiguracoes';
 
 export type CamposConfiguracao = {
     configuracao: Configuracao;
@@ -6,48 +7,42 @@ export type CamposConfiguracao = {
     alterar: <K extends keyof Configuracao>(chave: K, valor: Configuracao[K]) => void;
 };
 
-/** Edita os parâmetros aplicados ao próximo envio sem reiniciar o motor. */
+/** Parâmetros aplicados ao próximo envio sem reiniciar o motor. */
 export function CamposGeracao({ configuracao, ocupado, alterar }: CamposConfiguracao) {
     return (
-        <>
-            <h2>Geração</h2>
-            <p
-                data-ui="texto-secundario"
-                className={[
-                    'text-secundario text-[12px] leading-[1.7]',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-secundario',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:text-[12px]',
-                    '[[data-ui~=usuario-direita]_[data-ui~=conteudo]_&]:leading-[1.7]',
-                    '[[data-ui~=usuario-direita]_&]:text-secundario',
-                    '[[data-ui~=usuario-direita]_&]:text-[12px]',
-                    '[[data-ui~=usuario-direita]_&]:leading-[1.7]',
-                ].join(' ')}
-            >
-                No modo automático, cada resposta usa até 8.192 tokens, respeitando o contexto e o limite do modelo.
-            </p>
-            <div className="grid grid-cols-2 gap-5">
-                <label>
-                    Temperatura
+        <Secao titulo="Respostas">
+            <Linha
+                id="config-temperatura"
+                titulo="Temperatura"
+                descricao="Valores baixos deixam as respostas mais previsíveis. Entre 0 e 2."
+                controle={
                     <input
                         type="number"
+                        aria-label="Temperatura"
                         min="0"
                         max="2"
                         step="0.1"
                         value={configuracao.temperatura}
                         disabled={ocupado}
+                        className={`${campo} w-20 text-right tabular-nums`}
                         onChange={(evento) => alterar('temperatura', Number(evento.target.value))}
                     />
-                </label>
-            </div>
-            <label>
-                Instrução geral
+                }
+            />
+            <Linha
+                id="config-instrucao"
+                titulo="Instrução"
+                descricao="Vale para os modelos locais e do OpenRouter. ChatGPT e Claude usam as instruções do próprio CLI."
+            >
                 <textarea
-                    rows={7}
+                    aria-label="Instrução geral"
+                    rows={5}
                     value={configuracao.instrucao}
                     disabled={ocupado}
+                    className={`${campo} h-auto w-full resize-y py-2 leading-relaxed`}
                     onChange={(evento) => alterar('instrucao', evento.target.value)}
                 />
-            </label>
-        </>
+            </Linha>
+        </Secao>
     );
 }

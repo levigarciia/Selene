@@ -26,6 +26,13 @@ chat, code e permissões continuam válidos como decisões próprias da Selene.
 * `shared/configuracaoMotor.ts`: parâmetros que exigem recarregar os pesos no próximo envio.
 * `src/hooks`: estado e assinatura dos eventos do aplicativo.
 * `scripts`: desenvolvimento e compilação com Bun.
+* `electron/services/repositorio.ts`: status Git, branches, commit, push e listagem de pull requests e issues
+    pelo GitHub CLI (`gh`).
+* `electron/services/terminais.ts`: shells interativos dos projetos Code via `node-pty`.
+* `src/terminal/ghostty`: terminal Ghostty (libghostty em WebAssembly) copiado do T3 Code, licença MIT.
+
+Git, GitHub e terminal pertencem ao modo Code e são registrados apenas no IPC do desktop, fora do acesso web,
+porque executam processos com os privilégios do usuário.
 
 Ferramentas de computador pertencem ao modo code. Sem o acesso completo, leituras e edições respeitam a pasta de
 trabalho, enquanto comandos e escritas exigem aprovação individual. O acesso completo é uma escolha explícita por

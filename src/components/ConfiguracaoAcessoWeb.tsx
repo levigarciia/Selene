@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { EstadoAcessoWeb } from '../../shared/acessoWeb';
 import type { PonteSelene } from '../../shared/contratos';
 import type { Executar } from './Configuracoes';
+import { Alternar, Linha, Ponto, Secao, botaoPequeno, botaoSecundario, campo } from './PainelConfiguracoes';
 
 /** Permite habilitar o acesso local e revogar sessões pelo computador. */
 export function ConfiguracaoAcessoWeb({ ponte, executar }: { ponte?: PonteSelene; executar: Executar }) {
@@ -39,136 +40,169 @@ export function ConfiguracaoAcessoWeb({ ponte, executar }: { ponte?: PonteSelene
 
     if (navegador)
         return (
-            <div className="flex flex-col gap-4 text-sm">
-                <p className="text-secundario">Você está conectado à Selene do computador.</p>
-                {!exigirChave && <p className="text-secundario">O acesso nesta rede está liberado sem chave.</p>}
-                {exigirChave && (
-                    <button
-                        className="self-start rounded-md border border-borda px-4 py-2"
-                        onClick={async () => {
-                            const resposta = await fetch('/api/sair', { method: 'POST' });
-                            if (resposta.ok) window.dispatchEvent(new Event('selene:sessaoEncerrada'));
-                        }}
-                    >
-                        Sair deste navegador
-                    </button>
-                )}
-            </div>
+            <Secao titulo="Esta sessão">
+                <Linha
+                    titulo="Conectado à Selene do computador"
+                    descricao={
+                        exigirChave
+                            ? 'Sair encerra o acesso deste navegador.'
+                            : 'O acesso nesta rede está liberado sem chave.'
+                    }
+                    controle={
+                        exigirChave ? (
+                            <button
+                                className={botaoSecundario}
+                                onClick={async () => {
+                                    const resposta = await fetch('/api/sair', { method: 'POST' });
+                                    if (resposta.ok) window.dispatchEvent(new Event('selene:sessaoEncerrada'));
+                                }}
+                            >
+                                Sair deste navegador
+                            </button>
+                        ) : undefined
+                    }
+                />
+            </Secao>
         );
 
     const alterado = !!estado && (porta !== estado.porta || exigirChave !== estado.exigirChave);
+    const portaValida = Number.isInteger(porta) && porta >= 1024 && porta <= 65535;
+    async function aplicar() {
+        definirOcupado(true);
+        try {
+            const atualizado = await executar(() =>
+                ponte!.configurarAcessoWeb({ ativo: !estado?.ativo || alterado, porta, exigirChave }),
+            );
+            if (atualizado) definirEstado(atualizado);
+        } finally {
+            definirOcupado(false);
+        }
+    }
     return (
-        <div className="flex max-w-xl flex-col gap-5 text-sm">
-            <p className="text-secundario">
-                Abra a Selene pelo celular na mesma rede Wi Fi. Mantenha o aplicativo aberto.
-            </p>
-            <label className="flex max-w-40 flex-col gap-2">
-                Porta
-                <input
-                    type="number"
-                    min={1024}
-                    max={65535}
-                    value={porta}
-                    disabled={ocupado}
-                    className="rounded-md border border-borda bg-[#0d0f12] p-2"
-                    onChange={(evento) => definirPorta(Number(evento.target.value))}
-                />
-            </label>
-            <label className="flex items-center gap-3">
-                <input
-                    type="checkbox"
-                    checked={exigirChave}
-                    disabled={ocupado || !estado}
-                    onChange={(evento) => definirExigirChave(evento.target.checked)}
-                    className="size-4 accent-[#b5a2dc]"
-                />
-                Exigir chave de acesso
-            </label>
-            {!exigirChave && (
-                <p className="text-xs text-secundario">Qualquer pessoa nesta rede poderá operar a Selene.</p>
-            )}
-            <div className="flex flex-wrap gap-3">
-                <button
-                    disabled={ocupado || !estado || !Number.isInteger(porta) || porta < 1024 || porta > 65535}
-                    className="rounded-md bg-[#e0d8ef] px-4 py-2 text-[#251b38]"
-                    onClick={async () => {
-                        definirOcupado(true);
-                        try {
-                            const atualizado = await executar(() =>
-                                ponte!.configurarAcessoWeb({
-                                    ativo: !estado?.ativo || alterado,
-                                    porta,
-                                    exigirChave,
-                                }),
-                            );
-                            if (atualizado) definirEstado(atualizado);
-                        } finally {
-                            definirOcupado(false);
-                        }
-                    }}
+        <>
+            <Secao titulo="Acesso pelo celular">
+                <Linha
+                    id="config-acesso"
+                    titulo={
+                        <>
+                            <Ponto tom={estado?.ativo ? 'ok' : 'neutro'} />
+                            {estado?.ativo ? 'Ativo' : 'Desativado'}
+                        </>
+                    }
+                    descricao="Abra a Selene pelo navegador do celular na mesma rede Wi Fi, com o aplicativo aberto."
+                    controle={
+                        <button
+                            disabled={ocupado || !estado || !portaValida}
+                            className={
+                                estado?.ativo && !alterado
+                                    ? botaoSecundario
+                                    : `${botaoSecundario} border-transparent bg-[#e0d8ef] text-[#251b38] hover:bg-[#ece6f6]`
+                            }
+                            onClick={() => void aplicar()}
+                        >
+                            {ocupado
+                                ? 'Aplicando'
+                                : estado?.ativo
+                                  ? alterado
+                                      ? 'Aplicar alterações'
+                                      : 'Desativar acesso'
+                                  : 'Ativar acesso'}
+                        </button>
+                    }
                 >
-                    {ocupado
-                        ? 'Aplicando'
-                        : estado?.ativo
-                          ? alterado
-                              ? 'Aplicar alterações'
-                              : 'Desativar acesso'
-                          : 'Ativar acesso'}
-                </button>
-                {estado?.ativo && estado.exigirChave && (
-                    <button
-                        disabled={ocupado}
-                        className="rounded-md border border-borda px-4 py-2"
-                        onClick={async () => {
-                            const atualizado = await executar(() => ponte!.renovarChaveWeb());
-                            if (atualizado) definirEstado(atualizado);
-                        }}
-                    >
-                        Renovar chave e encerrar sessões
-                    </button>
-                )}
-            </div>
-            {estado?.erro && (
-                <p role="alert" className="text-[#eab1aa]">
-                    {estado.erro}
-                </p>
-            )}
+                    {estado?.erro ? (
+                        <p role="alert" className="text-xs text-[#eab1aa]">
+                            {estado.erro}
+                        </p>
+                    ) : undefined}
+                </Linha>
+                <Linha
+                    id="config-porta"
+                    titulo="Porta"
+                    descricao="Entre 1024 e 65535."
+                    controle={
+                        <input
+                            type="number"
+                            aria-label="Porta"
+                            min={1024}
+                            max={65535}
+                            value={porta}
+                            disabled={ocupado}
+                            className={`${campo} w-24 text-right tabular-nums`}
+                            onChange={(evento) => definirPorta(Number(evento.target.value))}
+                        />
+                    }
+                />
+                <Linha
+                    id="config-chave-web"
+                    titulo="Exigir chave de acesso"
+                    descricao={
+                        exigirChave
+                            ? 'A chave muda ao reiniciar o aplicativo.'
+                            : 'Qualquer pessoa nesta rede poderá operar a Selene.'
+                    }
+                    controle={
+                        <Alternar
+                            rotulo="Exigir chave de acesso"
+                            marcado={exigirChave}
+                            desativado={ocupado || !estado}
+                            alterar={definirExigirChave}
+                        />
+                    }
+                />
+            </Secao>
             {estado?.ativo && (
-                <>
-                    <div className="flex flex-col gap-2">
-                        <span className="text-secundario">Endereço no celular</span>
-                        {estado.enderecos.map((endereco) => (
-                            <code key={endereco} className="select-all">
-                                {endereco}
-                            </code>
-                        ))}
-                        {!estado.enderecos.length && <span>Nenhuma conexão de rede local encontrada.</span>}
-                    </div>
+                <Secao titulo="Conexão">
+                    <Linha
+                        titulo="Endereço no celular"
+                        descricao={estado.enderecos.length ? undefined : 'Nenhuma conexão de rede local encontrada.'}
+                    >
+                        {estado.enderecos.length ? (
+                            <div className="flex flex-col gap-1">
+                                {estado.enderecos.map((endereco) => (
+                                    <code key={endereco} className="select-all text-[13px] text-secundario">
+                                        {endereco}
+                                    </code>
+                                ))}
+                            </div>
+                        ) : undefined}
+                    </Linha>
                     {estado.exigirChave && (
-                        <label className="flex flex-col gap-2">
-                            Chave de acesso
+                        <Linha
+                            titulo="Chave de acesso"
+                            controle={
+                                <>
+                                    <button className={botaoPequeno} onClick={() => definirMostrar(!mostrar)}>
+                                        {mostrar ? 'Ocultar chave' : 'Mostrar chave'}
+                                    </button>
+                                    <button
+                                        disabled={ocupado}
+                                        className={botaoPequeno}
+                                        onClick={async () => {
+                                            const atualizado = await executar(() => ponte!.renovarChaveWeb());
+                                            if (atualizado) definirEstado(atualizado);
+                                        }}
+                                    >
+                                        Renovar chave e encerrar sessões
+                                    </button>
+                                </>
+                            }
+                        >
                             <input
                                 readOnly
+                                aria-label="Chave de acesso"
                                 type={mostrar ? 'text' : 'password'}
                                 value={estado.chave}
-                                className="w-full rounded-md border border-borda bg-[#0d0f12] p-3 font-mono"
+                                className={`${campo} w-full font-mono`}
                             />
-                        </label>
+                        </Linha>
                     )}
-                    {estado.exigirChave && (
-                        <button
-                            className="self-start text-secundario hover:text-principal"
-                            onClick={() => definirMostrar(!mostrar)}
-                        >
-                            {mostrar ? 'Ocultar chave' : 'Mostrar chave'}
-                        </button>
-                    )}
-                    <p className="text-xs text-secundario">
-                        Use em uma rede de confiança. O acesso usa HTTP local. Se o Windows solicitar, permita a Selene
-                        em redes privadas no firewall. A chave muda ao reiniciar o aplicativo.
-                    </p>
-                </>
+                </Secao>
             )}
-        </div>
+            <p className="-mt-5 px-4 text-xs text-discreto">
+                Use em uma rede de confiança. O acesso usa HTTP local. Se o Windows solicitar, permita a Selene em redes
+                privadas no firewall.
+            </p>
+        </>
     );
 }

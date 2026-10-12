@@ -81,7 +81,8 @@ try {
         globalThis.fetch = simular;
     });
     await pagina.getByRole('button', { name: 'Configurações', exact: true }).click();
-    await pagina.getByRole('button', { name: 'Geral', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Provedores', exact: true }).click();
+    await pagina.getByRole('tab', { name: /^OpenRouter/ }).click();
     await pagina.getByLabel('Chave de API', { exact: true }).fill('chave-ficticia-validacao');
     await pagina.getByRole('button', { name: 'Salvar chave', exact: true }).click();
     await pagina.getByText('Chave atualizada', { exact: true }).waitFor();

@@ -110,6 +110,7 @@ const iconesFerramentas: Record<string, NomeIconeAcao> = {
     controlar_navegador: 'navegador',
     controlar_computador: 'computador',
     atualizar_plano: 'concluido',
+    buscar_conversas: 'pesquisa',
 };
 
 function iconeComando(comando: unknown): NomeIconeAcao {

@@ -9,7 +9,9 @@ import {
     StarIcon,
 } from '@phosphor-icons/react';
 import { catalogoModelos, encontrarModeloLocal, formatarTamanho, type FamiliaModelo } from '../../shared/catalogo';
-import type { Estado, PonteSelene } from '../../shared/contratos';
+import type { Estado, Modelo, PonteSelene } from '../../shared/contratos';
+import { CatalogoAssinaturas } from './CatalogoAssinaturas';
+import { provedoresApresentacao, provedoresAssinatura } from '../../shared/assinaturas';
 import { nomeExibicaoModelo } from '../../shared/openrouter';
 import type { Executar } from './Configuracoes';
 import { LinhaModeloCatalogo } from './LinhaModeloCatalogo';
@@ -25,6 +27,20 @@ const familias: { id: FamiliaModelo; nome: string }[] = [
     { id: 'gemma', nome: 'Gemma' },
     { id: 'deepseek', nome: 'DeepSeek' },
 ];
+
+type Aba = 'local' | 'openrouter' | 'inscricoes';
+const abas: { id: Aba; nome: string }[] = [
+    { id: 'local', nome: 'Local' },
+    { id: 'openrouter', nome: 'OpenRouter' },
+    { id: 'inscricoes', nome: 'Inscrições' },
+];
+
+/** Abre o catálogo na aba do provedor do modelo atual. */
+function abaDoModelo(modelo?: Modelo): Aba {
+    if (modelo?.assinatura) return 'inscricoes';
+    if (modelo?.openrouter) return 'openrouter';
+    return 'local';
+}
 /** Oferece modelos prontos para download e permite selecionar arquivos já disponíveis na conversa. */
 export function CatalogoModelos({
     estado,
@@ -48,14 +64,14 @@ export function CatalogoModelos({
     hardware?: HardwareLocal;
 }) {
     const idCatalogo = useId();
-    const [provedor, definirProvedor] = useState<'local' | 'openrouter'>('local');
+    const selecionado = estado.modelos.find((modelo) => modelo.id === modeloId);
+    const [provedor, definirProvedor] = useState<Aba>(() => abaDoModelo(selecionado));
     const [busca, definirBusca] = useState('');
     const [filtro, definirFiltro] = useState<string>('todos');
     const [somenteLocais, definirSomenteLocais] = useState(false);
     const raiz = useRef<HTMLDivElement>(null);
     const campoBusca = useRef<HTMLInputElement>(null);
     const gatilho = useRef<HTMLButtonElement>(null);
-    const selecionado = estado.modelos.find((modelo) => modelo.id === modeloId);
     const familiaSelecionada = catalogoModelos.find(
         (item) => selecionado && encontrarModeloLocal(item, [selecionado]),
     )?.familia;
@@ -77,6 +93,7 @@ export function CatalogoModelos({
     const importados = estado.modelos.filter(
         (modelo) =>
             !modelo.openrouter &&
+            !modelo.assinatura &&
             !catalogoModelos.some((item) => encontrarModeloLocal(item, [modelo])) &&
             modelo.nome.toLocaleLowerCase('pt-BR').includes(termo),
     );
@@ -141,6 +158,11 @@ export function CatalogoModelos({
                 >
                     {selecionado?.openrouter ? (
                         <IconeModeloRemoto id={selecionado.openrouter.id} nome={selecionado.nome} />
+                    ) : selecionado?.assinatura ? (
+                        <IconeModeloRemoto
+                            id={selecionado.assinatura.provedor === 'chatgpt' ? 'openai/' : 'anthropic/'}
+                            nome={selecionado.nome}
+                        />
                     ) : (
                         <IconeModelo familia={familiaSelecionada} nome={selecionado?.nome} />
                     )}
@@ -232,44 +254,38 @@ export function CatalogoModelos({
                                     <IconeModeloRemoto id={`${id}/`} nome={nome} tamanho={21} />
                                 </button>
                             ))}
-                        {familias.map((familia) => (
-                            <button
-                                type="button"
-                                key={familia.id}
-                                aria-label={`Família ${familia.nome}`}
-                                title={familia.nome}
-                                aria-pressed={filtro === familia.id}
-                                onClick={() => definirFiltro(familia.id)}
-                            >
-                                <IconeModelo familia={familia.id} tamanho={21} />
-                            </button>
-                        ))}
+                        {provedor === 'inscricoes' &&
+                            provedoresAssinatura.map((id) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    aria-label={`Provedor ${provedoresApresentacao[id].nome}`}
+                                    title={provedoresApresentacao[id].nome}
+                                    aria-pressed={filtro === id}
+                                    onClick={() => definirFiltro(id)}
+                                >
+                                    <IconeModeloRemoto
+                                        id={id === 'chatgpt' ? 'openai/' : 'anthropic/'}
+                                        nome={provedoresApresentacao[id].nome}
+                                        tamanho={21}
+                                    />
+                                </button>
+                            ))}
+                        {provedor === 'local' &&
+                            familias.map((familia) => (
+                                <button
+                                    type="button"
+                                    key={familia.id}
+                                    aria-label={`Família ${familia.nome}`}
+                                    title={familia.nome}
+                                    aria-pressed={filtro === familia.id}
+                                    onClick={() => definirFiltro(familia.id)}
+                                >
+                                    <IconeModelo familia={familia.id} tamanho={21} />
+                                </button>
+                            ))}
                     </nav>
                     <div data-ui="conteudo-catalogo" className="flex flex-col min-w-0 min-h-0">
-                        <div className="flex gap-2 border-b border-borda px-3 py-2 text-xs">
-                            <button
-                                type="button"
-                                aria-pressed={provedor === 'local'}
-                                className="rounded px-2 py-1 aria-pressed:bg-hover"
-                                onClick={() => {
-                                    definirProvedor('local');
-                                    definirFiltro('todos');
-                                }}
-                            >
-                                Local
-                            </button>
-                            <button
-                                type="button"
-                                aria-pressed={provedor === 'openrouter'}
-                                className="rounded px-2 py-1 aria-pressed:bg-hover"
-                                onClick={() => {
-                                    definirProvedor('openrouter');
-                                    definirFiltro('todos');
-                                }}
-                            >
-                                OpenRouter
-                            </button>
-                        </div>
                         <div
                             data-ui="busca-catalogo"
                             className={[
@@ -318,6 +334,30 @@ export function CatalogoModelos({
                             </button>
                         </div>
                         <div
+                            data-ui="origem-catalogo"
+                            aria-label="Origem dos modelos"
+                            className="flex shrink-0 gap-[2px] mx-[12px] mt-[8px] mb-[2px] rounded-[8px] bg-[#101114] p-[3px]"
+                        >
+                            {abas.map((aba) => (
+                                <button
+                                    key={aba.id}
+                                    type="button"
+                                    aria-pressed={provedor === aba.id}
+                                    className={[
+                                        'flex-1 rounded-[6px] border-0 bg-transparent px-[4px] py-[5px] text-[11px]',
+                                        'text-[#8d94a0] [&:hover]:text-principal',
+                                        "[&[aria-pressed='true']]:bg-[#282b31] [&[aria-pressed='true']]:text-[#eef0f3]",
+                                    ].join(' ')}
+                                    onClick={() => {
+                                        definirProvedor(aba.id);
+                                        definirFiltro('todos');
+                                    }}
+                                >
+                                    {aba.nome}
+                                </button>
+                            ))}
+                        </div>
+                        <div
                             data-ui="itens-catalogo"
                             className={[
                                 [
@@ -327,7 +367,17 @@ export function CatalogoModelos({
                                 'px-0 py-[8px]',
                             ].join(' ')}
                         >
-                            {provedor === 'openrouter' ? (
+                            {provedor === 'inscricoes' ? (
+                                <CatalogoAssinaturas
+                                    estado={estado}
+                                    ponte={ponte}
+                                    executar={executar}
+                                    selecionar={usar}
+                                    busca={busca}
+                                    filtro={filtro}
+                                    modeloId={modeloId}
+                                />
+                            ) : provedor === 'openrouter' ? (
                                 <CatalogoOpenRouter
                                     estado={estado}
                                     ponte={ponte}

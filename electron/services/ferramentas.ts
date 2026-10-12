@@ -14,6 +14,9 @@ import {
     ferramentaNavegador,
     type ServicoWeb,
 } from '../../shared/web';
+import { ferramentasMemoria, nomesFerramentasMemoria } from '../../shared/memoria';
+import type { Memorias } from './memorias';
+import { buscarConversas, esquemaBuscaConversas, ferramentaBuscaConversas } from '../../shared/buscaConversas';
 
 const texto = z.string().min(1).max(30000);
 const esquemaLer = z.object({ caminho: texto, inicio: z.number().int().min(1).default(1) });
@@ -116,11 +119,25 @@ export const ferramentas = [
     ),
 ];
 
-/** Oferece pesquisa nos dois modos e controle do navegador somente no modo Code. */
-export function obterFerramentas(modo: Conversa['modo'], webDisponivel: boolean, computadorDisponivel = false) {
+/**
+ * Oferece pesquisa nos dois modos; memória e busca em conversas somente no Chat; arquivos, terminal, navegador e
+ * computador somente no Code.
+ */
+export function obterFerramentas(
+    modo: Conversa['modo'],
+    webDisponivel: boolean,
+    computadorDisponivel = false,
+    memoriaDisponivel = false,
+    conversasDisponiveis = false,
+) {
     const pesquisa = webDisponivel ? ferramentasPesquisa : [];
     return modo === 'code' ? [...ferramentas, ...pesquisa, ...(webDisponivel ? [ferramentaNavegador] : []),
-        ...(computadorDisponivel ? [ferramentaComputador] : [])] : pesquisa;
+        ...(computadorDisponivel ? [ferramentaComputador] : [])] :
+        [
+            ...pesquisa,
+            ...(memoriaDisponivel ? ferramentasMemoria : []),
+            ...(conversasDisponiveis ? [ferramentaBuscaConversas] : []),
+        ];
 }
 
 async function resolverExistente(caminho: string): Promise<string> {
@@ -178,7 +195,25 @@ export async function prepararFerramenta(
     conversa: Conversa,
     web?: ServicoWeb,
     computador?: ServicoComputador,
+    memorias?: Memorias,
+    conversas?: () => readonly Conversa[],
 ): Promise<FerramentaPreparada> {
+    if (nome === 'buscar_conversas') {
+        if (conversa.modo !== 'chat') throw new Error('A busca em conversas está disponível somente no modo Chat.');
+        if (!conversas) throw new Error('Busca em conversas indisponível.');
+        const argumentos = esquemaBuscaConversas.parse(entrada);
+        return {
+            argumentos,
+            aprovacao: false,
+            previa: argumentos.consulta,
+            executar: async () => buscarConversas(argumentos.consulta, conversas(), conversa.id),
+        };
+    }
+    if (nomesFerramentasMemoria.has(nome)) {
+        if (conversa.modo !== 'chat') throw new Error('A memória está disponível somente no modo Chat.');
+        if (!memorias?.ativa) throw new Error('A memória está desativada nas configurações.');
+        return memorias.preparar(nome, entrada, conversa);
+    }
     if (nome === 'pesquisar_web' || nome === 'ler_pagina_web') {
         if (!web) throw new Error('Pesquisa na web indisponível.');
         if (nome === 'pesquisar_web') {

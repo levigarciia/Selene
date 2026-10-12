@@ -3,7 +3,15 @@ import { ArrowsOutSimpleIcon, MinusIcon, XIcon } from '@phosphor-icons/react';
 import type { PonteSelene } from '../../shared/contratos';
 
 /** Mantém os controles nativos disponíveis em todas as telas do aplicativo. */
-export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: PonteSelene }) {
+export function BarraJanela({
+    children,
+    ponte,
+    acoes,
+}: {
+    children: ReactNode;
+    ponte?: PonteSelene;
+    acoes?: ReactNode;
+}) {
     return (
         <header
             data-ui="barra-superior"
@@ -17,9 +25,11 @@ export function BarraJanela({ children, ponte }: { children: ReactNode; ponte?: 
                 data-ui="acoes-janela"
                 className={[
                     'flex items-center gap-[4px]',
+                    acoes ? '[-webkit-app-region:no-drag]' : '',
                     navigator.userAgent.includes('Electron') ? '' : 'hidden',
                 ].join(' ')}
             >
+                {acoes && <div className="mr-3 flex items-center gap-[4px]">{acoes}</div>}
                 <button
                     data-ui="botao-icone"
                     className={[

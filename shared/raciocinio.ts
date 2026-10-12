@@ -34,7 +34,7 @@ const niveisLocais: NivelRaciocinio[] = ['desativado', 'baixo', 'medio', 'alto']
  * na ordem do provedor (do mais intenso ao mais leve); modelos locais seguem a capacidade do catálogo.
  */
 export function niveisRaciocinio(modelo?: Modelo): NivelRaciocinio[] {
-    if (!modelo) return [];
+    if (!modelo || modelo.assinatura) return [];
     if (modelo.openrouter) return niveisOpenRouter(modelo.openrouter);
     const item = catalogoModelos.find((entrada) => encontrarModeloLocal(entrada, [modelo]));
     if (item) {
@@ -47,7 +47,7 @@ export function niveisRaciocinio(modelo?: Modelo): NivelRaciocinio[] {
     return [];
 }
 
-/** Converte os esforços do provedor em níveis da Selene, preservando a ordem recebida. */
+/** Converte os esforços do provedor em níveis da Selene, mantendo a ordem informada pelo provedor. */
 function niveisOpenRouter(remoto: NonNullable<Modelo['openrouter']>): NivelRaciocinio[] {
     if (!remoto.raciocinio) return [];
     const niveis = (remoto.esforcos ?? []).flatMap((esforco) => {
@@ -72,6 +72,7 @@ export function parametrosRaciocinio(
     maxTokens: number,
 ) {
     const resolvido = resolverNivelRaciocinio(modelo, nivel);
+    if (modelo?.assinatura) return {};
     if (modelo?.openrouter) {
         const esforco = esforcoOpenRouter[resolvido];
         return {

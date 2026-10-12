@@ -53,7 +53,11 @@ try {
     pagina.on('pageerror', (erro) => erros.push(erro.message));
     await pagina.getByRole('button', { name: 'Configurações', exact: true }).click();
     const tela = pagina.getByRole('region', { name: 'Configurações', exact: true });
-    await tela.getByRole('button', { name: 'Instalados', exact: true }).waitFor();
+    await pagina
+        .getByRole('navigation', { name: 'Seções das configurações' })
+        .getByRole('button', { name: 'Modelos', exact: true })
+        .click();
+    await tela.getByRole('heading', { name: 'Modelos locais', exact: true }).waitFor();
     await tela.getByText('Opções de Modelo indisponível', { exact: true }).click();
     const linha = pagina.locator('[data-ui="linha-modelo"]').filter({ hasText: 'Modelo indisponível' });
     await linha.getByText('Avançado', { exact: true }).click();
@@ -74,19 +78,12 @@ try {
         modeloId,
     );
     assert.equal(invalido.ok, false);
-    await tela.getByRole('button', { name: 'Catálogo', exact: true }).click();
-    await tela.getByText('Sobre a estimativa', { exact: true }).first().waitFor();
-    await tela
-        .getByText(/Estimado: .* tokens\/s/)
-        .first()
-        .waitFor();
-    await pagina.screenshot({ path: 'artifacts/selene-catalogo-compatibilidade.png' });
-    await tela.getByRole('button', { name: 'Instalados', exact: true }).click();
+
     const falha = await pagina.evaluate(async (id) => window.selene!.carregarModelo(id), modeloId);
     assert.equal(falha.ok, false);
     await pagina
         .getByRole('navigation', { name: 'Seções das configurações' })
-        .getByRole('button', { name: 'Motor', exact: true })
+        .getByRole('button', { name: 'Provedores', exact: true })
         .click();
     await tela.getByText('Detalhes técnicos', { exact: true }).waitFor();
     assert.equal(await tela.locator('pre:visible').count(), 0);
@@ -162,6 +159,10 @@ try {
     pagina = await aplicativo.firstWindow();
     pagina.on('pageerror', (erro) => erros.push(erro.message));
     await pagina.getByRole('button', { name: 'Configurações', exact: true }).click();
+    await pagina
+        .getByRole('navigation', { name: 'Seções das configurações' })
+        .getByRole('button', { name: 'Modelos', exact: true })
+        .click();
     await pagina.getByText('Opções de Modelo indisponível', { exact: true }).click();
     const reaberta = pagina.locator('[data-ui="linha-modelo"]').filter({ hasText: 'Modelo indisponível' });
     await reaberta.getByText('Avançado', { exact: true }).click();
