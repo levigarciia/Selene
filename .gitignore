@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+output/
 
 .env
 .env.*
@@ -16,9 +17,19 @@ coverage/
 .cache/
 .vite/
 *.tsbuildinfo
+*.tmp
+*.temp
+__pycache__/
+*.pyc
+test-results/
+playwright-report/
 
 *.gguf
 *.gguf.part
+*.key
+*.pem
+*.pfx
+*.p12
 
 .DS_Store
 Thumbs.db
