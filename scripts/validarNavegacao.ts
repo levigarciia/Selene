@@ -8,6 +8,9 @@ export async function validarNavegacao(pagina: Page, aplicativo: ElectronApplica
     const tituloAtivo = await pagina.getByRole('textbox', { name: 'Título da conversa' }).inputValue();
     await pagina.getByRole('textbox', { name: 'Mensagem', exact: true }).fill('Rascunho preservado ao navegar');
     await pagina.getByRole('button', { name: 'Recolher sidebar' }).click();
+    await pagina.waitForFunction(() =>
+        document.querySelector('[data-ui~="sidebar"]')?.getBoundingClientRect().width === 72,
+    );
     assert.equal(
         await pagina.locator('[data-ui~="sidebar"]').evaluate((elemento) => elemento.getBoundingClientRect().width),
         72,
@@ -45,11 +48,11 @@ export async function validarNavegacao(pagina: Page, aplicativo: ElectronApplica
     const titulo = 'Conversa para menu de contexto';
     const id = await pagina.evaluate(async (titulo) => {
         const ponte = window.selene!;
-        const nova = await ponte.novaConversa('code');
-        if (!nova.ok) throw new Error(nova.erro);
-        const alterada = await ponte.alterarConversa(nova.valor.id, { titulo });
-        if (!alterada.ok) throw new Error(alterada.erro);
-        return nova.valor.id;
+        const estado = await ponte.estado();
+        if (!estado.ok) throw new Error(estado.erro);
+        const conversa = estado.valor.conversas.find((item) => item.titulo === titulo);
+        if (!conversa) throw new Error('A conversa de teste do menu precisa existir.');
+        return conversa.id;
     }, titulo);
     const botao = pagina.getByRole('button', { name: titulo, exact: true });
     await botao.click({ button: 'right' });
@@ -66,10 +69,12 @@ export async function validarNavegacao(pagina: Page, aplicativo: ElectronApplica
     }, destino);
     await pagina.getByRole('menuitem', { name: 'Exportar conversa' }).click();
     for (let tentativa = 0; tentativa < 30; tentativa++) {
-        if ((await readFile(destino, 'utf8').catch(() => '')) === `# ${titulo}`) break;
+        if ((await readFile(destino, 'utf8').catch(() => '')).includes('Contexto do menu')) break;
         await new Promise((resolver) => setTimeout(resolver, 100));
     }
-    assert.equal(await readFile(destino, 'utf8'), `# ${titulo}`);
+    const exportado = await readFile(destino, 'utf8');
+    assert(exportado.startsWith(`# ${titulo}`));
+    assert(exportado.includes('Contexto do menu'));
     await botao.click({ button: 'right' });
     await pagina.getByRole('menuitem', { name: 'Excluir conversa' }).click();
     await pagina.getByRole('heading', { name: 'Excluir esta conversa?' }).waitFor();

@@ -9,7 +9,8 @@ export async function exportarMarkdown(
     for (const mensagem of conversa.mensagens) {
         texto.push(`## ${mensagem.papel === 'user' ? 'Você' : 'Selene'}\n\n${mensagem.texto}`);
         for (const imagem of mensagem.imagens ?? []) {
-            texto.push(`![${imagem.nome.replace(/[\[\]\\]/g, '')}](${await lerImagem(imagem.id)})`);
+            const prefixo = imagem.mime === 'audio/wav' ? '' : '!';
+            texto.push(`${prefixo}[${imagem.nome.replace(/[\[\]\\]/g, '')}](${await lerImagem(imagem.id)})`);
         }
         texto.push(mensagem.acoes.map((acao) => `### ${acao.nome}: ${acao.estado}\n\n${acao.resultado}`).join('\n\n'));
     }

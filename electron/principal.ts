@@ -17,13 +17,23 @@ import {
     esquemaConfiguracao,
     esquemaPerfilModelo,
     esquemaEntradaImagem,
+    type Conversa,
     type Estado,
+    type Modelo,
     type Evento,
     type Resultado,
 } from '../shared/contratos';
 import { Persistencia } from './services/persistencia';
 import { MotorLocal } from './services/motor';
-import { Agente } from './services/agente';
+import type { Agente } from './services/agente';
+import { criarAgente, type ContextoAgentes } from './services/fabricaAgentes';
+import { ServidorMcp } from './services/servidorMcp';
+import { Subagentes } from './services/subagentes';
+import { ChatGptWeb } from './services/chatgptWeb';
+import { ConversaChatGpt } from './services/conversaChatGpt';
+import { Checkpoints } from './services/checkpoints';
+import { provedoresAssinatura, type ProvedorAssinatura } from '../shared/assinaturas';
+import { excluirAlteracoesConversa, lerPatchTurno } from './services/alteracoesTurno';
 import { EnviosCode } from './services/enviosCode';
 import { OpenRouter } from './services/openrouter';
 import { Memorias } from './services/memorias';
@@ -35,7 +45,9 @@ import { obterPedidoParaRegerarChat, prepararReenvioChat } from './services/reen
 import { catalogoModelos, encontrarModeloLocal, type ModeloCatalogo } from '../shared/catalogo';
 import { DownloadsModelos } from './services/downloadModelos';
 import { AnexosImagens } from './services/anexosImagens';
-import { prepararPastaTrabalho, cadastrarProjeto, criarProjetoGerenciado } from './services/projetos';
+import { limiteTrechoFala, modeloAceitaAudio } from '../shared/audio';
+import { permitirMicrofone } from '../shared/permissaoMicrofone';
+import { prepararPastaTrabalho, cadastrarProjeto, criarProjetoGerenciado, isolarConversa } from './services/projetos';
 import { Atualizacoes } from './services/atualizacoes';
 import electronUpdater from 'electron-updater';
 import { shell } from 'electron';
@@ -46,7 +58,11 @@ import { Operacoes } from './services/operacoes';
 import { AcessoWeb } from './services/acessoWeb';
 import { esquemaConfiguracaoWeb } from '../shared/acessoWeb';
 import { exportarMarkdown } from '../shared/exportacao';
-import { assinaturaCompletar, listarModelosAssinatura, verificarAssinatura } from './services/assinaturas';
+import {
+    listarModelosAssinatura,
+    localizarExecutavel,
+    verificarAssinatura,
+} from './services/assinaturas';
 import { esquemaNovoModeloAssinatura } from '../shared/assinaturas';
 import { consultarLimites } from './services/limitesAssinatura';
 import { Terminais } from './services/terminais';
@@ -79,6 +95,14 @@ const pastaTeste = process.env.SELENE_TESTE_DADOS;
 /** Janela usada pela Selene para compactar o histórico enviado às inscrições, que não informam o limite real. */
 const contextoAssinatura = 200_000;
 if (pastaTeste && process.env.SELENE_TESTE === '1') app.setPath('userData', pastaTeste);
+const instanciaPrincipal = app.requestSingleInstanceLock();
+if (!instanciaPrincipal) app.quit();
+app.on('second-instance', () => {
+    if (!janela) return;
+    if (janela.isMinimized()) janela.restore();
+    janela.show();
+    janela.focus();
+});
 let janela: BrowserWindow | null = null;
 let persistencia: Persistencia;
 let motor: MotorLocal;
@@ -92,12 +116,21 @@ let downloads: DownloadsModelos;
 let anexos: AnexosImagens;
 let atualizacoes: Atualizacoes;
 let acessoWeb: AcessoWeb;
+let servidorMcp: ServidorMcp;
+let subagentes: Subagentes;
+let chatgptWeb: ChatGptWeb;
+let conversaChatGpt: ConversaChatGpt;
+let contextoAgentes: ContextoAgentes;
+const agentesFilhos = new Set<Agente>();
+let entregarAoPai: (paiId: string, texto: string) => Promise<void> = async () => undefined;
 const operacoes = new Operacoes();
 const terminais = new Terminais((evento) => {
     if (janela && !janela.isDestroyed()) janela.webContents.send('selene:evento', evento);
 });
 let tarefa: Promise<void> | null = null;
 let encerramentoAutorizado = false;
+let restauracaoAtiva = false;
+let rtkDisponivel = false;
 const uuid = z.string().uuid();
 const urlDesenvolvimento = !app.isPackaged ? process.env.SELENE_VITE_URL : undefined;
 if (urlDesenvolvimento && urlDesenvolvimento !== 'http://127.0.0.1:5173') {
@@ -110,7 +143,9 @@ function estado(): Estado {
         ...persistencia.dados,
         motor: motor.estado,
         openrouterConfigurado: openrouter?.configurado ?? false,
-        conversaEmExecucao: agente?.conversaId ?? null,
+        conversaEmExecucao: agente?.conversaId ?? conversaChatGpt?.conversaId ?? null,
+        rtkDisponivel,
+        subagentesEmExecucao: subagentes?.emExecucao() ?? [],
         downloads: downloads?.estadosAtuais ?? [],
         atualizacao: atualizacoes?.estado,
     });
@@ -190,6 +225,47 @@ function registrarRepositorio(): void {
         }
         return { conversa, pasta: conversa?.pastaRepositorio ?? projeto.caminho };
     };
+    registrarDesktop('lerPatchTurno', z.tuple([uuid, uuid, z.string().min(1).max(4000)]), ([id, mensagemId, caminho]) => {
+        const mensagem = conversaPorId(id).mensagens.find((item) => item.id === mensagemId);
+        if (!mensagem?.alteracoes?.arquivos.some((arquivo) => arquivo.caminho === caminho)) {
+            throw new Error('Este arquivo não pertence às alterações do turno.');
+        }
+        return lerPatchTurno(pastaAlteracoes(), id, mensagemId, caminho);
+    });
+    const validarRestauracao = (id: string, mensagemId: string) => {
+        const conversa = conversaPorId(id);
+        if (conversa.modo !== 'code' || !conversa.mensagens.some((item) => item.id === mensagemId && item.checkpoint)) {
+            throw new Error('Checkpoint não pertence a esta conversa Code.');
+        }
+        if (agente.conversaId || [...agentesFilhos].some((item) => item.conversaId)) {
+            throw new Error('Encerre as tarefas antes de restaurar arquivos.');
+        }
+        return new Checkpoints(join(pastaAlteracoes(), 'checkpoints'));
+    };
+    registrarDesktop('prepararRestauracao', z.tuple([uuid, uuid]), ([id, mensagemId]) =>
+        validarRestauracao(id, mensagemId).preparar(id, mensagemId));
+    registrarDesktop('restaurarTurno', z.tuple([uuid, uuid, z.string().regex(/^[a-f0-9]{64}$/)]),
+        async ([id, mensagemId, token]) => {
+            if (restauracaoAtiva) throw new Error('Aguarde a restauração atual.');
+            const checkpoints = validarRestauracao(id, mensagemId);
+            restauracaoAtiva = true;
+            try {
+            await checkpoints.restaurar(id, mensagemId, token);
+            const conversa = conversaPorId(id);
+            delete conversa.sessaoAssinatura;
+            const mensagem = conversa.mensagens.find((item) => item.id === mensagemId)!;
+            mensagem.checkpoint = false;
+            mensagem.checkpointRestaurado = true;
+            await salvar();
+            } finally {
+                restauracaoAtiva = false;
+            }
+        });
+    registrarDesktop('isolarConversa', z.tuple([uuid]), async ([id]) => {
+        exigirLivre();
+        await isolarConversa(conversaPorId(id), app.getPath('userData'));
+        await salvar();
+    });
     registrarDesktop('desvincularPullRequest', z.tuple([uuid, esquemaUrlPullRequest]), async ([id, url]) => {
         desvincularPullRequest(conversaPorId(id), url);
         await salvar();
@@ -352,9 +428,11 @@ function conversaPorId(id: string) {
 }
 
 function exigirLivre(id?: string): void {
-    if (agente.conversaId && (!id || agente.conversaId === id)) {
-        throw new Error('Interrompa a tarefa antes de alterar esta configuração.');
-    }
+    if (restauracaoAtiva) throw new Error('Aguarde a restauração dos arquivos.');
+    const filhas = subagentes?.emExecucao() ?? [];
+    const ocupada = id ? agente.conversaId === id || conversaChatGpt?.conversaId === id || filhas.includes(id)
+        : !!agente.conversaId || !!conversaChatGpt?.conversaId;
+    if (ocupada) throw new Error('Interrompa a tarefa antes de alterar esta configuração.');
 }
 
 async function salvar(): Promise<void> {
@@ -383,6 +461,84 @@ async function excluirConversas(ids: string[]): Promise<void> {
         throw erro;
     }
     await anexos.excluirSemReferencia(idsImagens);
+    await Promise.allSettled(ids.map((id) => excluirAlteracoesConversa(pastaAlteracoes(), id)));
+}
+
+async function idsCatalogoOpenRouter(): Promise<string[]> {
+    return (await openrouter.modelos()).map((modelo) => modelo.id);
+}
+
+/**
+ * Devolve o modelo cadastrado da inscrição, cadastrando-o se preciso. Sem `id`, usa o primeiro modelo que o
+ * provedor anuncia; um `id` fora da lista do provedor é recusado.
+ */
+async function cadastrarModeloAssinatura(provedor: ProvedorAssinatura, id?: string, nome?: string): Promise<Modelo> {
+    const anunciados = (await listarModelosAssinatura(idsCatalogoOpenRouter))[provedor];
+    const anunciado = id ? anunciados.find((modelo) => modelo.id === id) : anunciados[0];
+    if (!anunciado) throw new Error('Modelo de assinatura desconhecido.');
+    const existente = persistencia.dados.modelos.find(
+        (modelo) => modelo.assinatura?.provedor === provedor && modelo.assinatura.id === anunciado.id,
+    );
+    if (existente) return existente;
+    const modelo: Modelo = {
+        id: randomUUID(),
+        nome: nome ?? anunciado.nome,
+        caminho: `${provedor}:${anunciado.id}`,
+        tamanho: 0,
+        assinatura: { provedor, id: anunciado.id },
+    };
+    persistencia.dados.modelos.push(modelo);
+    try {
+        await salvar();
+    } catch (erro) {
+        persistencia.dados.modelos = persistencia.dados.modelos.filter((item) => item.id !== modelo.id);
+        throw erro;
+    }
+    return modelo;
+}
+
+/** Executa uma conversa filha com um agente próprio, em paralelo ao agente principal. */
+async function executarConversaFilha(conversa: Conversa, texto: string, sinal: AbortSignal): Promise<void> {
+    if (restauracaoAtiva) throw new Error('Aguarde a restauração dos arquivos.');
+    if (sinal.aborted) return;
+    const modelo = persistencia.dados.modelos.find((item) => item.id === conversa.modeloId);
+    if (!modelo?.assinatura) throw new Error('Subagentes exigem um modelo de inscrição.');
+    const filho = criarAgente(contextoAgentes, false);
+    agentesFilhos.add(filho);
+    const abortar = () => filho.cancelar();
+    sinal.addEventListener('abort', abortar, { once: true });
+    try {
+        const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
+        const execucao = filho.executar(conversa, texto, configuracao, [], modelo, undefined, {
+            ligandoModelo: false,
+            executar: async () => ({ ...configuracao, contexto: contextoAssinatura }),
+        });
+        if (sinal.aborted) filho.cancelar();
+        await execucao;
+    } finally {
+        sinal.removeEventListener('abort', abortar);
+        agentesFilhos.delete(filho);
+    }
+}
+
+/** Provedores de inscrição prontos para receber subagentes, com os modelos que anunciam. */
+async function capacidadesSubagentes() {
+    const modelos = await listarModelosAssinatura(idsCatalogoOpenRouter);
+    return Promise.all(
+        provedoresAssinatura.map(async (provedor) => {
+            const estado = await verificarAssinatura(provedor);
+            return {
+                provedor,
+                disponivel: estado.estado === 'pronto',
+                ...(estado.estado === 'pronto' ? {} : { motivo: estado.mensagem }),
+                modelos: modelos[provedor],
+            };
+        }),
+    );
+}
+
+function pastaAlteracoes(): string {
+    return join(app.getPath('userData'), 'alteracoes');
 }
 
 function itemCatalogo(id: string): ModeloCatalogo {
@@ -413,12 +569,39 @@ async function registrarDownload(item: ModeloCatalogo, caminho: string): Promise
 async function carregarModelo(id: string): Promise<void> {
     const modelo = persistencia.dados.modelos.find((item) => item.id === id);
     if (!modelo) throw new Error('Modelo não encontrado.');
-    if (modelo.openrouter || modelo.assinatura) throw new Error('Modelo remoto não pode ser carregado no motor local.');
+    if (modelo.openrouter || modelo.assinatura || modelo.chatgptWeb) {
+        throw new Error('Modelo remoto não pode ser carregado no motor local.');
+    }
     const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
     await motor.carregar(modelo, configuracao);
 }
 
 function registrarOperacoes(): void {
+    registrarDesktop('cadastrarChatGptWeb', z.tuple([]), async () => {
+        exigirLivre();
+        const existente = persistencia.dados.modelos.find((modelo) => modelo.chatgptWeb);
+        if (existente) return existente;
+        const modelo: Modelo = {
+            id: randomUUID(), nome: 'ChatGPT', caminho: 'chatgpt:web', tamanho: 0, chatgptWeb: true,
+        };
+        persistencia.dados.modelos.push(modelo);
+        await salvar();
+        return modelo;
+    });
+    registrarDesktop('abrirChatGptWeb', z.tuple([uuid.optional()]), ([id]) => {
+        const conversa = id ? conversaPorId(id) : undefined;
+        if (conversa && conversa.modo !== 'chat') throw new Error('ChatGPT pelo site pertence ao Chat.');
+        return chatgptWeb.abrir(conversa?.chatgptWeb?.url);
+    });
+    registrarDesktop('confirmarRevisaoChatGpt', z.tuple([uuid]), async ([id]) => {
+        exigirLivre(id);
+        const conversa = conversaPorId(id);
+        if (conversa.modo !== 'chat' || !conversa.chatgptWeb?.envioIncerto) {
+            throw new Error('Não há envio incerto para revisar nesta conversa.');
+        }
+        conversa.chatgptWeb.envioIncerto = false;
+        await salvar();
+    });
     registrar('acessoWeb', z.tuple([]), () => acessoWeb.estado);
     registrar('configurarAcessoWeb', z.tuple([esquemaConfiguracaoWeb]), ([configuracao]) =>
         acessoWeb.configurar(configuracao),
@@ -480,7 +663,6 @@ function registrarOperacoes(): void {
         ]);
         return { chatgpt, claude };
     });
-    const idsCatalogoOpenRouter = async () => (await openrouter.modelos()).map((modelo) => modelo.id);
     registrar('modelosAssinatura', vazio, () => listarModelosAssinatura(idsCatalogoOpenRouter));
     registrar('limitesAssinaturas', vazio, async () => {
         const [chatgpt, claude] = await Promise.all([consultarLimites('chatgpt'), consultarLimites('claude')]);
@@ -488,31 +670,7 @@ function registrarOperacoes(): void {
     });
     registrar('adicionarModeloAssinatura', z.tuple([esquemaNovoModeloAssinatura]), async ([entrada]) => {
         exigirLivre();
-        const cadastrado = (await listarModelosAssinatura(idsCatalogoOpenRouter))[entrada.assinatura.provedor].find(
-            (modelo) => modelo.id === entrada.assinatura.id,
-        );
-        if (!cadastrado) throw new Error('Modelo de assinatura desconhecido.');
-        const existente = persistencia.dados.modelos.find(
-            (modelo) =>
-                modelo.assinatura?.provedor === entrada.assinatura.provedor &&
-                modelo.assinatura.id === entrada.assinatura.id,
-        );
-        if (existente) return existente;
-        const modelo = {
-            id: randomUUID(),
-            nome: entrada.nome,
-            caminho: `${entrada.assinatura.provedor}:${entrada.assinatura.id}`,
-            tamanho: 0,
-            assinatura: entrada.assinatura,
-        };
-        persistencia.dados.modelos.push(modelo);
-        try {
-            await salvar();
-        } catch (erro) {
-            persistencia.dados.modelos = persistencia.dados.modelos.filter((item) => item.id !== modelo.id);
-            throw erro;
-        }
-        return modelo;
+        return cadastrarModeloAssinatura(entrada.assinatura.provedor, entrada.assinatura.id, entrada.nome);
     });
     registrar('catalogoOpenRouter', z.tuple([z.boolean(), esquemaOrdenacaoOpenRouter]), ([atualizar, ordenacao]) =>
         openrouter.modelos(atualizar, ordenacao),
@@ -527,6 +685,7 @@ function registrarOperacoes(): void {
             contexto: item.context_length,
             maxTokens: item.top_provider?.max_completion_tokens ?? undefined,
             imagens: item.architecture.input_modalities.includes('image'),
+            audio: item.architecture.input_modalities.includes('audio'),
             ferramentas: item.supported_parameters.includes('tools'),
             raciocinio: item.supported_parameters.includes('reasoning'),
             esforcos: esforcosDoProvedor(item.reasoning?.supported_efforts),
@@ -572,6 +731,10 @@ function registrarOperacoes(): void {
         anexos.importar(imagens),
     );
     registrar('lerImagem', z.tuple([uuid]), ([id]) => anexos.ler(id));
+    registrar('sintetizarFala', z.tuple([z.string().trim().min(1).max(limiteTrechoFala)]), async ([texto]) => {
+        const audio = await motor.sintetizarFala(texto, AbortSignal.timeout(120000));
+        return `data:audio/wav;base64,${Buffer.from(audio).toString('base64')}`;
+    });
     registrar('descartarImagens', z.tuple([z.array(uuid).max(32)]), ([ids]) => anexos.descartar(ids));
     registrar('importarProjetor', z.tuple([uuid]), async ([id]) => {
         exigirLivre();
@@ -885,6 +1048,22 @@ function registrarOperacoes(): void {
         }
         const modelo = persistencia.dados.modelos.find((item) => item.id === conversa.modeloId);
         if (!modelo) throw new Error('Modelo não encontrado.');
+        if (modelo.chatgptWeb) {
+            if (conversa.modo !== 'chat') throw new Error('ChatGPT pelo site está disponível somente no Chat.');
+            if (imagens.length) throw new Error('Use texto na Selene. Anexos podem ser enviados na janela do ChatGPT.');
+            if (!conversa.chatgptWeb?.url && preparada.mensagens.some((mensagem) => mensagem.imagens?.length)) {
+                throw new Error('Este histórico tem anexos. Abra uma conversa nova para usar o ChatGPT pelo site.');
+            }
+            if (mensagemId) throw new Error('Edite ou gere novamente a resposta na janela do ChatGPT.');
+            tarefa = conversaChatGpt.executar(conversa, texto).catch((erro: Error) => {
+                publicar({ tipo: 'erro', erro: erro.message });
+            }).finally(() => {
+                tarefa = null;
+                publicarEstado();
+            });
+            publicarEstado();
+            return;
+        }
         if (
             modelo.assinatura &&
             (imagens.length || preparada.mensagens.some((mensagem) => mensagem.imagens?.length))
@@ -901,13 +1080,17 @@ function registrarOperacoes(): void {
         const indiceResumo = preparada.contextoCompactado
             ? preparada.mensagens.findIndex((mensagem) => mensagem.id === preparada.contextoCompactado!.ateMensagemId)
             : -1;
-        const possuiImagens =
-            imagens.length || preparada.mensagens.slice(indiceResumo + 1).some((mensagem) => mensagem.imagens?.length);
+        const anexosAtivos = [...imagens, ...preparada.mensagens.slice(indiceResumo + 1)
+            .flatMap((mensagem) => mensagem.imagens ?? [])];
+        const possuiImagens = anexosAtivos.some((anexo) => anexo.mime === 'image/jpeg');
+        const possuiAudio = anexosAtivos.some((anexo) => anexo.mime === 'audio/wav');
+        if (possuiAudio && !modeloAceitaAudio(modelo)) throw new Error('Este modelo não aceita áudio de entrada.');
         if (envioId) {
             if (!conversa.enviosPendentes?.some((item) => item.id === envioId)) {
                 throw new Error('Esta mensagem não está mais na fila.');
             }
         }
+        exigirLivre();
         tarefa = agente
             .executar(conversa, texto, configuracao, imagens, modelo, mensagemId, {
                 ligandoModelo: precisaLigar,
@@ -933,6 +1116,9 @@ function registrarOperacoes(): void {
                             'O motor está carregado sem suporte visual ativo. ' +
                                 'Para modelos importados, vincule o projetor visual compatível nas configurações de Modelos.',
                         );
+                    }
+                    if (possuiAudio && !motor.estado.suportaAudio) {
+                        throw new Error('O motor carregado não oferece suporte a áudio. Verifique o projetor do modelo.');
                     }
                     if (!motor.estado.contextoDisponivel)
                         throw new Error('O motor não informou o contexto disponível.');
@@ -962,6 +1148,14 @@ function registrarOperacoes(): void {
         publicarEstado();
         await anexos.descartar(ids);
     }
+    entregarAoPai = async (paiId, texto) => {
+        const pai = conversaPorId(paiId);
+        const ativa = agente.conversaId === paiId || subagentes.emExecucao().includes(paiId);
+        await enviosCode.adicionar(pai, texto, ativa ? 'direcao' : 'fila', () => undefined);
+        if (ativa || agente.conversaId) return;
+        const envio = pai.enviosPendentes?.at(-1);
+        if (envio) await enviarMensagem(paiId, envio.texto, [], undefined, envio.id);
+    };
     registrar('enviar', z.tuple([uuid, z.string().trim().max(30000), z.array(uuid).max(4)]), ([id, texto, ids]) =>
         enviarMensagem(id, texto, ids),
     );
@@ -1008,10 +1202,15 @@ function registrarOperacoes(): void {
         return enviarMensagem(id, pedido.texto, [], pedido.id);
     });
     registrar('cancelar', vazio, () => {
+        conversaChatGpt.cancelar();
         agente.cancelar();
+        subagentes.cancelarTodas();
         if (['instalando', 'carregando'].includes(motor.estado.fase)) motor.parar();
     });
-    registrar('aprovar', z.tuple([z.string().min(1), z.boolean()]), ([id, aprovada]) => agente.aprovar(id, aprovada));
+    registrar('aprovar', z.tuple([z.string().min(1), z.boolean()]), ([id, aprovada]) => {
+        const responsavel = [...agentesFilhos].find((filho) => filho.temPendente(id)) ?? agente;
+        responsavel.aprovar(id, aprovada);
+    });
     registrar('exportar', z.tuple([uuid]), async ([id]) => {
         const conversa = conversaPorId(id);
         const escolha = await dialog.showSaveDialog(janela!, {
@@ -1058,7 +1257,13 @@ async function criarJanela(): Promise<void> {
     janela.webContents.on('will-navigate', (evento, url) => {
         if (url !== urlInterface) evento.preventDefault();
     });
-    janela.webContents.session.setPermissionRequestHandler((_conteudo, _permissao, responder) => responder(false));
+    janela.webContents.session.setPermissionRequestHandler((conteudo, permissao, responder, detalhes) => {
+        responder(permitirMicrofone(permissao, conteudo === janela?.webContents && detalhes.isMainFrame,
+            detalhes.requestingUrl, urlInterface, 'mediaTypes' in detalhes ? detalhes.mediaTypes : undefined));
+    });
+    janela.webContents.session.setPermissionCheckHandler((conteudo, permissao, _origem, detalhes) =>
+        permitirMicrofone(permissao, conteudo === janela?.webContents && detalhes.isMainFrame,
+            detalhes.requestingUrl, urlInterface, detalhes.mediaType ? [detalhes.mediaType] : undefined));
     janela.once('ready-to-show', () => janela?.show());
     janela.once('closed', () => {
         janela = null;
@@ -1069,8 +1274,12 @@ async function criarJanela(): Promise<void> {
 
 app.whenReady()
     .then(async () => {
+        if (!instanciaPrincipal) return;
         persistencia = new Persistencia(app.getPath('userData'));
         await persistencia.abrir();
+        chatgptWeb = new ChatGptWeb();
+        conversaChatGpt = new ConversaChatGpt({ navegador: chatgptWeb, salvar, publicar: publicarEstado });
+        if (persistencia.avisoRecuperacao) dialog.showErrorBox('Histórico recuperado', persistencia.avisoRecuperacao);
         anexos = new AnexosImagens(
             join(app.getPath('userData'), 'attachments'),
             () => persistencia.dados.conversas,
@@ -1101,48 +1310,44 @@ app.whenReady()
             completarExtracao: (mensagens, sinal) =>
                 openrouter.completarTexto(modeloExtracaoMemoria, mensagens, sinal),
         });
-        agente = new Agente({
-            memorias,
+        subagentes = new Subagentes({
+            conversaPorId,
             conversas: () => persistencia.dados.conversas,
-            receberDirecoes: (conversa) =>
-                conversa.modo === 'code' ? enviosCode.receberDirecoes(conversa) : Promise.resolve([]),
+            assinaturaDoModelo: (id) => persistencia.dados.modelos.find((modelo) => modelo.id === id)?.assinatura,
+            criarConversa: async (conversa) => {
+                persistencia.dados.conversas.unshift(conversa);
+                await salvar();
+            },
+            obterModelo: async (provedor, id) => {
+                const verificacao = await verificarAssinatura(provedor);
+                if (verificacao.estado !== 'pronto') throw new Error(verificacao.mensagem);
+                return cadastrarModeloAssinatura(provedor, id);
+            },
+            executarConversa: executarConversaFilha,
+            capacidades: capacidadesSubagentes,
+            entregarAoPai: (paiId, texto) => entregarAoPai(paiId, texto),
+            publicarEstado,
+        });
+        servidorMcp = new ServidorMcp((servidor, escopo) => subagentes.registrarFerramentas(servidor, escopo));
+        await servidorMcp.abrir();
+        contextoAgentes = {
+            dados: () => persistencia.dados,
+            salvar,
+            publicar,
+            publicarEstado,
+            memorias,
+            enviosCode,
             web: navegador,
             computador: process.platform === 'win32' ? computador : undefined,
-            contextoProjetoChat: (conversa) => contextoProjetoChat(persistencia.dados, conversa),
-            completar: (corpo, sinal) => {
-                const conversa = agente.conversaId ? conversaPorId(agente.conversaId) : undefined;
-                const modelo = persistencia.dados.modelos.find((item) => item.id === conversa?.modeloId);
-                if (modelo?.assinatura) return assinaturaCompletar(modelo.assinatura, corpo, sinal, {
-                        acessoCompleto: !!conversa?.acessoCompleto,
-                        pasta: conversa?.pastaRepositorio ?? conversa?.projeto,
-                        acoes: {
-                            iniciar: (chamadaId, nome, argumentos) => agente.iniciarAcaoExterna(chamadaId, nome, argumentos),
-                            aprovar: (chamadaId, nome, argumentos, sinalAcao) =>
-                                agente.aprovarAcaoExterna(chamadaId, nome, argumentos, sinalAcao),
-                            concluir: (chamadaId, resultado, erro) => agente.concluirAcaoExterna(chamadaId, resultado, erro),
-                        },
-                    });
-                if (!modelo?.openrouter) return motor.completar(corpo, sinal);
-                const mensagem = [...conversa!.mensagens].reverse().find((item) => item.papel === 'assistant')!;
-                return openrouter.completar(modelo.openrouter.id, corpo, sinal, async (custo) => {
-                    mensagem.custoUsd = (mensagem.custoUsd ?? 0) + custo;
-                    mensagem.provedor = 'openrouter';
-                    mensagem.modeloUsoId = modelo.id;
-                    await salvar();
-                });
-            },
+            openrouter,
+            servidorMcp,
+            pastaAlteracoes: pastaAlteracoes(),
+            rtkDisponivel: () => rtkDisponivel,
             lerImagem: (id) => anexos.ler(id),
-            salvar,
-            publicar: (mensagem) => {
-                const conversaId =
-                    agente.conversaId ??
-                    persistencia.dados.conversas.find((conversa) =>
-                        conversa.mensagens.some((item) => item.id === mensagem.id),
-                    )?.id;
-                if (conversaId) publicar({ tipo: 'mensagem', conversaId, mensagem });
-                if (!agente.conversaId) publicarEstado();
-            },
-        });
+            completarLocal: (corpo, sinal) => motor.completar(corpo, sinal),
+            contextoProjetoChat: (conversa) => contextoProjetoChat(persistencia.dados, conversa),
+        };
+        agente = criarAgente(contextoAgentes, true);
         acessoWeb = new AcessoWeb(
             join(app.getPath('userData'), 'acessoWeb.json'),
             join(__dirname, '../dist'),
@@ -1158,6 +1363,12 @@ app.whenReady()
             publicarEstado,
             prepararEncerramento,
         );
+        void localizarExecutavel('rtk')
+            .then((caminho) => {
+                rtkDisponivel = !!caminho;
+                publicarEstado();
+            })
+            .catch(() => undefined);
         await criarJanela();
         await acessoWeb.abrir();
         atualizacoes.iniciar();
@@ -1171,12 +1382,16 @@ async function prepararEncerramento(): Promise<void> {
     await acessoWeb?.encerrar();
     atualizacoes?.encerrar();
     agente?.cancelar();
+    conversaChatGpt?.cancelar();
+    subagentes?.cancelarTodas();
+    await servidorMcp?.fechar();
     navegador?.encerrar();
     computador?.encerrar();
     terminais.encerrar();
     motor?.parar();
     await downloads?.encerrar();
     await tarefa;
+    chatgptWeb?.encerrar();
     await persistencia.salvar();
 }
 

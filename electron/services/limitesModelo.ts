@@ -30,6 +30,7 @@ export function argumentosMemoriaMotor(
     backend: BackendRuntime,
     contextoTentado = 0,
     possuiProjetor = false,
+    contextoMinimo = 2048,
 ): string[] {
     if (!configuracao.limitesAutomaticos) {
         return [
@@ -48,7 +49,7 @@ export function argumentosMemoriaMotor(
         '--fit',
         'on',
         '--fit-ctx',
-        '2048',
+        String(contextoTentado ? Math.min(contextoMinimo, contextoTentado) : contextoMinimo),
         '--fit-target',
         possuiProjetor && backend !== 'cpu' ? '2048' : '1024',
     ];

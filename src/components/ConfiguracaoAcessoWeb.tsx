@@ -71,7 +71,7 @@ export function ConfiguracaoAcessoWeb({ ponte, executar }: { ponte?: PonteSelene
         definirOcupado(true);
         try {
             const atualizado = await executar(() =>
-                ponte!.configurarAcessoWeb({ ativo: !estado?.ativo || alterado, porta, exigirChave }),
+                ponte!.configurarAcessoWeb({ ativo: !estado?.ativo || alterado, porta, exigirChave: true }),
             );
             if (atualizado) definirEstado(atualizado);
         } finally {
@@ -136,17 +136,13 @@ export function ConfiguracaoAcessoWeb({ ponte, executar }: { ponte?: PonteSelene
                 <Linha
                     id="config-chave-web"
                     titulo="Exigir chave de acesso"
-                    descricao={
-                        exigirChave
-                            ? 'A chave muda ao reiniciar o aplicativo.'
-                            : 'Qualquer pessoa nesta rede poderá operar a Selene.'
-                    }
+                    descricao="Obrigatória. A chave muda ao reiniciar o aplicativo."
                     controle={
                         <Alternar
                             rotulo="Exigir chave de acesso"
                             marcado={exigirChave}
-                            desativado={ocupado || !estado}
-                            alterar={definirExigirChave}
+                            desativado
+                            alterar={() => {}}
                         />
                     }
                 />
@@ -200,8 +196,8 @@ export function ConfiguracaoAcessoWeb({ ponte, executar }: { ponte?: PonteSelene
                 </Secao>
             )}
             <p className="-mt-5 px-4 text-xs text-discreto">
-                Use em uma rede de confiança. O acesso usa HTTP local. Se o Windows solicitar, permita a Selene em redes
-                privadas no firewall.
+                O acesso usa HTTPS com certificado local. Na primeira conexão, confira a impressão SHA256 do
+                certificado no navegador antes de confiar neste computador: {estado?.certificado ?? 'ative para consultar'}.
             </p>
         </>
     );

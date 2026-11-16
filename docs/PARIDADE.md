@@ -7,7 +7,7 @@ Os caminhos citados abaixo são relativos à raiz do Odysseus.
 
 A presença no código comprova o escopo da referência, mas não comprova que todos os seus fluxos funcionam.
 Uma funcionalidade só estará concluída na Selene depois de implementada e validada por um fluxo real.
-O `ROADMAP.md` não é evidência de implementação. Recursos de Codex, Claude Code ou T3 Code também
+O [ROADMAP.md](ROADMAP.md) não é evidência de implementação. Recursos de Codex, Claude Code ou T3 Code também
 não entram na paridade sem uma implementação correspondente no Odysseus.
 
 O catálogo de rotas está em [REFERENCIA_ODYSSEUS.json](REFERENCIA_ODYSSEUS.json):
@@ -296,6 +296,9 @@ Essa referência de experiência não amplia o catálogo de paridade com o Odyss
    e verificação de resultados. A Selene já tem projeto, ferramentas básicas e aprovação individual;
    esses recursos adicionais continuam pendentes.
 2. Conversas: edição, reenvio e regeneração de respostas disponíveis no modo chat por solicitação explícita.
+    A edição usa o campo de mensagem, destaca a bolha original com contorno pontilhado e preserva o rascunho
+    anterior ao cancelar. A alternância entre Chat e Code interpola as posições reais da hero e da entrada,
+    faz a transição dos textos e da topbar e respeita movimento reduzido.
    O reenvio e a regeneração preservam os anexos, substituem as mensagens seguintes e invalidam o resumo anterior.
    O pedido aparece no histórico antes da carga automática do modelo, com indicação de atividade durante a espera.
    Variantes, ramificações, grupos e demais funções seguem os escopos descritos acima.
@@ -334,6 +337,29 @@ Referências de experiência: `apps/web/src/components/NoProjectsHero.tsx`,
 `apps/web/src/components/chat/DraftHeroHeadline.tsx`, `apps/web/src/hooks/useScratchProject.ts`
 e `apps/server/src/project/ManagedProjectFolders.ts` do T3 Code local. Essa decisão própria não amplia
 a paridade com o Odysseus.
+
+Economia de tokens: o composer oferece, por conversa, os pacotes do PandaCode (Caveman Leve, Completo e Ultra,
+Código enxuto, Ferramentas silenciosas e RTK quando o executável `rtk` está no PATH). O bloco de estilo acompanha
+a mensagem somente quando os pacotes mudam e a cada oito mensagens, fica salvo no pedido para o reenvio do
+histórico repetir o mesmo conteúdo e vale para todos os provedores. Referência: `src/token-saver.ts` de
+github.com/aicodeking/pandacode. Implementação: `shared/economiaTokens.ts` e `src/components/EconomiaTokens.tsx`.
+
+Alterações por turno: respostas Code mostram os arquivos escritos pelas ferramentas, com linhas adicionadas e
+removidas e o diff unificado ou lado a lado (`@pierre/diffs`). A captura usa somente as ferramentas: as da Selene
+informam o conteúdo antes e depois; no Claude, ganchos `PreToolUse` e `PostToolUse` fotografam os arquivos; no
+Codex, os itens `fileChange`. O Git não é consultado. Comandos de terminal marcam o card como parcial. Os patches
+ficam em `alteracoes` nos dados do aplicativo, fora do histórico, com os limites do PandaCode (256 KiB por
+arquivo e 2 MiB por turno), e são removidos com a conversa. Referência: `docs/turn-changes.md` do PandaCode.
+
+Subagentes: conversas Code de inscrição (Claude ou ChatGPT) recebem o servidor MCP `selene`, em loopback, com
+token por execução revogado ao fim da resposta e recusa de pedidos com `Origin`. As ferramentas
+`capacidades_orquestrador`, `delegar_tarefa`, `status_tarefa` e `cancelar_tarefa` seguem o T3 Code: cada tarefa
+cria uma conversa filha que recebe somente o texto da tarefa, modo async (padrão) ou wait com prazo que não cancela
+o filho, `clientRequestId` idempotente, papel opcional e acesso que só pode ficar mais restrito. A conclusão
+assíncrona chega à conversa pai como direção, se ela estiver ativa, ou como envio da fila. Filhos podem delegar até
+três níveis. Interromper a tarefa interrompe os subagentes. Modelos locais e OpenRouter não recebem as ferramentas.
+O registro das tarefas fica em memória; após reiniciar, `status_tarefa` reconstrói o estado pela conversa filha.
+Referência: `docs/orchestration-v2/orchestrator-mcp-server.md` do T3 Code local.
 
 Projetos têm cadastro independente das conversas. A Selene abre pastas existentes, cria projetos por nome
 em `projects` com Git, README e ícone inicial, e clona repositórios por URL HTTPS. A sidebar lista conversas
@@ -505,3 +531,56 @@ repositórios transferidos ou renomeados continuem associados à pasta local cor
 Referência de comportamento: `D:/Saas/t3code-main/t3code-main/apps/web/src/components/pullRequest/`, especialmente
 `PullRequestDetailPanel.tsx`, `pullRequestDetail.logic.ts` e `PullRequestThreadLinks.tsx`. A implementação foi
 adaptada aos contratos IPC e ao motor da Selene, sem ampliar a paridade com o Odysseus.
+
+## Decisão própria: motor LFM3 Omni
+
+Por solicitação do usuário, o LFM3 Omni 2B possui motores específicos em CPU e Vulkan, compilados de uma revisão
+oficial fixa do llama.cpp. Essa inclusão não amplia a paridade com o Odysseus.
+O procedimento está em `docs/MOTOR_LFM3.md`. Carregamento com projetor, resposta textual, cancelamento,
+falha de inicialização e encerramento foram validados com os arquivos locais do modelo.
+Vulkan foi validado na RX 7700 XT com gravação, pergunta falada, reprodução e benchmark de texto.
+CPU continua selecionável; a estimativa genérica de velocidade foi removida para LFM3 por não estar calibrada.
+O envio de arquivos de áudio foi integrado por solicitação do usuário, com até quatro anexos por mensagem,
+60 segundos e 10 MB por áudio de entrada. O compositor normaliza para WAV PCM16 mono e o processo principal
+valida o formato antes de persistir. Modelos incompatíveis são recusados. O histórico preserva os anexos.
+Transcrição pelo LFM3 Omni e reabertura do anexo foram validadas na interface real em uma pasta isolada.
+O OpenRouter recebe áudio somente quando o modelo declara essa modalidade; inferência remota não foi validada.
+O botão de microfone permite gravar e ouvir a prévia antes de enviar. O dispositivo é liberado ao concluir,
+trocar de conversa ou sair. A permissão fica restrita a áudio na interface principal, sem câmera.
+Gravação via MediaRecorder e transcrição real foram validadas com entrada de áudio simulada.
+A saída de voz foi integrada por solicitação do usuário: botão de ouvir em cada resposta e leitura automática
+quando o pedido foi falado, pelo endpoint `/tts` do motor LFM3. A síntese foi validada diretamente no motor em CPU;
+a reprodução pela interface não foi validada.
+Vídeo não foi integrado; compreensão de imagem não foi validada por uma pergunta visual.
+
+Chamadas rejeitadas pelo servidor por argumentos JSON inválidos recebem uma tentativa de recuperação,
+com orientação para dividir conteúdos grandes. O erro exibido omite os argumentos rejeitados.
+Chamadas interrompidas pelo limite de saída não são executadas e também devolvem o erro ao modelo para
+uma tentativa de refazer em partes menores, mantendo a tarefa ativa e registrando as ações rejeitadas.
+O limite de uma recuperação por turno é compartilhado entre JSON inválido e saída interrompida.
+Esses casos foram validados com respostas
+HTTP e SSE simuladas; a recuperação com geração real do modelo ainda não foi validada.
+
+Por solicitação do usuário, o Chat também contém repetições geradas pelo modelo dentro da resposta e entre
+respostas OpenUI. Há uma tentativa de recuperação, sem alterar o histórico salvo; uma nova falha encerra com erro.
+Pedidos isolados e claros para parar são tratados pelo aplicativo. A contenção foi validada com LFM3 real em CPU,
+incluindo os esquemas de ferramentas do desktop em uma reprodução isolada. Isso não comprova que o modelo obedeça
+a todos os pedidos nem altera o escopo de paridade com o Odysseus.
+
+O LFM3 local também prepara preventivamente históricos textuais com OpenUI como referências de dados,
+em vez de exemplos de respostas do assistente. A cópia foi reproduzida em duas versões de llama.cpp e na
+implementação oficial de referência em Transformers; a correção do contexto preservou a escolha B e permitiu
+responder a um novo pedido aritmético sem repetir a interface. Essa adaptação é específica do LFM3 local.
+
+Por solicitação do usuário após auditoria de confiabilidade, foram adicionados bloqueio de instância única,
+detecção de gravações concorrentes, três cópias rotativas do histórico, HTTPS e autenticação obrigatória no acesso web.
+O Code agora tem checkpoints com restauração revisada e isolamento opcional em worktree para conversas novas.
+Sessões nativas de inscrição são retomáveis e imagens são transportadas ao harness. Codex está restrito ao Code;
+Claude Chat desativa ferramentas nativas. São decisões próprias da Selene, sem ampliar a paridade com o Odysseus.
+Os limites, as validações reais e as pendências estão em `SEGURANCA.md` e no parecer da auditoria de novembro.
+
+Por solicitação do usuário, o Chat permite conversar pelo site do ChatGPT em sessão isolada,
+com resposta textual acompanhada na Selene e vínculo persistente com a conversa nativa.
+Essa decisão própria não amplia a paridade com o Odysseus. Limites e validação estão em `CHATGPT.md`.
+Conversas do ChatGPT são retomadas automaticamente pelo link persistido, inclusive depois de reiniciar a Selene.
+O histórico nativo deve carregar antes de um novo envio; os textos anteriores não são reenviados nesse caminho.

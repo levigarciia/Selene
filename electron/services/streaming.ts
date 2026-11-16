@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ErroRepeticaoGeracao, temParagrafosRepetidos, temRepeticaoDegenerada } from './repeticaoGeracao';
 import type { Desempenho } from '../../shared/contratos';
 
 const esquemaTempos = z.object({
@@ -39,6 +40,19 @@ const esquemaTrecho = z.object({
 });
 export type Chamada = { id: string; nome: string; argumentos: string };
 
+/** Permite recuperar uma geração rejeitada antes de executar suas ferramentas. */
+export class ErroArgumentosModelo extends Error {
+    constructor() {
+        super('O modelo gerou uma chamada de ferramenta com JSON inválido ou incompleto.');
+    }
+}
+
+function erroDoModelo(mensagem: string): Error {
+    return mensagem.includes('Failed to parse tool call arguments as JSON')
+        ? new ErroArgumentosModelo()
+        : new Error(mensagem);
+}
+
 /** Lê SSE mesmo quando bytes UTF 8 e linhas chegam separados entre vários pacotes. */
 export async function lerEventos(
     resposta: Response,
@@ -46,7 +60,7 @@ export async function lerEventos(
     sinal: AbortSignal,
 ): Promise<void> {
     if (!resposta.ok)
-        throw new Error(`Falha no modelo: HTTP ${resposta.status}. ${(await resposta.text()).slice(0, 2000)}`);
+        throw erroDoModelo(`Falha no modelo: HTTP ${resposta.status}. ${(await resposta.text()).slice(0, 2000)}`);
     if (!resposta.body) throw new Error('O modelo retornou uma resposta vazia.');
     const leitor = resposta.body.getReader();
     const decodificador = new TextDecoder();
@@ -92,6 +106,7 @@ export async function receberResposta(
     adicionarRaciocinio?: (texto: string) => void,
 ): Promise<{ texto: string; chamadas: Chamada[]; motivo: string | null; desempenho?: Desempenho }> {
     let texto = '';
+    let raciocinioAcumulado = '';
     let motivo: string | null = null;
     const chamadas = new Map<number, Chamada>();
     let desempenho: Desempenho | undefined;
@@ -103,7 +118,7 @@ export async function receberResposta(
         resposta,
         (dados) => {
             const bruto = JSON.parse(dados);
-            if (bruto.error) throw new Error(bruto.error.message ?? 'O modelo retornou um erro.');
+            if (bruto.error) throw erroDoModelo(bruto.error.message ?? 'O modelo retornou um erro.');
             const evento = esquemaTrecho.parse(bruto);
             const uso = esquemaUso.safeParse(bruto.usage);
             if (uso.success) {
@@ -127,9 +142,16 @@ export async function receberResposta(
             if (!escolha) return;
             if (escolha.finish_reason) motivo = escolha.finish_reason;
             const raciocinio = escolha.delta.reasoning_content ?? escolha.delta.reasoning;
-            if (raciocinio) adicionarRaciocinio?.(raciocinio);
+            if (raciocinio) {
+                raciocinioAcumulado += raciocinio;
+                if (temRepeticaoDegenerada(raciocinioAcumulado) || temParagrafosRepetidos(raciocinioAcumulado)) {
+                    throw new ErroRepeticaoGeracao();
+                }
+                adicionarRaciocinio?.(raciocinio);
+            }
             if (escolha.delta.content) {
                 texto += escolha.delta.content;
+                if (temRepeticaoDegenerada(texto) || temParagrafosRepetidos(texto)) throw new ErroRepeticaoGeracao();
                 adicionarTexto(escolha.delta.content);
             }
             for (const parte of escolha.delta.tool_calls ?? []) {
@@ -137,6 +159,7 @@ export async function receberResposta(
                 chamada.id += parte.id ?? '';
                 chamada.nome += parte.function?.name ?? '';
                 chamada.argumentos += parte.function?.arguments ?? '';
+                if (temRepeticaoDegenerada(chamada.argumentos)) throw new ErroRepeticaoGeracao();
                 chamadas.set(parte.index, chamada);
                 if (adicionarChamada) {
                     adicionarChamada({

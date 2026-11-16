@@ -1,6 +1,7 @@
-import { BrainIcon, CodeIcon, EyeIcon, WrenchIcon } from '@phosphor-icons/react';
+import { BrainIcon, CodeIcon, EyeIcon, WrenchIcon, WaveformIcon } from '@phosphor-icons/react';
 
 const capacidades = {
+    audio: { nome: 'Áudio', Icone: WaveformIcon, cor: 'text-[#a9c7af] bg-[#213129]' },
     raciocinio: { nome: 'Raciocínio', Icone: BrainIcon, cor: 'text-[#b6a3ea] bg-[#27213c]' },
     ferramentas: { nome: 'Ferramentas', Icone: WrenchIcon, cor: 'text-[#92bbed] bg-[#1f2b3b]' },
     code: { nome: 'Código', Icone: CodeIcon, cor: 'text-[#b6a3ea] bg-[#29243a]' },

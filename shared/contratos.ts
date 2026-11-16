@@ -10,6 +10,10 @@ import type * as Repositorio from './repositorio';
 import { esquemaPullRequest, type PullRequest } from './pullRequests';
 import type { ArquivoPullRequest, DetalhesPullRequest, MetodoMesclagem } from './detalhesPullRequest';
 import { esquemaItemGitHubNoChat } from './abrirItemGitHub';
+import { esquemaEconomiaTokens, esquemaEnvioEconomia } from './economiaTokens';
+import { esquemaAlteracoesTurno } from './alteracoesTurno';
+import { esquemaVinculoSubagente } from './subagentes';
+import { esquemaVinculoChatGpt } from './chatgptWeb';
 
 /** Esforços aceitos pelo OpenRouter, do mais leve ao mais intenso. */
 export const esforcosOpenRouter = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -51,6 +55,7 @@ export const esquemaModelo = z.object({
             contexto: z.number().int().positive(),
             maxTokens: z.number().int().positive().optional(),
             imagens: z.boolean(),
+            audio: z.boolean().optional(),
             ferramentas: z.boolean(),
             raciocinio: z.boolean(),
             esforcos: z.array(z.enum(esforcosOpenRouter)).optional(),
@@ -58,6 +63,7 @@ export const esquemaModelo = z.object({
         .optional(),
     tamanho: z.number().nonnegative(),
     catalogoId: z.string().max(120).optional(),
+    chatgptWeb: z.literal(true).optional(),
     projetorVisual: z.any().optional(),
     perfil: esquemaPerfilModelo.optional(),
     assinatura: z
@@ -107,21 +113,22 @@ export type RegistroUso = z.infer<typeof esquemaRegistroUso>;
 export const esquemaImagem = z.object({
     id: z.string().uuid(),
     nome: z.string().min(1).max(200),
-    mime: z.literal('image/jpeg'),
+    mime: z.enum(['image/jpeg', 'audio/wav']),
     tamanho: z
         .number()
         .int()
         .positive()
         .max(4 * 1024 ** 2),
-    largura: z.number().int().positive().max(1536),
-    altura: z.number().int().positive().max(1536),
-});
+    largura: z.number().int().positive().max(1536).optional(),
+    altura: z.number().int().positive().max(1536).optional(),
+}).refine((anexo) => anexo.mime === 'audio/wav' || (!!anexo.largura && !!anexo.altura),
+    'Imagens devem informar largura e altura.');
 export const esquemaEntradaImagem = z.object({
     nome: z.string().min(1).max(200),
     dados: z
         .string()
         .max(14 * 1024 ** 2)
-        .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/),
+        .regex(/^data:(image\/(png|jpeg|webp)|audio\/wav);base64,[A-Za-z0-9+/]+={0,2}$/),
 });
 export type ImagemAnexada = z.infer<typeof esquemaImagem>;
 export type EntradaImagem = z.infer<typeof esquemaEntradaImagem>;
@@ -148,6 +155,11 @@ export const esquemaMensagem = z.object({
     provedor: z.literal('openrouter').optional(),
     modeloUsoId: z.string().uuid().optional(),
     imagens: z.array(esquemaImagem).max(4).optional(),
+    blocoEconomia: z.string().max(4000).optional(),
+    alteracoes: esquemaAlteracoesTurno.optional(),
+    checkpoint: z.boolean().optional(),
+    checkpointRestaurado: z.boolean().optional(),
+    avisoCheckpoint: z.string().optional(),
     faseContexto: z.literal('compactando').optional(),
     compactacoes: z.array(esquemaCompactacao).optional(),
     usoContexto: z.object({ tokens: z.number().int().nonnegative(), limite: z.number().int().positive() }).optional(),
@@ -159,6 +171,7 @@ export const esquemaConversa = z.object({
     projeto: z.string().nullable().default(null),
     projetoId: z.string().uuid().nullable().optional(),
     projetoChatId: z.string().uuid().nullable().optional(),
+    chatgptWeb: esquemaVinculoChatGpt.optional(),
     rascunho: z.string().max(30000).optional(),
     anexosRascunho: z.number().int().min(0).max(4).optional(),
     pastaTrabalho: z.string().min(1).optional(),
@@ -166,6 +179,9 @@ export const esquemaConversa = z.object({
     acessoCompleto: z.boolean().default(false),
     modeloId: z.string().uuid().nullable().default(null),
     nivelRaciocinio: z.enum(niveisRaciocinioTodos).optional(),
+    economiaTokens: esquemaEconomiaTokens.optional(),
+    envioEconomia: esquemaEnvioEconomia.optional(),
+    subagente: esquemaVinculoSubagente.optional(),
     mensagens: z.array(esquemaMensagem).default([]),
     pullRequests: z.array(esquemaPullRequest).optional(),
     enviosPendentes: z
@@ -188,6 +204,11 @@ export const esquemaConversa = z.object({
             criadoEm: z.string(),
         })
         .optional(),
+    sessaoAssinatura: z.object({
+        id: z.string().min(1).max(200),
+        chave: z.string().min(1).max(100),
+        ateMensagemId: z.string().uuid().optional(),
+    }).optional(),
 });
 export const esquemaProjeto = z.object({
     id: z.string().uuid(),
@@ -216,6 +237,7 @@ export const esquemaRascunho = esquemaConversa.pick({
     projetoChatId: true,
     modeloId: true,
     nivelRaciocinio: true,
+    economiaTokens: true,
     acessoCompleto: true,
     rascunho: true,
 });
@@ -248,6 +270,8 @@ export type EstadoMotor = {
     dispositivo?: string;
     recarregamentoPendente?: boolean;
     suportaImagens?: boolean;
+    suportaAudio?: boolean;
+    suportaFala?: boolean;
     contextoDisponivel?: number;
 };
 export type DownloadModelo = {
@@ -262,6 +286,8 @@ export type Estado = Dados & {
     atualizacao?: EstadoAtualizacao;
     motor: EstadoMotor;
     conversaEmExecucao: string | null;
+    rtkDisponivel?: boolean;
+    subagentesEmExecucao?: string[];
     downloads: DownloadModelo[];
 };
 export type Evento =
@@ -283,11 +309,15 @@ export const esquemaAlteracao = z
         acessoCompleto: z.boolean(),
         modeloId: esquemaModelo.shape.id.nullable(),
         nivelRaciocinio: esquemaConversa.shape.nivelRaciocinio,
+        economiaTokens: esquemaEconomiaTokens,
         concluida: z.boolean(),
     })
     .partial();
 
 export interface PonteSelene {
+    cadastrarChatGptWeb(): Promise<Resultado<Modelo>>;
+    abrirChatGptWeb(conversaId?: string): Promise<Resultado<void>>;
+    confirmarRevisaoChatGpt(conversaId: string): Promise<Resultado<void>>;
     acessoWeb(): Promise<Resultado<import('./acessoWeb').EstadoAcessoWeb>>;
     configurarAcessoWeb(
         configuracao: import('./acessoWeb').EntradaConfiguracaoWeb,
@@ -337,6 +367,7 @@ export interface PonteSelene {
     importarProjetor(id: string): Promise<Resultado<void>>;
     anexarImagens(imagens: EntradaImagem[]): Promise<Resultado<ImagemRascunho[]>>;
     lerImagem(id: string): Promise<Resultado<string>>;
+    sintetizarFala(texto: string): Promise<Resultado<string>>;
     descartarImagens(ids: string[]): Promise<Resultado<void>>;
     baixarModelo(catalogoId: string): Promise<Resultado<void>>;
     cancelarDownload(catalogoId: string): Promise<Resultado<void>>;
@@ -363,6 +394,12 @@ export interface PonteSelene {
     ): Promise<Resultado<string | null>>;
     vincularPullRequest(conversaId: string, url: string): Promise<Resultado<void>>;
     desvincularPullRequest(conversaId: string, url: string): Promise<Resultado<void>>;
+    lerPatchTurno(conversaId: string, mensagemId: string, caminho: string): Promise<Resultado<string | null>>;
+    prepararRestauracao(conversaId: string, mensagemId: string): Promise<Resultado<{
+        arquivos: string[]; token: string; interrompido: boolean;
+    }>>;
+    restaurarTurno(conversaId: string, mensagemId: string, token: string): Promise<Resultado<void>>;
+    isolarConversa(conversaId: string): Promise<Resultado<void>>;
     abrirItemGitHubNoChat(entrada: z.infer<typeof esquemaItemGitHubNoChat>): Promise<Resultado<Conversa>>;
     atualizarPullRequests(conversaId: string): Promise<Resultado<PullRequest[]>>;
     detalhesPullRequest(conversaId: string, url: string): Promise<Resultado<DetalhesPullRequest>>;

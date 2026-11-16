@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { scriptComputador } from './scriptComputador';
 import { encerrarProcesso } from './processos';
-import type { ComandoComputador } from '../../shared/computador';
+import type { ComandoNativoComputador } from '../../shared/computador';
 import { selecionarElementosComputador } from '../../shared/elementosComputador';
 
 export const esquemaObservacaoComputador = z.object({
@@ -94,7 +94,7 @@ export class ControladorComputador {
         return processo;
     }
 
-    async executar(comando: ComandoComputador, sinal: AbortSignal): Promise<ObservacaoComputador> {
+    async executar(comando: ComandoNativoComputador, sinal: AbortSignal): Promise<ObservacaoComputador> {
         sinal.throwIfAborted();
         if (this.pendente) throw new Error('Já existe uma ação nativa em execução.');
         const processo = this.iniciar();

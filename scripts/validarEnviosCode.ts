@@ -103,27 +103,6 @@ try {
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.getByRole('button', { name: 'Envios Code', exact: true }).click();
     const mensagem = pagina.getByRole('textbox', { name: 'Mensagem', exact: true });
-    await mensagem.fill('Investigue o projeto');
-    await mensagem.press('Enter');
-    await pagina.getByRole('button', { name: 'Redirecionar', exact: true }).waitFor();
-    await mensagem.fill('Primeiro da fila');
-    await mensagem.press('Alt+Enter');
-    await pagina.locator('[data-ui="fila-code"]').getByText('Primeiro da fila', { exact: true }).waitFor();
-    await mensagem.fill('Segundo da fila');
-    await pagina.getByRole('button', { name: 'Na fila', exact: true }).click();
-    await pagina.locator('[data-ui="fila-code"]').getByText('Segundo da fila', { exact: true }).waitFor();
-    await mensagem.fill('Use Bun');
-    await mensagem.press('Enter');
-    await pagina.getByText('Redirecionando', { exact: true }).waitFor();
-    await pagina.screenshot({ path: 'artifacts/selene-envios-code.png' });
-    await pagina.setViewportSize({ width: 420, height: 900 });
-    assert(
-        await pagina
-            .locator('[data-ui="fila-code"]')
-            .evaluate((elemento) => elemento.scrollWidth <= elemento.clientWidth),
-    );
-    await pagina.screenshot({ path: 'artifacts/selene-envios-code-mobile.png' });
-    await pagina.setViewportSize({ width: 1280, height: 840 });
     const liberar = () =>
         app.evaluate(() => {
             (globalThis as typeof globalThis & { enviosTeste: { liberar?: () => void } }).enviosTeste.liberar?.();
@@ -140,6 +119,28 @@ try {
         }
         throw new Error(`Não iniciou a chamada ${quantidade}.`);
     };
+    await mensagem.fill('Investigue o projeto');
+    await mensagem.press('Enter');
+    await pagina.getByRole('button', { name: 'Interromper tarefa', exact: true }).waitFor();
+    await aguardarChamada(1);
+    await mensagem.fill('Primeiro da fila');
+    await mensagem.press('Enter');
+    await pagina.locator('[data-ui="fila-code"]').getByText('Primeiro da fila', { exact: true }).waitFor();
+    await mensagem.fill('Segundo da fila');
+    await pagina.getByRole('button', { name: 'Colocar na fila', exact: true }).click();
+    await pagina.locator('[data-ui="fila-code"]').getByText('Segundo da fila', { exact: true }).waitFor();
+    await mensagem.fill('Use Bun');
+    await mensagem.press('Control+Enter');
+    await pagina.getByText('Redirecionando', { exact: true }).waitFor();
+    await pagina.screenshot({ path: 'artifacts/selene-envios-code.png' });
+    await pagina.setViewportSize({ width: 420, height: 900 });
+    assert(
+        await pagina
+            .locator('[data-ui="fila-code"]')
+            .evaluate((elemento) => elemento.scrollWidth <= elemento.clientWidth),
+    );
+    await pagina.screenshot({ path: 'artifacts/selene-envios-code-mobile.png' });
+    await pagina.setViewportSize({ width: 1280, height: 840 });
     await aguardarChamada(1);
     await liberar();
     await aguardarChamada(2);
@@ -163,7 +164,7 @@ try {
     await mensagem.press('Enter');
     await aguardarChamada(5);
     await mensagem.fill('Preservar na fila');
-    await mensagem.press('Alt+Enter');
+    await mensagem.press('Enter');
     await pagina.getByText('Preservar na fila', { exact: true }).waitFor();
     await pagina.getByRole('button', { name: 'Interromper tarefa', exact: true }).click();
     await pagina.getByRole('button', { name: 'Enviar mensagem', exact: true }).waitFor();
@@ -177,7 +178,7 @@ try {
     await pagina.locator('[data-ui="fila-code"]').getByRole('button', { name: 'Enviar', exact: true }).click();
     await aguardarChamada(6);
     await mensagem.fill('Converter em instrução');
-    await mensagem.press('Alt+Enter');
+    await mensagem.press('Enter');
     const fila = pagina.locator('[data-ui="fila-code"]');
     await fila.getByText('Converter em instrução', { exact: true }).waitFor();
     await fila.getByRole('button', { name: 'Redirecionar', exact: true }).click();

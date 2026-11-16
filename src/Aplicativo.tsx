@@ -27,6 +27,7 @@ import { PainelTerminal, type PedidoTerminal } from './components/PainelTerminal
 import { MenuProjetoCode } from './components/MenuProjetoCode';
 import { PullRequestsConversa } from './components/PullRequestsConversa';
 import { PainelPullRequest } from './components/PainelPullRequest';
+import { useTransicaoModo } from './hooks/useTransicaoModo';
 
 function lerSidebarRecolhida(): boolean {
     try {
@@ -42,6 +43,7 @@ export function Aplicativo() {
     const { estado, erro, carregando, executar, definirErro, ponte } = dados;
     const [ativas, definirAtivas] = useState<Record<'chat' | 'code', string | null>>({ chat: null, code: null });
     const [modoInicial, definirModoInicial] = useState<'chat' | 'code'>('chat');
+    const prepararTransicaoModo = useTransicaoModo(modoInicial);
     const [configurando, definirConfigurando] = useState(false);
     const [configuracoesMontadas, definirConfiguracoesMontadas] = useState(false);
     const [secaoConfig, definirSecaoConfig] = useState<SecaoConfiguracoes>('geral');
@@ -206,6 +208,7 @@ export function Aplicativo() {
             className={[
                 [
                     'grid grid-cols-[290px_minmax(0,_1fr)] h-dvh min-h-0',
+                    'transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none',
                     '[@media(width<=1000px)]:grid-cols-[240px_minmax(0,_1fr)]',
                     '[@media(width<=760px)]:grid-cols-[minmax(0,_1fr)]',
                     '[@media(width<=760px)]:grid-rows-[minmax(0,_1fr)]',
@@ -256,6 +259,7 @@ export function Aplicativo() {
                         estado={estado}
                         modo={modoInicial}
                         alterarModo={(modo) => {
+                            if (modo !== modoInicial) prepararTransicaoModo();
                             fecharTelas();
                             definirModoInicial(modo);
                             definirConfigurando(false);
@@ -331,6 +335,7 @@ export function Aplicativo() {
                                 key={modo}
                                 aria-pressed={modoInicial === modo}
                                 onClick={() => {
+                                    if (modo !== modoInicial) prepararTransicaoModo();
                                     fecharTelas();
                                     definirModoInicial(modo);
                                     definirConfigurando(false);

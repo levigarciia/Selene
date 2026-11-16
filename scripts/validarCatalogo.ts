@@ -29,7 +29,8 @@ export async function validarCatalogo(pagina: Page): Promise<void> {
     await catalogo.waitFor();
     assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), catalogoModelos.length);
     await pagina.getByRole('button', { name: 'Família Qwen', exact: true }).click();
-    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), 4);
+    assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(),
+        catalogoModelos.filter((modelo) => modelo.familia === 'qwen').length);
     await pagina.getByRole('textbox', { name: 'Buscar modelos' }).fill('9B');
     assert.equal(await catalogo.locator('[data-ui~="item-catalogo"]').count(), 1);
     await pagina.getByRole('button', { name: 'Favoritar Qwen3.5 9B', exact: true }).click();
@@ -44,7 +45,7 @@ export async function validarCatalogo(pagina: Page): Promise<void> {
         'Qwen3.5 9B',
     );
     const icones = catalogo.locator('[data-ui~="item-catalogo"] [data-ui~="icone-modelo"]');
-    assert.equal(await icones.count(), catalogoModelos.length);
+    assert.equal(await icones.count(), catalogoModelos.filter((modelo) => modelo.familia !== 'liquid').length);
     assert.ok(await icones.first().evaluate((elemento) => getComputedStyle(elemento).maskImage !== 'none'));
     await pagina.screenshot({ path: 'artifacts/selene-catalogo.png' });
     await pagina.getByRole('button', { name: 'Mostrar somente disponíveis', exact: true }).click();

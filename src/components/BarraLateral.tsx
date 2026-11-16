@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
     ChatCircleIcon,
     CodeIcon,
@@ -98,6 +98,7 @@ export function BarraLateral({
     const conversas = estado.conversas.filter(
         (conversa) =>
             conversa.modo === modo &&
+            (!!termo || !conversa.subagente) &&
             (conversa.mensagens.length || possuiRascunho(conversa)) &&
             (!termo ||
                 `${conversa.titulo} ${conversa.projeto ?? ''} ${
@@ -114,6 +115,11 @@ export function BarraLateral({
         modo,
         estado.conversaEmExecucao,
     );
+    const filhasPorPai = new Map<string, Conversa[]>();
+    for (const conversa of estado.conversas) {
+        if (!conversa.subagente || !conversa.mensagens.length) continue;
+        filhasPorPai.set(conversa.subagente.paiId, [...(filhasPorPai.get(conversa.subagente.paiId) ?? []), conversa]);
+    }
     const quantidadeConcluidas = estado.conversas.filter((item) => item.modo === modo && item.concluida).length;
 
     function alternarGrupo(chave: string) {
@@ -130,7 +136,20 @@ export function BarraLateral({
         definirMenuConcluidas({ origem, x, y });
     }
 
-    function renderizarConversa(conversa: Conversa) {
+    function renderizarConversa(conversa: Conversa): ReactNode {
+        const filhas = termo ? [] : (filhasPorPai.get(conversa.id) ?? []);
+        if (!filhas.length) return renderizarLinha(conversa);
+        return (
+            <Fragment key={conversa.id}>
+                {renderizarLinha(conversa)}
+                <div data-ui="subagentes" className="pl-[14px]">
+                    {filhas.map(renderizarConversa)}
+                </div>
+            </Fragment>
+        );
+    }
+
+    function renderizarLinha(conversa: Conversa) {
         return (
             <LinhaConversaSidebar
                 key={conversa.id}
@@ -179,7 +198,8 @@ export function BarraLateral({
                         data-movimento-sidebar
                         data-ui="rotulo-grupo separador-historico"
                         className={[
-                            'text-[11px] text-secundario flex items-center gap-[7px] flex-1 min-w-0 bg-transparent',
+                            'text-[11px] font-medium text-secundario flex items-center gap-[7px] flex-1 min-w-0',
+                            'bg-transparent',
                             'text-left w-full p-[8px] mx-0 my-[8px] border-0 border-solid border-current',
                             [
                                 '[&_.truncate]:flex-1 [&_small]:text-[#666d76] [&_small]:text-[10px]',
@@ -259,6 +279,7 @@ export function BarraLateral({
                 data-ui="marca"
                 className={[
                     'flex h-[56px] shrink-0 items-center gap-[11px] mt-0 mb-[12px] [-webkit-app-region:drag] mx-[8px]',
+                    'font-semibold',
                     'border-b border-transparent [[data-ui~=sidebar-recolhida]_&]:border-0',
                     '[&_span]:text-[17px] [&_span]:font-semibold [&_span]:tracking-[-0.4px] [&_span]:text-white',
                     '[[data-ui~=sidebar-recolhida]_&]:flex-col [[data-ui~=sidebar-recolhida]_&]:mt-0',
@@ -480,6 +501,12 @@ export function BarraLateral({
                     <ChartBarIcon size={19} />
                 </button>
                 {modo === 'code' && (
+                    <div data-ui="entrada-pr-sidebar" className={[
+                        'transition-[opacity,translate] duration-300 ease-out',
+                        'starting:opacity-0 starting:-translate-x-3',
+                        'motion-reduce:transition-none motion-reduce:starting:opacity-100',
+                        'motion-reduce:starting:translate-x-0',
+                    ].join(' ')}>
                     <button
                         data-ui="botao-icone"
                         className={[
@@ -494,6 +521,7 @@ export function BarraLateral({
                     >
                         <GitPullRequestIcon size={19} />
                     </button>
+                    </div>
                 )}
                 <AtualizacaoSidebar
                     estado={estado.atualizacao}

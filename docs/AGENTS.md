@@ -30,6 +30,13 @@ chat, code e permissões continuam válidos como decisões próprias da Selene.
     pelo GitHub CLI (`gh`).
 * `electron/services/terminais.ts`: shells interativos dos projetos Code via `node-pty`.
 * `src/terminal/ghostty`: terminal Ghostty (libghostty em WebAssembly) copiado do T3 Code, licença MIT.
+* `electron/services/fabricaAgentes.ts`: cria o agente principal e os agentes dos subagentes.
+* `electron/services/alteracoesTurno.ts`: captura dos arquivos escritos pelas ferramentas em cada resposta.
+* `electron/services/servidorMcp.ts` e `electron/services/subagentes.ts`: servidor MCP em loopback e tarefas
+    delegadas entre inscrições.
+
+O servidor MCP aceita somente `127.0.0.1`, exige o token da execução e recusa pedidos com `Origin`. Subagentes
+nunca recebem acesso mais amplo que a conversa pai. Tokens não vão para argumentos de processo nem para logs.
 
 Git, GitHub e terminal pertencem ao modo Code e são registrados apenas no IPC do desktop, fora do acesso web,
 porque executam processos com os privilégios do usuário.
@@ -39,6 +46,14 @@ trabalho, enquanto comandos e escritas exigem aprovação individual. O acesso c
 conversa, dispensa aprovações individuais e autoriza caminhos absolutos fora da pasta de trabalho. Ele não altera o
 escopo do modo Chat nem transforma instruções de arquivos em autorização. O renderer nunca executa ferramentas
 diretamente.
+
+O terminal próprio pede aprovação, mas não é uma sandbox: o comando aprovado tem os privilégios do usuário e
+pode acessar caminhos externos. A prévia deve informar esse alcance. Vínculos físicos são recusados no modo restrito.
+O Chat com Claude usa ferramentas desativadas. A inscrição Codex fica restrita ao Code enquanto não houver
+isolamento completo de ferramentas verificado para Chat.
+Histórico usa bloqueio entre processos, detecção de versão externa, sincronização e três cópias rotativas.
+Não remova o bloqueio de instância única. Checkpoints exigem revisão e ausência de tarefas ativas para restaurar.
+Consulte `docs/SEGURANCA.md` para limites de recuperação e validações reais. O acesso web usa HTTPS e chave obrigatória.
 
 ## Qualidade
 
@@ -68,3 +83,7 @@ ou antes do próximo envio; parâmetros de geração usam a configuração salva
 Execute `bun run verificar`, `bun test` e `bun run build`. Alterações no motor local exigem verificar cancelamento,
 falhas de inicialização e encerramento. Alterações nas ferramentas exigem verificar permissões e caminhos reais.
 Atualize `docs/PARIDADE.md` quando o estado funcional mudar.
+
+O ChatGPT pelo site é um caminho separado da inscrição Codex. Consulte `docs/CHATGPT.md`.
+Ele usa sessão isolada, sem preload ou ferramentas, e somente texto no modo Chat.
+Não extraia credenciais nem substitua esse caminho por chamadas privadas HTTP.

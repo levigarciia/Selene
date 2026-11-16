@@ -3,6 +3,7 @@ import { receberResposta } from './streaming';
 import { criarContextoTemporal } from './contextoTemporal';
 
 export type BlocoConteudo =
+    | { type: 'input_audio'; input_audio: { data: string; format: 'wav' } }
     | { type: 'text'; text: string }
     | {
           type: 'image_url';
@@ -23,17 +24,19 @@ export function estimarTokens(mensagens: MensagemModelo[], ferramentas?: unknown
             ? mensagem.content.filter((bloco) => bloco.type === 'text')
             : mensagem.content,
     }));
-    const imagens = mensagens.reduce(
+    const tokensAnexos = mensagens.reduce(
         (total, mensagem) =>
             total +
             (Array.isArray(mensagem.content)
-                ? mensagem.content.filter((bloco) => bloco.type === 'image_url').length
+                ? mensagem.content.reduce((soma, bloco) => soma + (bloco.type === 'image_url' ? 4096 :
+                    bloco.type === 'input_audio'
+                        ? 256 + Math.ceil(bloco.input_audio.data.length * 0.75 / 32000 * 100) : 0), 0)
                 : 0),
         0,
     );
     return (
         Math.ceil(Buffer.byteLength(JSON.stringify({ messages: texto, tools: ferramentas }), 'utf8') / 2) +
-        imagens * 4096
+        tokensAnexos
     );
 }
 
@@ -45,7 +48,9 @@ function transcrever(mensagens: MensagemModelo[]): string {
                       .map((bloco) =>
                           bloco.type === 'text'
                               ? bloco.text
-                              : '[Imagem anexada. Preserve a descrição e os resultados visuais existentes no histórico.]',
+                              : bloco.type === 'input_audio'
+                                ? '[Áudio anexado. Preserve a transcrição e os resultados existentes no histórico.]'
+                                : '[Imagem anexada. Preserve a descrição e os resultados visuais existentes no histórico.]',
                       )
                       .join('\n')
                 : (mensagem.content ?? '');
@@ -92,7 +97,7 @@ export class CompactadorContexto {
         const limite = contexto - configuracao.maxTokens - 256;
         const antes = estimarTokens(mensagens, ferramentas);
         if (antes <= limite * 0.85) {
-            resposta.usoContexto = { tokens: antes, limite: contexto };
+            resposta.usoContexto = { tokens: antes, limite: configuracao.contexto };
             this.dependencias.publicar();
             return;
         }
@@ -108,7 +113,10 @@ export class CompactadorContexto {
             Math.floor((limite - tokensMinimos) / 3),
         );
         if (reservaResumo < 128) {
-            throw new Error('A mensagem ou as imagens excedem o contexto disponível. Reduza o envio.');
+            throw new Error(
+                'Não há espaço suficiente no contexto para a mensagem, as instruções e as ferramentas. ' +
+                    'Aumente o contexto ou reduza o envio.',
+            );
         }
         if (estimarTokens([...sistema, pedido], ferramentas) + reservaResumo * 2 > limite) {
             throw new Error('A mensagem, as imagens ou as instruções excedem o contexto. ' + 'Reduza o envio.');
@@ -137,7 +145,7 @@ export class CompactadorContexto {
         if (!antigas.length) {
             if (antes > limite)
                 throw new Error('Não há histórico suficiente para compactar. Reduza o envio ou inicie outra conversa.');
-            resposta.usoContexto = { tokens: antes, limite: contexto };
+            resposta.usoContexto = { tokens: antes, limite: configuracao.contexto };
             return;
         }
         resposta.faseContexto = 'compactando';
@@ -165,7 +173,7 @@ export class CompactadorContexto {
                 tokensAntes: antes,
                 tokensDepois: depois,
             });
-            resposta.usoContexto = { tokens: depois, limite: contexto };
+            resposta.usoContexto = { tokens: depois, limite: configuracao.contexto };
         } finally {
             delete resposta.faseContexto;
             this.dependencias.publicar();

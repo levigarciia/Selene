@@ -1,10 +1,11 @@
-import { lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { executarProcesso } from './processos';
 import type { Conversa } from '../../shared/contratos';
 import { esquemaPlano } from '../../shared/atividade';
 import { prepararPatch } from './patch';
+import { gravarAtomico } from './arquivosSeguros';
 import { esquemaComputador, ferramentaComputador, type ServicoComputador } from '../../shared/computador';
 import {
     esquemaPesquisaWeb,
@@ -173,6 +174,9 @@ export async function resolverCaminho(caminho: string, projeto: string, acessoCo
         return null;
     });
     if (existente?.isSymbolicLink()) await realpath(absoluto);
+    if (!acessoCompleto && existente?.isFile() && existente.nlink > 1) {
+        throw new Error('Arquivo com vínculos físicos não pode ser acessado no modo restrito.');
+    }
     const destino = await resolverExistente(absoluto);
     const caminhoRelativo = relative(raiz, destino);
     if (
@@ -199,6 +203,8 @@ export type FerramentaPreparada = {
     aprovacao: boolean;
     previa: string;
     executar: (sinal: AbortSignal) => Promise<string>;
+    /** Conteúdo antes e depois de cada arquivo que a ação escreve, para o card de alterações do turno. */
+    alteracoes?: { caminho: string; antes: string | null; depois: string | null }[];
 };
 
 /** Prepara uma ação validada e sua prévia antes de qualquer efeito no computador. */
@@ -357,7 +363,8 @@ export async function prepararFerramenta(
         return {
             argumentos,
             aprovacao: true,
-            previa: argumentos.comando,
+            previa: 'Este comando será executado com os seus privilégios e poderá acessar arquivos fora do projeto.\n\n'
+                + argumentos.comando,
             executar: async (sinal) => {
                 const pasta = await caminhoValidado(argumentos.pasta);
                 const executavel = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh';
@@ -394,6 +401,7 @@ export async function prepararFerramenta(
         argumentos,
         aprovacao: true,
         previa,
+        alteracoes: [{ caminho, antes: original, depois: conteudo }],
         executar: async (sinal) => {
             sinal.throwIfAborted();
             const destino = await caminhoValidado(argumentos.caminho);
@@ -405,7 +413,7 @@ export async function prepararFerramenta(
             if (atual !== original) throw new Error('O arquivo mudou após a aprovação. Leia o conteúdo novamente.');
             await mkdir(dirname(destino), { recursive: true });
             sinal.throwIfAborted();
-            await writeFile(destino, conteudo, 'utf8');
+            await gravarAtomico(destino, conteudo);
             return `Arquivo salvo: ${destino}`;
         },
     };

@@ -1,5 +1,16 @@
 # Validação do primeiro marco
 
+## Revisão de segurança em 15 de novembro de 2026
+
+O estado mais recente está em `SEGURANCA.md`. A auditoria de dependências passou sem alertas conhecidos após
+atualização do Electron e das dependências transitivas. Os registros antigos abaixo são históricos.
+Passaram 292 testes, verificação TypeScript, compilação, validação desktop completa, acesso HTTPS e fila Code.
+O pacote Windows foi aberto com perfil separado e validou instância única, terminal nativo, isolamento em worktree
+e restauração pela interface. A versão portátil foi gerada localmente, sem publicação ou instalação.
+Codex real editou dois arquivos, executou testes e retomou a mesma sessão. Também passaram reconhecimento de imagem
+e cancelamento com encerramento do subprocesso. Claude real não foi validado porque o login local expirou.
+O Chat com inscrição Codex ficou bloqueado para preservar o limite de ferramentas.
+
 ## Ícones contextuais de ações
 
 * Catálogo de 25 ícones baseado no T3 Code, incluindo estados de pull requests e sem a marca do T3.
@@ -438,3 +449,16 @@ cancelamento, limites de pasta e rejeição de caminhos repetidos por diferença
 por `@electron/get`, `global-agent` e `roarr`. Não há versão corrigida publicada. O alerta foi preservado,
 sem excluir dependências da auditoria ou aplicar uma atualização incompatível nas ferramentas de distribuição.
 Referência: [aviso de segurança](https://github.com/advisories/GHSA-hp3w-g68c-fv3c).
+
+## ChatGPT pelo site em 16 de novembro de 2026
+
+O teste `scripts/validarChatGptWeb.ts` usa página simulada no Electron e cobre envio único, continuidade,
+cancelamento, preservação de rascunho, compositor textarea, revisão de envio incerto e persistência.
+Também verifica bloqueio no Code, ausência de preload e Node e isolamento de contexto na janela remota.
+O teste `scripts/validarLoginChatGpt.ts` abriu o site real sem conta conectada e reconheceu login e compositor.
+Após login e verificação manual, dois envios autenticados reais concluíram na mesma conversa.
+A resposta e a continuidade foram confirmadas na Selene, sem ações locais.
+O defeito dos seletores antigos foi reproduzido na conversa real e corrigido para a estrutura autenticada atual.
+O guia de uso e os limites estão em `CHATGPT.md`.
+O teste de retomada reinicia o Electron, carrega diretamente o link persistido e atrasa a exibição do histórico.
+Ele confirma que a conversa original recebeu somente a mensagem nova. O link também é preservado em envios incertos.

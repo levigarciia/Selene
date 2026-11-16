@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+﻿import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Agente } from '../electron/services/agente';
 import { esquemaAlteracao, esquemaConfiguracao, esquemaConversa, type Modelo } from '../shared/contratos';
@@ -11,6 +11,18 @@ const qwen: Modelo = {
     tamanho: 1,
     catalogoId: 'qwen3.5-4b-q4',
 };
+
+test('LFM3 Omni oculta o controle e mantém o raciocínio desativado no motor', () => {
+    const modelo = { ...qwen, nome: 'LFM3 Omni 2B', catalogoId: 'lfm3-omni-2b-q4' };
+    expect(niveisRaciocinio(modelo)).toEqual([]);
+    expect(resolverNivelRaciocinio(modelo, 'alto')).toBe('desativado');
+    expect(parametrosRaciocinio(modelo, 'alto', 2048)).toEqual({
+        chat_template_kwargs: { enable_thinking: false },
+        reasoning_format: 'deepseek',
+    });
+    expect(parametrosRaciocinio(modelo, 'desativado', 2048)).not.toHaveProperty('reasoning_budget_tokens');
+    expect(niveisRaciocinio({ ...modelo, catalogoId: undefined })).toEqual([]);
+});
 
 test('oferece somente níveis compatíveis e resolve a escolha ao trocar o modelo', () => {
     const llama = { ...qwen, catalogoId: 'llama-3.2-1b-q4', nome: 'Llama', caminho: 'llama.gguf' };
@@ -151,3 +163,5 @@ test('cancelar durante o raciocínio interrompe o envio e preserva o nível esco
     expect(conversa.nivelRaciocinio).toBe('alto');
     expect(agente.conversaId).toBeNull();
 });
+
+

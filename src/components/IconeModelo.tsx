@@ -21,10 +21,10 @@ export function IconeModelo({
     const identificada =
         familia ??
         (Object.keys(icones) as FamiliaModelo[]).find((chave) => nome.toLocaleLowerCase('pt-BR').includes(chave));
-    if (!identificada) return <CpuIcon size={tamanho} aria-hidden="true" />;
+    if (!identificada || !(identificada in icones)) return <CpuIcon size={tamanho} aria-hidden="true" />;
 
     const estilo = {
-        '--icone-modelo': `url("${icones[identificada]}")`,
+        '--icone-modelo': `url("${icones[identificada as keyof typeof icones]}")`,
         width: tamanho,
         height: tamanho,
     } as CSSProperties;

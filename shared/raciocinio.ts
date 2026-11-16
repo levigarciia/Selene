@@ -1,5 +1,6 @@
 import { catalogoModelos, encontrarModeloLocal } from './catalogo';
 import type { Conversa, Modelo } from './contratos';
+import { exigeRuntimeLfm3 } from './runtimeModelo';
 
 export type NivelRaciocinio = NonNullable<Conversa['nivelRaciocinio']>;
 
@@ -36,6 +37,7 @@ const niveisLocais: NivelRaciocinio[] = ['desativado', 'baixo', 'medio', 'alto']
 export function niveisRaciocinio(modelo?: Modelo): NivelRaciocinio[] {
     if (!modelo || modelo.assinatura) return [];
     if (modelo.openrouter) return niveisOpenRouter(modelo.openrouter);
+    if (exigeRuntimeLfm3(modelo)) return [];
     const item = catalogoModelos.find((entrada) => encontrarModeloLocal(entrada, [modelo]));
     if (item) {
         if (!item.capacidades.includes('raciocinio')) return [];
@@ -77,6 +79,12 @@ export function parametrosRaciocinio(
         const esforco = esforcoOpenRouter[resolvido];
         return {
             reasoning: resolvido === 'desativado' ? { enabled: false } : { effort: esforco },
+        };
+    }
+    if (modelo && exigeRuntimeLfm3(modelo)) {
+        return {
+            chat_template_kwargs: { enable_thinking: false },
+            reasoning_format: 'deepseek',
         };
     }
     const proporcao = { desativado: 0, baixo: 0.25, medio: 0.5, alto: 0.75, xhigh: 0.75, max: 0.75 }[resolvido];

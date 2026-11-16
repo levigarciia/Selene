@@ -24,10 +24,13 @@ test('acesso web autentica, valida operações, transmite eventos e revoga sess�
         tipo: 'erro',
         erro: 'Estado inicial de teste',
     }));
-    const origem = `http://127.0.0.1:${porta}`;
+    const origem = `https://127.0.0.1:${porta}`;
     const controlador = new AbortController();
+    const pedirHttps = (url: string, opcoes: RequestInit = {}) => fetch(url, {
+        ...opcoes, ...{ tls: { rejectUnauthorized: false } },
+    });
     const pedir = (caminho: string, body?: unknown, cookie?: string, origin = origem) =>
-        fetch(origem + caminho, {
+        pedirHttps(origem + caminho, {
             method: body === undefined ? 'GET' : 'POST',
             headers: { Origin: origin, ...(cookie ? { Cookie: cookie } : {}) },
             body: body === undefined ? undefined : JSON.stringify(body),
@@ -57,8 +60,8 @@ test('acesso web autentica, valida operações, transmite eventos e revoga sess�
                 .status,
         ).toBe(403);
         expect((await pedir('/%2e%2e%2fprivado.js')).status).toBe(404);
-        expect((await fetch(origem, { headers: { Host: `outro.site:${porta}` } })).status).toBe(403);
-        const eventos = await fetch(origem + '/api/eventos', {
+        expect((await pedirHttps(origem, { headers: { Host: `outro.site:${porta}` } })).status).toBe(403);
+        const eventos = await pedirHttps(origem + '/api/eventos', {
             headers: { Cookie: cookie },
             signal: controlador.signal,
         });
@@ -80,27 +83,8 @@ test('acesso web autentica, valida operações, transmite eventos e revoga sess�
             porta,
             exigirChave: true,
         });
-        await servidor.configurar({ ativo: true, porta, exigirChave: false });
-        expect(await (await pedir('/api/sessao')).json()).toEqual({ ok: true, exigirChave: false });
-        expect(await (await pedir('/api/operacao', { nome: 'eco', argumentos: ['sem chave'] })).json()).toEqual({
-            ok: true,
-            valor: 'sem chave',
-        });
-        expect((await pedir('/api/operacao', { nome: 'acessoWeb', argumentos: [] })).status).toBe(403);
-        expect(
-            (await pedir('/api/operacao', { nome: 'eco', argumentos: ['texto'] }, undefined, 'https://outro.site'))
-                .status,
-        ).toBe(403);
-        const semChave = await fetch(origem + '/api/eventos', { signal: controlador.signal });
-        const leitorAberto = semChave.body!.getReader();
-        expect(new TextDecoder().decode((await leitorAberto.read()).value)).toContain('Estado inicial');
-        servidor.publicar({ tipo: 'erro', erro: 'Evento sem chave' });
-        expect(new TextDecoder().decode((await leitorAberto.read()).value)).toContain('Evento sem chave');
-        await leitorAberto.cancel();
-        expect(JSON.parse(await readFile(join(pasta, 'acessoWeb.json'), 'utf8')).exigirChave).toBe(false);
-        await servidor.configurar({ ativo: true, porta, exigirChave: true });
+        await expect(servidor.configurar({ ativo: true, porta, exigirChave: false } as never)).rejects.toThrow();
         expect((await pedir('/api/sessao')).status).toBe(401);
-        expect((await pedir('/api/operacao', { nome: 'eco', argumentos: ['texto'] })).status).toBe(401);
         await servidor.configurar({ ativo: false, porta });
         expect(servidor.estado.ativo).toBe(false);
     } finally {

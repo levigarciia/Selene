@@ -1,4 +1,5 @@
-﻿import { spawn, type ChildProcess } from 'node:child_process';
+import { instrucaoOpenUI } from '../../shared/openui';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,6 +13,8 @@ import {
     type ProvedorAssinatura,
 } from '../../shared/assinaturas';
 import { responderCodexAppServer } from './codexAppServer';
+import type { HookInput, Options } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
 /** Limite de texto reunido de uma única resposta, impedindo que um CLI defeituoso consuma a memória. */
 const limiteResposta = 2 * 1024 ** 2;
@@ -34,13 +37,13 @@ function executar(binario: string, argumentos: string[], cwd?: string): ChildPro
 
 /**
  * Transforma o corpo de mensagens da Selene em um único texto para o CLI, preservando papéis e ordem.
- * Partes que não são texto são ignoradas, pois os CLIs de assinatura não recebem imagens nesta etapa.
+ * Anexos são transportados separadamente; chamadas e resultados preservam suas identidades na transcrição.
  */
 export function montarPromptAssinatura(corpo: unknown): string {
     const mensagens = (corpo as { messages?: unknown }).messages;
     if (!Array.isArray(mensagens)) throw new Error('Corpo de solicitação inválido para o CLI.');
     return mensagens
-        .map((mensagem: { role?: unknown; content?: unknown }) => {
+        .map((mensagem: { role?: unknown; content?: unknown; tool_calls?: unknown; tool_call_id?: unknown }) => {
             const papel = typeof mensagem.role === 'string' ? mensagem.role : 'user';
             const conteudo =
                 typeof mensagem.content === 'string'
@@ -51,7 +54,9 @@ export function montarPromptAssinatura(corpo: unknown): string {
                             .map((parte: { text?: unknown }) => String(parte.text ?? ''))
                             .join('\n')
                       : '';
-            return conteudo ? `[${papel}]\n${conteudo}` : '';
+            const ferramentas = mensagem.tool_calls ? `\n${JSON.stringify({ tool_calls: mensagem.tool_calls })}` : '';
+            const identidade = mensagem.tool_call_id ? ` ${String(mensagem.tool_call_id)}` : '';
+            return conteudo || ferramentas ? `[${papel}${identidade}]\n${conteudo}${ferramentas}` : '';
         })
         .filter(Boolean)
         .join('\n\n');
@@ -65,11 +70,27 @@ export async function assinaturaCompletar(
     alvo: { provedor: ProvedorAssinatura; id: string },
     corpo: unknown,
     sinal: AbortSignal,
-    opcoes: { acessoCompleto?: boolean; pasta?: string | null; acoes?: AcoesExternas } = {},
+    opcoes: {
+        acessoCompleto?: boolean;
+        pasta?: string | null;
+        acoes?: AcoesExternas;
+        mcp?: McpHarness;
+        modo?: 'chat' | 'code';
+        sessao?: string;
+        aoSessao?: (id: string) => Promise<void>;
+        aoSucesso?: () => Promise<void>;
+        /** Chamado quando o harness termina, com sucesso ou falha; revoga a credencial MCP da execução. */
+        aoConcluir?: () => void;
+    } = {},
 ): Promise<Response> {
-    const prompt = montarPromptAssinatura(corpo);
     const pasta = opcoes.pasta || tmpdir();
     const acessoCompleto = !!opcoes.acessoCompleto;
+    const modo = opcoes.modo ?? 'code';
+    const prompt = `${modo === 'chat' ? instrucaoOpenUI + '\n\n' : ''}${montarPromptAssinatura(corpo)}`;
+    if (modo === 'chat' && alvo.provedor === 'chatgpt') {
+        throw new Error('A inscrição Codex está disponível somente no Code. No Chat, use Claude, modelo local ou OpenRouter.');
+    }
+    const imagens = obterImagensAssinatura(corpo);
     const fila = new FilaFluxo();
     const fluxo = fila.criar();
     let publicado = '';
@@ -82,7 +103,8 @@ export async function assinaturaCompletar(
     };
     const resposta =
         alvo.provedor === 'claude'
-            ? responderClaudeSdk(alvo.id, prompt, sinal, pasta, acessoCompleto, publicar, opcoes.acoes)
+            ? responderClaudeSdk(alvo.id, prompt, sinal, pasta, acessoCompleto, publicar, opcoes.acoes, opcoes.mcp,
+                { modo, sessao: opcoes.sessao, aoSessao: opcoes.aoSessao, imagens })
             : responderCodexAppServer(
                   validarModeloAssinatura(alvo.id),
                   prompt,
@@ -91,10 +113,15 @@ export async function assinaturaCompletar(
                   acessoCompleto,
                   publicar,
                   opcoes.acoes,
+                  opcoes.mcp,
+                  { sessao: opcoes.sessao, aoSessao: opcoes.aoSessao, imagens },
               );
     // O fluxo é devolvido antes da resposta terminar: o texto aparece enquanto o harness trabalha, e as
     // aprovações pedidas no meio da execução chegam à interface sem esperar o fim.
-    void resposta.then(
+    void resposta.then(async (texto) => {
+        await opcoes.aoSucesso?.();
+        return texto;
+    }).finally(() => opcoes.aoConcluir?.()).then(
         (texto) => {
             if (texto && !publicado) publicar(texto);
             fila.enqueue(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`);
@@ -105,12 +132,68 @@ export async function assinaturaCompletar(
     return respostaEmFluxo(fluxo);
 }
 
+/** Servidor MCP da Selene oferecido ao harness, com o token da execução e as instruções de uso. */
+export type McpHarness = { url: string; token: string; instrucoes: string };
+
+/** Extrai somente anexos incorporados e recusa formatos que o harness não pode transportar. */
+export function obterImagensAssinatura(corpo: unknown): string[] {
+    const mensagens = (corpo as { messages?: { content?: unknown }[] }).messages;
+    if (!Array.isArray(mensagens)) throw new Error('Mensagens inválidas.');
+    return mensagens.flatMap((mensagem) => Array.isArray(mensagem.content) ? mensagem.content.flatMap((parte) => {
+        if (parte.type === 'input_audio') throw new Error('Esta inscrição não aceita áudio de entrada.');
+        if (parte.type !== 'image_url') return [];
+        const imagem = z.string().max(14 * 1024 ** 2)
+            .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/).parse(parte.image_url?.url);
+        return [imagem];
+    }) : []);
+}
+
 /** Ponte com o agente para mostrar e aprovar as ferramentas do próprio harness na conversa. */
 export type AcoesExternas = {
     iniciar: (chamadaId: string, nome: string, argumentos: Record<string, unknown>) => void;
     aprovar: (chamadaId: string, nome: string, argumentos: Record<string, unknown>, sinal: AbortSignal) => Promise<boolean>;
     concluir: (chamadaId: string, resultado: string, erro: boolean) => void;
+    capturarAntes: (caminho: string) => Promise<void>;
+    capturarDepois: (caminho: string) => Promise<void>;
+    capturaParcial: () => void;
 };
+
+const ferramentasEscritaClaude = 'Write|Edit|MultiEdit|NotebookEdit';
+
+function caminhoEscritaClaude(entrada: unknown): string | undefined {
+    const argumentos = (entrada ?? {}) as { file_path?: unknown; notebook_path?: unknown };
+    const caminho = argumentos.file_path ?? argumentos.notebook_path;
+    return typeof caminho === 'string' && caminho ? caminho : undefined;
+}
+
+/**
+ * Ganchos que fotografam cada arquivo antes e depois das ferramentas de escrita do Claude Code. Rodam também com
+ * acesso completo, quando `canUseTool` não é chamado. Comandos de shell podem escrever sem avisar e tornam a
+ * captura parcial.
+ */
+export function ganchosAlteracoesClaude(acoes: AcoesExternas): Options['hooks'] {
+    const capturar = (lado: 'capturarAntes' | 'capturarDepois') => async (entrada: HookInput) => {
+        const caminho = 'tool_input' in entrada ? caminhoEscritaClaude(entrada.tool_input) : undefined;
+        if (caminho) await acoes[lado](caminho).catch(() => acoes.capturaParcial());
+        return {};
+    };
+    return {
+        PreToolUse: [
+            { matcher: ferramentasEscritaClaude, hooks: [capturar('capturarAntes')] },
+            {
+                matcher: 'Bash|PowerShell',
+                hooks: [
+                    async () => {
+                        acoes.capturaParcial();
+                        return {};
+                    },
+                ],
+            },
+        ],
+        PostToolUse: [{ matcher: ferramentasEscritaClaude, hooks: [capturar('capturarDepois')] }],
+        PostToolUseFailure: [{ matcher: ferramentasEscritaClaude, hooks: [capturar('capturarDepois')] }],
+    };
+}
 
 /** Ferramentas internas do Claude Code que não representam trabalho visível para o usuário. */
 const ferramentasOcultasClaude = new Set(['ToolSearch']);
@@ -174,17 +257,29 @@ export function apresentarFerramentaClaude(
             };
         }
         default:
-            return { nome, argumentos: entrada };
+            return { nome: nome.startsWith(prefixoMcpSelene) ? nome.slice(prefixoMcpSelene.length) : nome, argumentos: entrada };
     }
+}
+
+const prefixoMcpSelene = 'mcp__selene__';
+
+/** Caminho de um comando no PATH, ou `undefined` quando não está instalado. */
+export async function localizarExecutavel(nome: string): Promise<string | undefined> {
+    if (!/^[a-z0-9._-]+$/i.test(nome)) throw new Error('Nome de comando inválido.');
+    const { codigo, saida } = await rodar(
+        process.platform === 'win32' ? 'where.exe' : 'which',
+        [nome],
+        tempoLimiteVerificacaoMs,
+    );
+    return codigo === 0 ? primeiraLinha(saida) : undefined;
 }
 
 let caminhoClaude: Promise<string> | null = null;
 
 /** Localiza o executável do Claude Code instalado, que guarda o login da inscrição. */
 function localizarClaude(): Promise<string> {
-    caminhoClaude ??= rodar(process.platform === 'win32' ? 'where.exe' : 'which', ['claude'], tempoLimiteVerificacaoMs)
-        .then(({ codigo, saida }) => {
-            const caminho = codigo === 0 ? primeiraLinha(saida) : undefined;
+    caminhoClaude ??= localizarExecutavel('claude')
+        .then((caminho) => {
             if (!caminho) throw new Error('O comando claude não foi encontrado no computador.');
             return caminho;
         })
@@ -218,6 +313,10 @@ async function responderClaudeSdk(
     acessoCompleto: boolean,
     publicar: (texto: string) => void,
     acoes?: AcoesExternas,
+    mcp?: McpHarness,
+    configuracao: {
+        modo: 'chat' | 'code'; sessao?: string; aoSessao?: (id: string) => Promise<void>; imagens: string[];
+    } = { modo: 'code', imagens: [] },
 ): Promise<string> {
     const modeloValidado = validarModeloAssinatura(modelo);
     if (sinal.aborted) throw new Error('Tarefa interrompida pelo usuário.');
@@ -228,18 +327,54 @@ async function responderClaudeSdk(
     let texto = '';
     let tamanho = 0;
     try {
+        const entrada: SDKUserMessage = {
+            type: 'user', parent_tool_use_id: null, session_id: configuracao.sessao ?? '',
+            message: { role: 'user', content: [
+                { type: 'text', text: prompt },
+                ...configuracao.imagens.map((imagem) => {
+                    const partes = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(imagem)!;
+                    return { type: 'image' as const, source: { type: 'base64' as const,
+                        media_type: partes[1] as 'image/jpeg' | 'image/png' | 'image/webp', data: partes[2] } };
+                }),
+            ] },
+        };
         const conversa = query({
-            prompt,
+            prompt: (async function* () { yield entrada; })(),
             options: {
                 model: modeloValidado,
                 cwd: pasta,
+                ...(configuracao.sessao ? { resume: configuracao.sessao } : {}),
+                ...(configuracao.modo === 'chat' ? { tools: [], mcpServers: {}, settingSources: [] } : {}),
                 abortController: controle,
                 includePartialMessages: true,
                 pathToClaudeCodeExecutable: await localizarClaude(),
-                systemPrompt: { type: 'preset', preset: 'claude_code' },
+                systemPrompt: configuracao.modo === 'chat'
+                    ? 'Responda somente com base nas mensagens e anexos recebidos. Ferramentas não estão disponíveis.'
+                    : {
+                    type: 'preset',
+                    preset: 'claude_code',
+                    ...(mcp ? { append: mcp.instrucoes } : {}),
+                },
+                ...(mcp
+                    ? {
+                          mcpServers: {
+                              selene: {
+                                  type: 'http' as const,
+                                  url: mcp.url,
+                                  headers: { Authorization: `Bearer ${mcp.token}` },
+                              },
+                          },
+                          allowedTools: ['mcp__selene__*'],
+                          env: { ...process.env, MCP_TOOL_TIMEOUT: String(60 * 60 * 1000) },
+                      }
+                    : {}),
                 permissionMode: acessoCompleto ? 'bypassPermissions' : 'default',
                 ...(acessoCompleto ? { allowDangerouslySkipPermissions: true } : {}),
+                ...(acoes ? { hooks: ganchosAlteracoesClaude(acoes) } : {}),
                 canUseTool: async (nome, argumentos, { signal, toolUseID }) => {
+                    if (configuracao.modo === 'chat') {
+                        return { behavior: 'deny', message: 'Ferramentas nativas não são permitidas no Chat.' };
+                    }
                     const apresentada = apresentarFerramentaClaude(nome, argumentos) ?? { nome, argumentos };
                     const aprovada = acoes
                         ? await acoes.aprovar(toolUseID, apresentada.nome, apresentada.argumentos, signal)
@@ -251,6 +386,9 @@ async function responderClaudeSdk(
             },
         });
         for await (const mensagem of conversa) {
+            if (mensagem.type === 'system' && mensagem.subtype === 'init') {
+                await configuracao.aoSessao?.(mensagem.session_id);
+            }
             if (mensagem.type === 'stream_event') {
                 const evento = mensagem.event;
                 if (evento.type === 'message_start' && texto && !texto.endsWith('\n\n')) texto += '\n\n';

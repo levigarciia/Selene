@@ -31,6 +31,16 @@ test('CPU e camadas manuais não herdam a previsão de execução integral na GP
     expect(manual.detalhe).toContain('Camadas manuais');
 });
 
+test('não aplica a previsão genérica de largura de banda ao LFM3', () => {
+    for (const somenteCpu of [true, false]) {
+        const estimativa = estimarVelocidadeModelo({ ...entrada, tamanho: 1099630080,
+            identificacao: 'LFM3 Omni 2B', somenteCpu });
+        expect(estimativa.rotulo).toBe('Estimativa indisponível');
+        expect(estimativa.maximo).toBeUndefined();
+        expect(estimativa.detalhe).toContain('não possui uma estimativa calibrada');
+    }
+});
+
 test('contexto e projetor que deslocam pesos para RAM reduzem a estimativa', () => {
     const gpu = estimarVelocidadeModelo(entrada);
     const projetor = estimarVelocidadeModelo({ ...entrada, projetor: 7 * gb });

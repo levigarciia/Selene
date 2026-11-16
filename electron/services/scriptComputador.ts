@@ -91,15 +91,57 @@ public static class ComputadorSelene {
     [StructLayout(LayoutKind.Sequential)] public struct Teclado {
         public ushort virtualKey, scan; public uint flags, tempo; public UIntPtr extra;
     }
-    public static void Tecla(ushort codigo, bool soltar) {
-        Entrada entrada = new Entrada(); entrada.tipo = 1;
-        entrada.valor.teclado.virtualKey = codigo; entrada.valor.teclado.flags = soltar ? 2u : 0u;
+    [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint codigo, uint tipo);
+    static void Enviar(Entrada entrada) {
         if (SendInput(1, new Entrada[] { entrada }, Marshal.SizeOf(typeof(Entrada))) != 1)
             throw new Exception("O Windows bloqueou a entrada. Verifique a elevação do aplicativo.");
     }
-    public static void Pressionar(ushort codigo, bool controle) {
-        try { if (controle) Tecla(17, false); Tecla(codigo, false); }
+    public static void Tecla(ushort codigo, bool soltar) {
+        bool estendida = (codigo >= 33 && codigo <= 40) || codigo == 46;
+        Entrada entrada = new Entrada(); entrada.tipo = 1;
+        entrada.valor.teclado.virtualKey = codigo;
+        entrada.valor.teclado.scan = (ushort)MapVirtualKey(codigo, 0);
+        entrada.valor.teclado.flags = (soltar ? 2u : 0u) | (estendida ? 1u : 0u);
+        Enviar(entrada);
+    }
+    public static void Pressionar(ushort codigo, bool controle, int duracao) {
+        try {
+            if (controle) Tecla(17, false);
+            Tecla(codigo, false);
+            System.Threading.Thread.Sleep(Math.Max(30, duracao));
+        }
         finally { Tecla(codigo, true); if (controle) Tecla(17, true); }
+    }
+    static void EventoMouse(uint flags, int x, int y) {
+        Entrada entrada = new Entrada(); entrada.tipo = 0;
+        entrada.valor.mouse.flags = flags; entrada.valor.mouse.x = x; entrada.valor.mouse.y = y;
+        Enviar(entrada);
+    }
+    public static void Botao(bool direito, int duracao) {
+        try {
+            EventoMouse(direito ? 8u : 2u, 0, 0);
+            System.Threading.Thread.Sleep(Math.Max(30, duracao));
+        }
+        finally { EventoMouse(direito ? 16u : 4u, 0, 0); }
+    }
+    public static void ClicarPonto(IntPtr janela, int x, int y, bool direito, int duracao) {
+        if (!Ativar(janela)) throw new Exception("Não foi possível ativar a janela. Observe novamente.");
+        Ponto ponto = new Ponto(); ponto.x = x; ponto.y = y;
+        if (GetAncestor(WindowFromPoint(ponto), 2) != janela)
+            throw new Exception("O ponto não pertence à janela observada. Observe novamente.");
+        if (!SetCursorPos(x, y)) throw new Exception("Não foi possível alcançar o ponto.");
+        System.Threading.Thread.Sleep(30);
+        Botao(direito, duracao);
+    }
+    public static void Mover(int dx, int dy) {
+        int passos = Math.Max(1, Math.Max(Math.Abs(dx), Math.Abs(dy)) / 40);
+        int feitoX = 0, feitoY = 0;
+        for (int passo = 1; passo <= passos; passo++) {
+            int alvoX = dx * passo / passos, alvoY = dy * passo / passos;
+            EventoMouse(1u, alvoX - feitoX, alvoY - feitoY);
+            feitoX = alvoX; feitoY = alvoY;
+            System.Threading.Thread.Sleep(10);
+        }
     }
     public static bool Editavel(AutomationElement elemento) {
         if (elemento.Current.IsPassword || SenhaNativa(elemento.Current.NativeWindowHandle) ||
@@ -142,7 +184,7 @@ public static class ComputadorSelene {
     public static void Digitar(IntPtr janela, AutomationElement elemento, string texto) {
         if (!Editavel(elemento)) throw new Exception("Escolha uma referência com editavel=true para digitar.");
         Focar(janela, elemento);
-        Pressionar(65, true);
+        Pressionar(65, true, 0);
         foreach (char caractere in texto) {
             ValidarFoco(janela, elemento);
             Entrada pressionar = new Entrada(); pressionar.tipo = 1;
@@ -195,19 +237,27 @@ while ($null -ne ($linha = [Console]::ReadLine())) {
             switch ($comando.acao) {
                 'clicar' {
                     $padraoClique = $null
-                    if ($elemento.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,
+                    $direito = $comando.botao -eq 'direito'
+                    $duracao = [int]$comando.duracao
+                    if ($comando.ponto) {
+                        [ComputadorSelene]::ClicarPonto([IntPtr]$janelaAtual.Current.NativeWindowHandle,
+                            [int]$comando.ponto.x, [int]$comando.ponto.y, $direito, $duracao)
+                    } elseif (!$direito -and !$duracao -and $elemento.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,
                         [ref]$padraoClique)) {
                         $padraoClique.Invoke()
-                    } elseif (![ComputadorSelene]::ClicarNativo($elemento.Current.NativeWindowHandle)) {
-                        if (![ComputadorSelene]::Ativar([IntPtr]$janelaAtual.Current.NativeWindowHandle)) {
-                            throw 'Não foi possível ativar a janela. Observe novamente.'
-                        }
+                    } elseif ($direito -or $duracao -or
+                        ![ComputadorSelene]::ClicarNativo($elemento.Current.NativeWindowHandle)) {
                         $retangulo = $elemento.Current.BoundingRectangle
-                        [void][ComputadorSelene]::SetCursorPos([int]($retangulo.X + $retangulo.Width/2),
-                            [int]($retangulo.Y + $retangulo.Height/2))
-                        [ComputadorSelene]::mouse_event(2,0,0,0,[UIntPtr]::Zero)
-                        [ComputadorSelene]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+                        [ComputadorSelene]::ClicarPonto([IntPtr]$janelaAtual.Current.NativeWindowHandle,
+                            [int]($retangulo.X + $retangulo.Width/2), [int]($retangulo.Y + $retangulo.Height/2),
+                            $direito, $duracao)
                     }
+                }
+                'mover' {
+                    if (![ComputadorSelene]::Ativar([IntPtr]$janelaAtual.Current.NativeWindowHandle)) {
+                        throw 'Não foi possível ativar a janela. Observe novamente.'
+                    }
+                    [ComputadorSelene]::Mover([int]$comando.dx, [int]$comando.dy)
                 }
                 'digitar' {
                     if (![ComputadorSelene]::Editavel($elemento)) {
@@ -243,10 +293,14 @@ while ($null -ne ($linha = [Console]::ReadLine())) {
                     }
                     $teclas = @{ Enter=13; Tab=9; Escape=27; Backspace=8; Delete=46; ArrowUp=38; ArrowDown=40;
                         ArrowLeft=37; ArrowRight=39; Home=36; End=35; PageUp=33; PageDown=34;
+                        Space=32; Shift=16; Control=17; F1=112; F3=114; F5=116;
                         'Control+a'=65; 'Control+c'=67; 'Control+v'=86 }
+                    foreach ($caractere in [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') {
+                        $teclas[[string]$caractere] = [int]$caractere
+                    }
                     if (!$teclas.ContainsKey([string]$comando.tecla)) { throw 'Tecla inválida.' }
                     [ComputadorSelene]::Pressionar([System.UInt16]$teclas[[string]$comando.tecla],
-                        ([string]$comando.tecla).StartsWith('Control+'))
+                        ([string]$comando.tecla).StartsWith('Control+'), [int]$comando.duracao)
                 }
                 'rolar' {
                     if (![ComputadorSelene]::Ativar([IntPtr]$janelaAtual.Current.NativeWindowHandle)) {

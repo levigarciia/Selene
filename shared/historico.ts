@@ -18,9 +18,13 @@ export type AtividadeConversa = {
 };
 
 /** Use com o identificador da tarefa atual para evitar apresentar atividade antiga como execução real. */
-export function obterAtividadeConversa(conversa: Conversa, execucao: string | null): AtividadeConversa {
+export function obterAtividadeConversa(
+    conversa: Conversa,
+    execucao: string | null,
+    subagentesEmExecucao: readonly string[] = [],
+): AtividadeConversa {
     const mensagem = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
-    if (execucao === conversa.id) {
+    if (execucao === conversa.id || subagentesEmExecucao.includes(conversa.id)) {
         if (mensagem?.faseContexto) return { fase: 'compactando', nome: 'Compactando', ocupada: true };
         const pendente = mensagem?.acoes.find((acao) => acao.estado === 'aguardando');
         if (pendente) return { fase: 'aprovacao', nome: 'Aprovação', ocupada: true };

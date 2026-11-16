@@ -219,35 +219,32 @@ export class Navegador implements ServicoWeb {
     }
 
     async pesquisar(consulta: string, sinal: AbortSignal, _conversaId?: string): Promise<string> {
-        const pagina = this.criar();
-        this.temporarias.add(pagina);
-        try {
-            return await this.limitar(pagina, sinal, async () => {
-                const destinos = [
-                    `https://html.duckduckgo.com/html/?q=${encodeURIComponent(consulta)}`,
-                    `https://www.bing.com/search?q=${encodeURIComponent(consulta)}`,
-                ];
-                for (const url of destinos) {
-                    try {
-                        await pagina.janela.loadURL(url);
-                    } catch {
-                        if (sinal.aborted || pagina.janela.isDestroyed()) sinal.throwIfAborted();
-                        continue;
-                    }
-                    const resultados = await this.executarScript<ReturnType<typeof extrairResultadosPesquisa>>(
-                        pagina,
-                        `(${extrairResultadosPesquisa.toString()})()`,
+        const destinos = [
+            `https://html.duckduckgo.com/html/?q=${encodeURIComponent(consulta)}`,
+            `https://www.bing.com/search?q=${encodeURIComponent(consulta)}`,
+        ];
+        for (const url of destinos) {
+            sinal.throwIfAborted();
+            const pagina = this.criar();
+            this.temporarias.add(pagina);
+            try {
+                const resultados = await this.limitar(pagina, sinal, async () => {
+                    await pagina.janela.loadURL(url);
+                    return this.executarScript<ReturnType<typeof extrairResultadosPesquisa>>(
+                        pagina, `(${extrairResultadosPesquisa.toString()})()`,
                     );
-                    if (resultados.length) {
-                        return JSON.stringify({ consulta, mecanismo: new URL(url).hostname, resultados });
-                    }
+                });
+                if (resultados.length) {
+                    return JSON.stringify({ consulta, mecanismo: new URL(url).hostname, resultados });
                 }
-                throw new Error('A pesquisa não retornou fontes legíveis. O serviço pode ter bloqueado a consulta.');
-            });
-        } finally {
-            this.temporarias.delete(pagina);
-            if (!pagina.janela.isDestroyed()) pagina.janela.destroy();
+            } catch {
+                sinal.throwIfAborted();
+            } finally {
+                this.temporarias.delete(pagina);
+                if (!pagina.janela.isDestroyed()) pagina.janela.destroy();
+            }
         }
+        throw new Error('Nenhum mecanismo retornou fontes legíveis no prazo. Tente novamente mais tarde.');
     }
 
     async ler(url: string, sinal: AbortSignal, _conversaId?: string): Promise<string> {

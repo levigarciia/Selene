@@ -1,5 +1,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type Server } from 'node:https';
+import { obterCertificadoWeb } from './certificadoWeb';
 import { networkInterfaces } from 'node:os';
 import { readFile, realpath, writeFile } from 'node:fs/promises';
 import { extname, join, relative, isAbsolute } from 'node:path';
@@ -66,6 +68,7 @@ export class AcessoWeb {
     private chave = randomBytes(24).toString('base64url');
     private erro?: string;
     private alterando = false;
+    private certificado?: string;
     private readonly sessoes = new Map<string, number>();
     private readonly clientes = new Map<ServerResponse, string>();
     private readonly tentativas = new Map<string, { quantidade: number; ate: number }>();
@@ -82,16 +85,19 @@ export class AcessoWeb {
             ...this.configuracao,
             ativo: !!this.servidor?.listening,
             enderecos: this.servidor?.listening
-                ? enderecosLocais().map((ip) => `http://${ip}:${this.configuracao.porta}`)
+                ? enderecosLocais().map((ip) => `https://${ip}:${this.configuracao.porta}`)
                 : [],
             chave: this.chave,
+            certificado: this.certificado,
             erro: this.erro,
         };
     }
 
     async abrir(): Promise<void> {
         try {
-            this.configuracao = esquemaConfiguracaoWeb.parse(JSON.parse(await readFile(this.arquivo, 'utf8')));
+            this.configuracao = esquemaConfiguracaoWeb.parse({
+                ...JSON.parse(await readFile(this.arquivo, 'utf8')), exigirChave: true,
+            });
         } catch (erro) {
             if ((erro as NodeJS.ErrnoException).code !== 'ENOENT') this.erro = 'Configuração web inválida.';
         }
@@ -159,7 +165,10 @@ export class AcessoWeb {
 
     private async iniciar(): Promise<void> {
         await readFile(join(this.pastaInterface, 'index.html'));
-        const servidor = createServer((pedido, resposta) => {
+        const certificado = await obterCertificadoWeb(`${this.arquivo}.tls.json`, ['127.0.0.1', ...enderecosLocais()]);
+        this.certificado = certificado.impressao;
+        const servidor = createServer({ key: certificado.key, cert: certificado.cert, minVersion: 'TLSv1.2' },
+            (pedido, resposta) => {
             void this.receber(pedido, resposta).catch((erro: Error) => {
                 if (!resposta.headersSent) responder(resposta, 400, { ok: false, erro: erro.message });
                 else resposta.end();
@@ -180,7 +189,6 @@ export class AcessoWeb {
     }
 
     private sessaoValida(sessao: string): boolean {
-        if (!this.configuracao.exigirChave) return true;
         const validade = this.sessoes.get(sessao);
         if (validade && validade > Date.now()) return true;
         this.sessoes.delete(sessao);
@@ -197,7 +205,7 @@ export class AcessoWeb {
             responder(resposta, 403, { ok: false, erro: 'Endereço não autorizado.' });
             return;
         }
-        const origem = `http://${pedido.headers.host}`;
+        const origem = `https://${pedido.headers.host}`;
         if ((pedido.method === 'POST' || pedido.headers.origin) && pedido.headers.origin !== origem) {
             responder(resposta, 403, { ok: false, erro: 'Origem não autorizada.' });
             return;
@@ -250,10 +258,6 @@ export class AcessoWeb {
     }
 
     private async entrar(pedido: IncomingMessage, resposta: ServerResponse): Promise<void> {
-        if (!this.configuracao.exigirChave) {
-            responder(resposta, 200, { ok: true });
-            return;
-        }
         const agora = Date.now();
         for (const [ip, tentativa] of this.tentativas) if (tentativa.ate < agora) this.tentativas.delete(ip);
         const ip = pedido.socket.remoteAddress ?? '';
@@ -278,7 +282,7 @@ export class AcessoWeb {
         }
         const sessao = randomBytes(32).toString('base64url');
         this.sessoes.set(sessao, agora + 86400000);
-        resposta.setHeader('Set-Cookie', `selene_sessao=${sessao}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400`);
+        resposta.setHeader('Set-Cookie', `selene_sessao=${sessao}; HttpOnly; SameSite=Strict; Secure; Path=/; Max-Age=86400`);
         responder(resposta, 200, { ok: true });
     }
 

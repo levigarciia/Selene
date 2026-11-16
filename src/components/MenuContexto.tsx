@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export type PosicaoMenu = { x: number; y: number; origem: HTMLElement };
 
@@ -46,7 +47,7 @@ export function MenuContexto({
             window.removeEventListener('resize', fechar);
         };
     }, [fechar, posicao]);
-    return (
+    return createPortal(
         <div
             ref={raiz}
             data-ui={`menu-conversa ${classe === 'menu-projetos' ? 'menu-projetos' : ''}`}
@@ -97,6 +98,6 @@ export function MenuContexto({
             }}
         >
             {children}
-        </div>
+        </div>, document.body,
     );
 }

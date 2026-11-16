@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EntradaImagem, ImagemRascunho, PonteSelene } from '../../shared/contratos';
+import { prepararAudio } from '../utils/prepararAudio';
 
 async function lerArquivo(arquivo: File): Promise<EntradaImagem> {
-    if (arquivo.size > 10 * 1024 ** 2) throw new Error('Cada imagem deve ter até 10 MB.');
+    if (arquivo.size > 10 * 1024 ** 2) throw new Error('Cada anexo deve ter até 10 MB.');
+    if (arquivo.type.startsWith('audio/') || /\.(wav|mp3|ogg|m4a|flac|webm)$/i.test(arquivo.name)) {
+        return prepararAudio(arquivo);
+    }
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(arquivo.type)) {
         throw new Error('Escolha imagens PNG, JPEG ou WebP.');
     }
@@ -30,6 +34,7 @@ export function useAnexos(
     ponte: PonteSelene | undefined,
     informarErro: (erro: string) => void,
     informarQuantidade?: (quantidade: number) => void,
+    aceitaAudio = false,
 ) {
     const [rascunhos, definirRascunhos] = useState<Record<string, ImagemRascunho[]>>({});
     const [importando, definirImportando] = useState(false);
@@ -44,8 +49,12 @@ export function useAnexos(
 
     async function anexar(arquivos: File[]) {
         if (!arquivos.length || bloqueio.current) return;
-        if (!ponte) return informarErro('Anexe imagens no aplicativo desktop.');
-        if (imagens.length + arquivos.length > 4) return informarErro('Anexe até quatro imagens por mensagem.');
+        if (!aceitaAudio && arquivos.some((arquivo) => arquivo.type.startsWith('audio/') ||
+            /\.(wav|mp3|ogg|m4a|flac|webm)$/i.test(arquivo.name))) {
+            return informarErro('Este modelo não aceita áudio de entrada.');
+        }
+        if (!ponte) return informarErro('Anexe arquivos no aplicativo desktop.');
+        if (imagens.length + arquivos.length > 4) return informarErro('Anexe até quatro arquivos por mensagem.');
         bloqueio.current = true;
         definirImportando(true);
         informarErro('');
@@ -58,7 +67,7 @@ export function useAnexos(
                 [chave]: [...(anteriores[chave] ?? []), ...resultado.valor],
             }));
         } catch (erro) {
-            informarErro(erro instanceof Error ? erro.message : 'Não foi possível anexar as imagens.');
+            informarErro(erro instanceof Error ? erro.message : 'Não foi possível anexar os arquivos.');
         } finally {
             bloqueio.current = false;
             definirImportando(false);

@@ -137,7 +137,7 @@ test('reduz publicações sem perder texto, conclusão ou métricas do agente', 
         completar: async (corpo) => {
             requisicao = corpo as Record<string, unknown>;
             return respostaEventos([
-                ...Array.from({ length: 500 }, () => ({ choices: [{ delta: { content: 'ação ' } }] })),
+                ...Array.from({ length: 500 }, (_, indice) => ({ choices: [{ delta: { content: `ação ${indice} ` } }] })),
                 {
                     choices: [{ delta: {}, finish_reason: 'stop' }],
                     timings: { predicted_n: 500, predicted_ms: 10000, predicted_per_second: 50 },
@@ -146,7 +146,7 @@ test('reduz publicações sem perder texto, conclusão ou métricas do agente', 
         },
     });
     await agente.executar(conversa, 'Teste sintético', esquemaConfiguracao.parse({}));
-    expect(conversa.mensagens[1].texto).toBe('ação '.repeat(500));
+    expect(conversa.mensagens[1].texto).toBe(Array.from({ length: 500 }, (_, indice) => `ação ${indice} `).join(''));
     expect(conversa.mensagens[1].estado).toBe('concluida');
     expect(conversa.mensagens[1].desempenho?.tokensPorSegundo).toBe(50);
     expect(publicacoes).toBeLessThan(50);

@@ -2,6 +2,7 @@ import { MenuContexto, type PosicaoMenu } from './MenuContexto';
 import { DownloadSimpleIcon, TrashIcon, CheckIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 import type { Conversa } from '../../shared/contratos';
 import type { ProjetoChat } from '../../shared/projetosChat';
+import { useState } from 'react';
 
 export type PosicaoMenuConversa = PosicaoMenu & { conversa: Conversa };
 
@@ -25,8 +26,39 @@ export function MenuConversa({
     projetosChat?: ProjetoChat[];
     moverProjetoChat?: (conversa: Conversa, projetoId: string | null) => void;
 }) {
+    const [erro, definirErro] = useState('');
+    const [isolando, definirIsolando] = useState(false);
+    async function isolar() {
+        if (!window.selene) return;
+        definirIsolando(true);
+        try {
+            const estado = await window.selene.estado();
+            if (!estado.ok) {
+                definirErro(estado.erro);
+                return;
+            }
+            if (!estado.valor.conversas.some((item) => item.id === menu.conversa.id)) {
+                const promovida = await window.selene.promoverRascunho(menu.conversa);
+                if (!promovida.ok) {
+                    definirErro(promovida.erro);
+                    return;
+                }
+            }
+            const resultado = await window.selene.isolarConversa(menu.conversa.id);
+            if (resultado.ok) fechar();
+            else definirErro(resultado.erro);
+        } finally {
+            definirIsolando(false);
+        }
+    }
     return (
         <MenuContexto posicao={menu} fechar={fechar} titulo={`Ações de ${menu.conversa.titulo}`}>
+            {menu.conversa.modo === 'code' && menu.conversa.projeto
+                && !menu.conversa.pastaRepositorio && !menu.conversa.mensagens.length && (
+                <button role="menuitem" disabled={ocupado || isolando || !window.selene}
+                    onClick={() => void isolar()}>{isolando ? 'Isolando' : 'Isolar em worktree'}</button>
+            )}
+            {erro && <p role="alert" className="text-xs text-[#e9aaa7] p-2">{erro}</p>}
             {menu.conversa.modo === 'chat' && moverProjetoChat && (
                 <>
                     {projetosChat

@@ -1,5 +1,6 @@
-import { mkdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { gravarAtomico } from './arquivosSeguros';
 
 type Trecho = { contexto: string; anterior: string[]; novo: string[]; fim: boolean };
 type Operacao = { tipo: 'Add' | 'Delete' | 'Update'; caminho: string; destino?: string; linhas: string[] };
@@ -135,6 +136,11 @@ export async function prepararPatch(patch: string, resolver: (caminho: string) =
     }
     return {
         previa: patch,
+        alteracoes: [...arquivos].map(([caminho, arquivo]) => ({
+            caminho,
+            antes: arquivo.original,
+            depois: arquivo.novo,
+        })),
         executar: async (sinal: AbortSignal) => {
             for (const [caminho, arquivo] of arquivos) {
                 sinal.throwIfAborted();
@@ -150,14 +156,14 @@ export async function prepararPatch(patch: string, resolver: (caminho: string) =
                     if (arquivo.novo === null) await unlink(caminho);
                     else {
                         await mkdir(dirname(caminho), { recursive: true });
-                        await writeFile(caminho, arquivo.novo, 'utf8');
+                        await gravarAtomico(caminho, arquivo.novo);
                     }
                 }
             } catch (erro) {
                 for (const caminho of gravados.reverse()) {
                     const arquivo = arquivos.get(caminho)!;
                     if (arquivo.original === null) await rm(caminho, { force: true });
-                    else await writeFile(caminho, arquivo.original, 'utf8');
+                    else await gravarAtomico(caminho, arquivo.original);
                 }
                 throw erro;
             }

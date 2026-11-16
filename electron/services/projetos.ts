@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, realpath, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Conversa, Dados, NovoProjeto, Projeto } from '../../shared/contratos';
@@ -133,4 +133,22 @@ export async function prepararPastaTrabalho(conversa: Conversa, pastaDados: stri
     await mkdir(pasta, { recursive: true });
     conversa.pastaTrabalho = await realpath(pasta);
     return conversa.pastaTrabalho;
+}
+
+/** Isola uma conversa nova no HEAD atual sem modificar os arquivos da pasta original. */
+export async function isolarConversa(conversa: Conversa, pastaDados: string): Promise<void> {
+    if (conversa.modo !== 'code' || !conversa.projeto || conversa.mensagens.length || conversa.pastaRepositorio) {
+        throw new Error('O isolamento exige uma conversa Code nova vinculada a um repositório.');
+    }
+    const resultado = await executarProcesso('git', ['status', '--porcelain'], conversa.projeto,
+        new AbortController().signal);
+    if (resultado.codigo !== 0 || resultado.saida.trim()) {
+        throw new Error('Salve as alterações do repositório em um commit antes de criar a worktree.');
+    }
+    const id = z.uuid().parse(conversa.id);
+    const pasta = join(pastaDados, 'worktrees', id);
+    await mkdir(dirname(pasta), { recursive: true });
+    await git(conversa.projeto, ['worktree', 'add', '-b', `selene/${id}`, '--', pasta, 'HEAD']);
+    conversa.pastaRepositorio = await realpath(pasta);
+    delete conversa.sessaoAssinatura;
 }

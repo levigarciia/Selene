@@ -37,6 +37,10 @@ test('libera contexto e camadas para ajustar o modelo à VRAM disponível', () =
     expect(visual[visual.indexOf('--fit-target') + 1]).toBe('2048');
     expect(visual[visual.indexOf('-c') + 1]).toBe('4096');
     expect(visual[visual.indexOf('-ngl') + 1]).toBe('auto');
+    const lfm3 = argumentosMemoriaMotor(configuracao, 'vulkan', 0, true, 8192);
+    expect(lfm3[lfm3.indexOf('--fit-ctx') + 1]).toBe('8192');
+    const lfm3Reduzido = argumentosMemoriaMotor(configuracao, 'vulkan', 4096, true, 8192);
+    expect(lfm3Reduzido[lfm3Reduzido.indexOf('--fit-ctx') + 1]).toBe('4096');
     const cpu = argumentosMemoriaMotor(configuracao, 'cpu');
     expect(cpu[cpu.indexOf('-ngl') + 1]).toBe('0');
 });

@@ -11,6 +11,7 @@ import {
 import { catalogoModelos, encontrarModeloLocal, formatarTamanho, type FamiliaModelo } from '../../shared/catalogo';
 import type { Estado, Modelo, PonteSelene } from '../../shared/contratos';
 import { CatalogoAssinaturas } from './CatalogoAssinaturas';
+import { CatalogoChatGpt } from './CatalogoChatGpt';
 import { provedoresApresentacao, provedoresAssinatura } from '../../shared/assinaturas';
 import { nomeExibicaoModelo } from '../../shared/openrouter';
 import type { Executar } from './Configuracoes';
@@ -26,17 +27,20 @@ const familias: { id: FamiliaModelo; nome: string }[] = [
     { id: 'llama', nome: 'Llama' },
     { id: 'gemma', nome: 'Gemma' },
     { id: 'deepseek', nome: 'DeepSeek' },
+    { id: 'liquid', nome: 'Liquid AI' },
 ];
 
-type Aba = 'local' | 'openrouter' | 'inscricoes';
+type Aba = 'local' | 'openrouter' | 'inscricoes' | 'chatgpt';
 const abas: { id: Aba; nome: string }[] = [
     { id: 'local', nome: 'Local' },
     { id: 'openrouter', nome: 'OpenRouter' },
     { id: 'inscricoes', nome: 'Inscrições' },
+    { id: 'chatgpt', nome: 'ChatGPT' },
 ];
 
 /** Abre o catálogo na aba do provedor do modelo atual. */
 function abaDoModelo(modelo?: Modelo): Aba {
+    if (modelo?.chatgptWeb) return 'chatgpt';
     if (modelo?.assinatura) return 'inscricoes';
     if (modelo?.openrouter) return 'openrouter';
     return 'local';
@@ -52,6 +56,7 @@ export function CatalogoModelos({
     definirAberto,
     embutido = false,
     hardware,
+    modo = 'code',
 }: {
     estado: Estado;
     ponte?: PonteSelene;
@@ -62,6 +67,7 @@ export function CatalogoModelos({
     definirAberto: (valor: boolean) => void;
     embutido?: boolean;
     hardware?: HardwareLocal;
+    modo?: 'chat' | 'code';
 }) {
     const idCatalogo = useId();
     const selecionado = estado.modelos.find((modelo) => modelo.id === modeloId);
@@ -94,6 +100,7 @@ export function CatalogoModelos({
         (modelo) =>
             !modelo.openrouter &&
             !modelo.assinatura &&
+            !modelo.chatgptWeb &&
             !catalogoModelos.some((item) => encontrarModeloLocal(item, [modelo])) &&
             modelo.nome.toLocaleLowerCase('pt-BR').includes(termo),
     );
@@ -156,7 +163,7 @@ export function CatalogoModelos({
                     aria-controls={idCatalogo}
                     onClick={() => definirAberto(!aberto)}
                 >
-                    {selecionado?.openrouter ? (
+                    {selecionado?.chatgptWeb ? <IconeModeloRemoto id="openai/" nome="ChatGPT" /> : selecionado?.openrouter ? (
                         <IconeModeloRemoto id={selecionado.openrouter.id} nome={selecionado.nome} />
                     ) : selecionado?.assinatura ? (
                         <IconeModeloRemoto
@@ -338,7 +345,7 @@ export function CatalogoModelos({
                             aria-label="Origem dos modelos"
                             className="flex shrink-0 gap-[2px] mx-[12px] mt-[8px] mb-[2px] rounded-[8px] bg-[#101114] p-[3px]"
                         >
-                            {abas.map((aba) => (
+                            {abas.filter((aba) => aba.id !== 'chatgpt' || modo === 'chat').map((aba) => (
                                 <button
                                     key={aba.id}
                                     type="button"
@@ -367,7 +374,9 @@ export function CatalogoModelos({
                                 'px-0 py-[8px]',
                             ].join(' ')}
                         >
-                            {provedor === 'inscricoes' ? (
+                            {provedor === 'chatgpt' && modo === 'chat' ? (
+                                <CatalogoChatGpt ponte={ponte} executar={executar} selecionar={usar} />
+                            ) : provedor === 'inscricoes' ? (
                                 <CatalogoAssinaturas
                                     estado={estado}
                                     ponte={ponte}

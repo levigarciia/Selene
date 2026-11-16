@@ -37,7 +37,7 @@ await writeFile(
                     tamanho: 0,
                     openrouter: {
                         id: 'teste/modelo',
-                        contexto: 8192,
+                        contexto: 65536,
                         imagens: true,
                         ferramentas: true,
                         raciocinio: true,
@@ -86,7 +86,7 @@ const app = await electron.launch({
     args: ['.'],
     env: ambiente,
 });
-const navegador = await chromium.launch({ channel: 'chrome', headless: true });
+const navegador = await chromium.launch({ headless: true });
 try {
     const desktop = await app.firstWindow();
     desktop.setDefaultTimeout(15000);
@@ -141,8 +141,8 @@ try {
     await desktop.getByRole('button', { name: 'Desativar acesso', exact: true }).waitFor();
     const acesso = await desktop.evaluate(() => window.selene!.acessoWeb());
     assert(acesso.ok);
-    const endereco = acesso.valor.enderecos[0] ?? `http://127.0.0.1:${porta}`;
-    const pagina = await navegador.newPage({ viewport: { width: 414, height: 896 }, isMobile: true, hasTouch: true });
+    const endereco = acesso.valor.enderecos[0] ?? `https://127.0.0.1:${porta}`;
+    const pagina = await navegador.newPage({ ignoreHTTPSErrors: true, viewport: { width: 414, height: 896 }, isMobile: true, hasTouch: true });
     pagina.setDefaultTimeout(15000);
     const erros: string[] = [];
     pagina.on('pageerror', (erro) => erros.push(erro.message));
@@ -157,7 +157,7 @@ try {
     await pagina.getByLabel('Chave de acesso', { exact: true }).fill(acesso.valor.chave);
     await pagina.getByRole('button', { name: 'Entrar', exact: true }).click();
     await pagina.locator('textarea[aria-label="Mensagem"]:visible').waitFor();
-    assert.equal(await pagina.evaluate(() => typeof crypto.randomUUID), 'undefined');
+    assert.equal(await pagina.evaluate(() => typeof crypto.randomUUID), 'function');
     const conversaNova = await pagina.evaluate(() => window.selene!.novaConversa('chat'));
     assert(conversaNova.ok, 'Argumentos opcionais devem continuar opcionais no transporte web.');
     await pagina.getByRole('button', { name: 'Abrir navegação' }).click();
@@ -180,7 +180,7 @@ try {
     });
     await pagina
         .locator('[data-ui~="tela-conversa"]:visible')
-        .getByLabel('Selecionar imagens')
+        .getByLabel('Selecionar anexos')
         .setInputFiles({ name: 'imagem.png', mimeType: 'image/png', buffer: Buffer.from(imagem, 'base64') });
     await pagina.getByRole('button', { name: 'Remover imagem.png', exact: true }).waitFor();
     await pagina.locator('textarea[aria-label="Mensagem"]:visible').fill('Mensagem pelo celular');
@@ -287,31 +287,12 @@ try {
         ).status(),
         401,
     );
-    await desktop.getByLabel('Exigir chave de acesso', { exact: true }).uncheck();
-    await desktop.getByRole('button', { name: 'Aplicar alterações', exact: true }).click();
-    await desktop.getByRole('button', { name: 'Desativar acesso', exact: true }).waitFor();
-    const livre = await navegador.newPage({ viewport: { width: 414, height: 896 }, isMobile: true, hasTouch: true });
-    livre.on('pageerror', (erro) => erros.push(erro.message));
-    await livre.goto(endereco);
-    await livre.locator('textarea[aria-label="Mensagem"]:visible').waitFor();
-    assert.equal(await livre.getByLabel('Chave de acesso', { exact: true }).count(), 0);
-    assert.equal((await livre.request.get(endereco + '/api/sessao')).status(), 200);
-    const novaConversa = livre.getByRole('button', { name: 'Nova conversa', exact: true }).filter({ visible: true });
-    assert.equal(await novaConversa.innerText(), '');
-    assert.equal(await novaConversa.locator('svg').count(), 1);
-    await livre.locator('textarea[aria-label="Mensagem"]:visible').fill('Rascunho anterior');
-    await novaConversa.click();
-    assert.equal(await livre.locator('textarea[aria-label="Mensagem"]:visible').inputValue(), '');
+    assert(await desktop.getByLabel('Exigir chave de acesso', { exact: true }).isDisabled());
     const salvo = JSON.parse(await readFile(resolve(pasta, 'acessoWeb.json'), 'utf8'));
-    assert.equal(salvo.exigirChave, false);
-    await desktop.getByLabel('Exigir chave de acesso', { exact: true }).check();
-    await desktop.getByRole('button', { name: 'Aplicar alterações', exact: true }).click();
-    await livre.getByLabel('Chave de acesso', { exact: true }).waitFor();
-    assert.equal((await livre.request.get(endereco + '/api/sessao')).status(), 401);
-    await livre.close();
+    assert.equal(salvo.exigirChave, true);
     assert.deepEqual(erros, []);
     await desktop.screenshot({ path: 'artifacts/selene-configuracao-acesso-web.png' });
-    console.log('Acesso móvel, Chat, Code, aprovação, anexos, exportação, conexão e chave opcional validados.');
+    console.log('Acesso móvel, Chat, Code, aprovação, anexos, exportação, conexão e HTTPS e chave obrigat?ria validados.');
 } finally {
     await navegador.close();
     await app.close();

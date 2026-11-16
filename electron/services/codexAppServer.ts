@@ -1,5 +1,24 @@
 import { spawn } from 'node:child_process';
-import type { AcoesExternas } from './assinaturas';
+import type { AcoesExternas, McpHarness } from './assinaturas';
+import { encerrarProcesso } from './processos';
+import { StringDecoder } from 'node:string_decoder';
+
+/** Variável de ambiente pela qual o Codex lê o token, mantendo-o fora dos argumentos do processo. */
+const variavelTokenMcp = 'SELENE_MCP_TOKEN';
+
+/**
+ * Configura o servidor MCP da Selene no Codex. O token vai por variável de ambiente, fora dos argumentos; as
+ * ferramentas da Selene dispensam aprovação do Codex porque validam o escopo da execução no próprio servidor.
+ */
+export function argumentosMcp(mcp?: McpHarness): string[] {
+    if (!mcp) return [];
+    return [
+        `mcp_servers.selene.url=${JSON.stringify(mcp.url)}`,
+        `mcp_servers.selene.bearer_token_env_var=${JSON.stringify(variavelTokenMcp)}`,
+        'mcp_servers.selene.default_tools_approval_mode="approve"',
+        'mcp_servers.selene.tool_timeout_sec=3600',
+    ].flatMap((configuracao) => ['-c', configuracao]);
+}
 
 /** Limite de texto reunido de uma única resposta, impedindo que um CLI defeituoso consuma a memória. */
 const limiteResposta = 2 * 1024 ** 2;
@@ -68,6 +87,10 @@ export function apresentarItemCodex(item: Item): { nome: string; argumentos: Rec
     }
 }
 
+function caminhosAlterados(item: Item): string[] {
+    return (item.changes ?? []).flatMap((mudanca) => (mudanca.path ? [mudanca.path] : []));
+}
+
 /** Resultado legível de um item concluído e se ele terminou em erro. */
 function resultadoItem(item: Item): { resultado: string; erro: boolean } {
     switch (item.type) {
@@ -101,14 +124,20 @@ export function responderCodexAppServer(
     acessoCompleto: boolean,
     publicar: (texto: string) => void,
     acoes?: AcoesExternas,
+    mcp?: McpHarness,
+    configuracao: {
+        sessao?: string; aoSessao?: (id: string) => Promise<void>; imagens?: string[];
+    } = {},
 ): Promise<string> {
     if (sinal.aborted) return Promise.reject(new Error('Tarefa interrompida pelo usuário.'));
-    const processo = spawn('codex', ['app-server', '-c', 'web_search="live"'], {
+    const processo = spawn('codex', ['app-server', '-c', 'web_search="live"', ...argumentosMcp(mcp)], {
         cwd: pasta,
         shell: false,
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
+        ...(mcp ? { env: { ...process.env, [variavelTokenMcp]: mcp.token } } : {}),
     });
+    if (mcp) prompt = `[system]\n${mcp.instrucoes}\n\n${prompt}`;
     return new Promise<string>((resolver, rejeitar) => {
         let proximoId = 1;
         const pendentes = new Map<number, { resolver: (valor: unknown) => void; rejeitar: (erro: Error) => void }>();
@@ -119,6 +148,7 @@ export function responderCodexAppServer(
         let tamanho = 0;
         let encerrado = false;
         let erroStderr = '';
+        const decodificador = new StringDecoder('utf8');
 
         const finalizar = (erro?: Error) => {
             if (encerrado) return;
@@ -126,7 +156,7 @@ export function responderCodexAppServer(
             sinal.removeEventListener('abort', abortar);
             pendentes.forEach((item) => item.rejeitar(erro ?? new Error('O Codex encerrou a conexão.')));
             pendentes.clear();
-            processo.kill();
+            encerrarProcesso(processo);
             if (sinal.aborted) return rejeitar(new Error('Tarefa interrompida pelo usuário.'));
             if (erro) return rejeitar(erro);
             if (!texto.trim()) return rejeitar(new Error('O Codex não retornou uma resposta.'));
@@ -177,12 +207,18 @@ export function responderCodexAppServer(
                     case 'item/permissions/requestApproval': {
                         const aprovada = await aprovar(itemId, 'permissoes', {
                             acao: typeof params.reason === 'string' ? params.reason : 'Ampliar as permissões do Codex',
+                            permissoes: params.permissions,
                         });
                         return enviar({
                             id: mensagem.id,
                             result: { permissions: aprovada ? (params.permissions ?? {}) : {}, scope: 'turn' },
                         });
                     }
+                    case 'mcpServer/elicitation/request':
+                        return enviar({
+                            id: mensagem.id,
+                            result: { action: params.serverName === 'selene' ? 'accept' : 'decline', content: {} },
+                        });
                     default:
                         return enviar({
                             id: mensagem.id,
@@ -209,6 +245,8 @@ export function responderCodexAppServer(
                     const item = params.item as Item | undefined;
                     if (!item?.id) return;
                     itens.set(item.id, item);
+                    if (item.type === 'fileChange') caminhosAlterados(item).forEach((caminho) => void acoes?.capturarAntes(caminho));
+                    if (item.type === 'commandExecution') acoes?.capturaParcial();
                     // A busca só informa a consulta ao terminar; ela é registrada em `item/completed`.
                     if (item.type === 'webSearch') return;
                     const apresentada = apresentarItemCodex(item);
@@ -227,6 +265,7 @@ export function responderCodexAppServer(
                         }
                         return;
                     }
+                    if (item.type === 'fileChange') caminhosAlterados(item).forEach((caminho) => void acoes?.capturarDepois(caminho));
                     const apresentada = apresentarItemCodex(item);
                     if (!apresentada) return;
                     acoes?.iniciar(item.id, apresentada.nome, apresentada.argumentos);
@@ -269,7 +308,11 @@ export function responderCodexAppServer(
         };
 
         processo.stdout?.on('data', (parte: Buffer) => {
-            pendente += parte.toString('utf8');
+            pendente += decodificador.write(parte);
+            if (pendente.length > limiteResposta * 2) {
+                finalizar(new Error('O Codex excedeu o limite de mensagem do protocolo.'));
+                return;
+            }
             const linhas = pendente.split('\n');
             pendente = linhas.pop() ?? '';
             linhas.forEach(observar);
@@ -290,17 +333,21 @@ export function responderCodexAppServer(
                 capabilities: { experimentalApi: false, requestAttestation: false },
             });
             enviar({ method: 'initialized' });
-            const inicio = (await pedir('thread/start', {
+            const inicio = (await pedir(configuracao.sessao ? 'thread/resume' : 'thread/start', {
+                ...(configuracao.sessao ? { threadId: configuracao.sessao } : { ephemeral: false }),
                 model: modelo,
                 cwd: pasta,
                 // Mesmo mapeamento do t3code: aprovação pede tudo que não é confiável; acesso completo roda solto.
                 approvalPolicy: acessoCompleto ? 'never' : 'untrusted',
                 sandbox: acessoCompleto ? 'danger-full-access' : 'read-only',
-                ephemeral: true,
             })) as { thread?: { id?: string } };
             const threadId = inicio.thread?.id;
             if (!threadId) throw new Error('O Codex não abriu a conversa.');
-            await pedir('turn/start', { threadId, input: [{ type: 'text', text: prompt, text_elements: [] }] });
+            await configuracao.aoSessao?.(threadId);
+            await pedir('turn/start', { threadId, input: [
+                { type: 'text', text: prompt, text_elements: [] },
+                ...(configuracao.imagens ?? []).map((url) => ({ type: 'image', url })),
+            ] });
         })().catch((erro: unknown) => finalizar(erro instanceof Error ? erro : new Error(String(erro))));
     });
 }

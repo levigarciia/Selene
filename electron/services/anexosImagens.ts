@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { validarAudio } from '../../shared/audio';
 import {
     esquemaEntradaImagem,
     esquemaImagem,
@@ -26,7 +27,7 @@ export class AnexosImagens {
     async preparar(): Promise<void> {
         await mkdir(this.pasta, { recursive: true });
         for (const arquivo of await readdir(this.pasta, { withFileTypes: true })) {
-            if (!arquivo.isFile() || !arquivo.name.endsWith('.jpg')) continue;
+            if (!arquivo.isFile() || !/\.(jpg|wav)$/.test(arquivo.name)) continue;
             const id = arquivo.name.slice(0, -4);
             if (!esquemaImagem.shape.id.safeParse(id).success) continue;
             await this.excluirSemReferencia([id]);
@@ -45,11 +46,13 @@ export class AnexosImagens {
             const validada = esquemaEntradaImagem.parse(entrada);
             const bytes = Buffer.from(validada.dados.split(',')[1], 'base64');
             if (!bytes.length || bytes.length > 10 * 1024 ** 2) throw new Error('A imagem deve ter até 10 MB.');
-            const normalizada = this.normalizar(bytes);
+            const audio = validada.dados.startsWith('data:audio/wav;');
+            if (audio) validarAudio(bytes);
+            const normalizada = audio ? { bytes, largura: undefined, altura: undefined } : this.normalizar(bytes);
             const imagem = esquemaImagem.parse({
                 id: randomUUID(),
                 nome: validada.nome,
-                mime: 'image/jpeg',
+                mime: audio ? 'audio/wav' : 'image/jpeg',
                 tamanho: normalizada.bytes.length,
                 largura: normalizada.largura,
                 altura: normalizada.altura,
@@ -60,16 +63,17 @@ export class AnexosImagens {
         const gravadas: string[] = [];
         try {
             for (const { imagem, bytes } of preparadas) {
-                await writeFile(join(this.pasta, `${imagem.id}.jpg`), bytes, { flag: 'wx' });
+                const extensao = imagem.mime === 'audio/wav' ? 'wav' : 'jpg';
+                await writeFile(join(this.pasta, `${imagem.id}.${extensao}`), bytes, { flag: 'wx' });
                 gravadas.push(imagem.id);
             }
         } catch (erro) {
-            for (const id of gravadas) await rm(join(this.pasta, `${id}.jpg`), { force: true });
+            for (const id of gravadas) await this.excluirArquivos(id);
             throw erro;
         }
         return preparadas.map(({ imagem, bytes }) => {
             this.pendentes.set(imagem.id, imagem);
-            return { ...imagem, previa: `data:image/jpeg;base64,${bytes.toString('base64')}` };
+            return { ...imagem, previa: `data:${imagem.mime};base64,${bytes.toString('base64')}` };
         });
     }
 
@@ -90,9 +94,11 @@ export class AnexosImagens {
     /** Lê uma cópia gerenciada para prévia ou inferência, inclusive depois de reiniciar. */
     async ler(id: string): Promise<string> {
         const [imagem] = this.obter([id]);
-        const bytes = await readFile(join(this.pasta, `${imagem.id}.jpg`));
+        const extensao = imagem.mime === 'audio/wav' ? 'wav' : 'jpg';
+        const bytes = await readFile(join(this.pasta, `${imagem.id}.${extensao}`));
         if (bytes.length !== imagem.tamanho) throw new Error('O anexo foi alterado ou está incompleto.');
-        return `data:image/jpeg;base64,${bytes.toString('base64')}`;
+        if (imagem.mime === 'audio/wav') validarAudio(bytes);
+        return `data:${imagem.mime};base64,${bytes.toString('base64')}`;
     }
 
     /** Remove rascunhos descartados, preservando qualquer imagem usada em uma conversa. */
@@ -102,7 +108,7 @@ export class AnexosImagens {
             const usada = this.conversas().some((conversa) =>
                 conversa.mensagens.some((mensagem) => mensagem.imagens?.some((imagem) => imagem.id === id)),
             );
-            if (!usada) await rm(join(this.pasta, `${id}.jpg`), { force: true });
+            if (!usada) await this.excluirArquivos(id);
             this.pendentes.delete(id);
         }
     }
@@ -115,7 +121,12 @@ export class AnexosImagens {
             const usada = this.conversas().some((conversa) =>
                 conversa.mensagens.some((mensagem) => mensagem.imagens?.some((imagem) => imagem.id === id)),
             );
-            if (!usada) await rm(join(this.pasta, `${id}.jpg`), { force: true });
+            if (!usada) await this.excluirArquivos(id);
         }
+    }
+
+    private async excluirArquivos(id: string): Promise<void> {
+        await Promise.all(['jpg', 'wav'].map((extensao) =>
+            rm(join(this.pasta, `${id}.${extensao}`), { force: true })));
     }
 }

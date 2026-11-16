@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>ChatGPT de teste</title></head>
+<body>
+    <main id="historico"></main>
+    <form data-chatgpt-composer>
+        <div id="prompt-textarea" contenteditable="true" role="textbox" aria-label="Mensagem no site"></div>
+        <button type="button" data-testid="send-button">Enviar</button>
+        <button type="button" data-testid="stop-button" hidden>Parar</button>
+    </form>
+    <script>
+        const historico = document.getElementById('historico');
+        const parada = document.querySelector('[data-testid="stop-button"]');
+        let mensagens = JSON.parse(localStorage.getItem('mensagensTeste') || '[]');
+        let temporizador;
+        window.enviosTeste = 0;
+        window.cancelouTeste = false;
+        function renderizar() {
+            historico.replaceChildren();
+            for (const mensagem of mensagens) {
+                const elemento = document.createElement('div');
+                if (document.documentElement.hasAttribute('data-chatgpt-teste-moderno')) {
+                    if (mensagem.papel === 'user') elemento.dataset.userMessageBubble = 'true';
+                    else {
+                        elemento.dataset.responseBody = mensagem.id;
+                        elemento.dataset.talvtTurnState = parada.hidden ? 'complete' : 'streaming';
+                    }
+                } else {
+                    elemento.dataset.messageAuthorRole = mensagem.papel;
+                    elemento.dataset.messageId = mensagem.id;
+                }
+                const conteudo = document.createElement('div');
+                if (document.documentElement.hasAttribute('data-chatgpt-teste-moderno')) {
+                    if (mensagem.papel === 'user') conteudo.className = 'whitespace-pre-wrap';
+                    else conteudo.dataset.markdownTextStyle = 'assistant-message';
+                } else conteudo.className = 'markdown';
+                conteudo.textContent = mensagem.texto;
+                elemento.append(conteudo);
+                historico.append(elemento);
+            }
+            localStorage.setItem('mensagensTeste', JSON.stringify(mensagens));
+        }
+        if (location.pathname.startsWith('/c/')) setTimeout(renderizar, 2500);
+        else renderizar();
+        document.querySelector('[data-testid="send-button"]').addEventListener('click', () => {
+            const editor = document.querySelector('#prompt-textarea, textarea[data-mobile-composer-prompt]');
+            const texto = (editor instanceof HTMLTextAreaElement ? editor.value : editor.innerText).trim();
+            window.enviosTeste++;
+            window.ultimoTextoTeste = texto;
+            if (texto.includes('sem confirmação')) return;
+            if (editor instanceof HTMLTextAreaElement) editor.value = '';
+            else editor.replaceChildren();
+            if (location.pathname === '/') history.pushState({}, '', '/c/conversa-teste');
+            mensagens.push({ papel: 'user', id: crypto.randomUUID(), texto });
+            const resposta = { papel: 'assistant', id: crypto.randomUUID(), texto: 'Resposta parcial' };
+            mensagens.push(resposta);
+            parada.hidden = false;
+            renderizar();
+            const numero = mensagens.filter((mensagem) => mensagem.papel === 'user').length;
+            temporizador = setTimeout(() => {
+                resposta.texto = 'Resposta de teste ' + numero;
+                parada.hidden = true;
+                renderizar();
+            }, texto.includes('geração longa') ? 60000 : 800);
+        });
+        parada.addEventListener('click', () => {
+            clearTimeout(temporizador);
+            window.cancelouTeste = true;
+            parada.hidden = true;
+            renderizar();
+        });
+    </script>
+</body>
+</html>

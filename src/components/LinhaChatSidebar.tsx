@@ -40,7 +40,8 @@ export function LinhaChatSidebar({
                 data-ui={`item-conversa ${selecionada ? 'selecionado' : ''}`}
                 className={[
                     'flex h-[34px] w-full min-w-0 items-center gap-2 rounded-[7px] border-0',
-                    'text-left text-[13px] font-normal text-principal hover:bg-selecionado',
+                    'text-left text-[13px] text-principal hover:bg-selecionado',
+                    conversa.concluida ? 'font-normal' : 'font-medium',
                     recolhida ? 'justify-center px-2' : permiteOcultar ? 'pl-3 pr-[66px]' : 'pl-3 pr-9',
                     selecionada ? 'bg-selecionado' : 'bg-transparent',
                 ].join(' ')}

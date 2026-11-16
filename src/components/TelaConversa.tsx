@@ -1,23 +1,30 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
     ArrowDownIcon,
     ArrowBendUpRightIcon,
     ArrowUpIcon,
+    CheckIcon,
     BrainIcon,
     QueueIcon,
     MoonIcon,
     LockSimpleIcon,
     LockSimpleOpenIcon,
     PaperclipIcon,
+    MicrophoneIcon,
     StopIcon,
     XIcon,
 } from '@phosphor-icons/react';
 import type { useSelene } from '../hooks/useSelene';
 import { MensagemConversa } from './MensagemConversa';
 import { MenuOpcoesEntrada } from './MenuOpcoesEntrada';
+import { EconomiaTokens } from './EconomiaTokens';
 import { niveisRaciocinio, nomesRaciocinio, resolverNivelRaciocinio } from '../../shared/raciocinio';
 import { CatalogoModelos } from './CatalogoModelos';
+import { ControleChatGpt } from './ControleChatGpt';
 import { useAnexos } from '../hooks/useAnexos';
+import { useGravacaoAudio } from '../hooks/useGravacaoAudio';
+import { modeloAceitaAudio, modeloFalaRespostas } from '../../shared/audio';
+import { useFala } from '../hooks/useFala';
 import { ImagemConversa } from './ImagemConversa';
 import { TarefasConversa } from './TarefasConversa';
 import { SeletorProjeto } from './SeletorProjeto';
@@ -25,6 +32,7 @@ import type { Conversa } from '../../shared/contratos';
 import { rolagemDiscreta } from './rolagemDiscreta';
 import { FilaCode } from './FilaCode';
 import { ComputadorConversa } from './ComputadorConversa';
+import { useTransicaoPrimeiroEnvio } from '../hooks/useTransicaoPrimeiroEnvio';
 
 const chaveUltimoModelo = 'selene.ultimoModelo';
 
@@ -68,32 +76,57 @@ export function TelaConversa({
     const acompanhar = useRef(true);
     const seletorImagens = useRef<HTMLInputElement>(null);
     const [arrastando, definirArrastando] = useState(false);
+    const [edicao, definirEdicao] = useState<{ conversaId: string; mensagemId: string; texto: string } | null>(null);
+    const campoMensagem = useRef<HTMLTextAreaElement>(null);
     const conversa = estado.conversas.find((item) => item.id === ativa);
+    const editando = edicao?.conversaId === ativa ? edicao : null;
+    const texto = editando?.texto ?? conversa?.rascunho ?? '';
+    useEffect(() => definirEdicao(null), [ativa]);
+    const modo = conversa?.modo ?? modoInicial;
+    const filhaEmExecucao = !!conversa && !!estado.subagentesEmExecucao?.includes(conversa.id);
+    const ocupado = !!estado.conversaEmExecucao || filhaEmExecucao || enviando || selecionandoProjeto;
+    const codeEmExecucao = modo === 'code' && !!conversa && estado.conversaEmExecucao === conversa.id;
+    const inicial = !conversa?.mensagens.length;
+    const tela = useTransicaoPrimeiroEnvio(inicial, conversa?.id ?? null);
+    useLayoutEffect(() => {
+        if (!visivel || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const elemento = tela.current;
+        if (!elemento) return;
+        const temporizacao = { duration: 320, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' };
+        const animacoes: Animation[] = [];
+        for (const item of elemento.querySelectorAll('[data-ui="opcoes-code"]')) {
+            animacoes.push(item.animate([
+                { opacity: 0, transform: modo === 'code' ? 'translateX(-16px)' : 'translateX(0)' },
+                { opacity: 1, transform: 'translateX(0)' },
+            ], { ...temporizacao, delay: 60, fill: 'backwards' }));
+        }
+        return () => animacoes.forEach((animacao) => animacao.cancel());
+    }, [visivel, tela, modo]);
+    const ultimoModeloId = lerUltimoModelo();
+    const modeloId =
+        conversa?.modeloId ??
+        estado.modelos.find((item) => item.id === ultimoModeloId && (!item.chatgptWeb || modo === 'chat'))?.id ??
+        estado.motor.modeloId ??
+        estado.modelos.find((item) => !item.chatgptWeb || modo === 'chat')?.id ??
+        '';
+    const modelo = estado.modelos.find((item) => item.id === modeloId);
     const anexos = useAnexos(ativa, ponte, dados.definirErro, (quantidade) => {
         if (conversa && quantidade !== (conversa.anexosRascunho ?? 0)) {
             dados.alterarRascunho(conversa, { anexosRascunho: quantidade });
         }
-    });
-    const texto = conversa?.rascunho ?? '';
-    const modo = conversa?.modo ?? modoInicial;
-    const ocupado = !!estado.conversaEmExecucao || enviando || selecionandoProjeto;
-    const codeEmExecucao = modo === 'code' && !!conversa && estado.conversaEmExecucao === conversa.id;
-    const inicial = !conversa?.mensagens.length;
-    const ultimoModeloId = lerUltimoModelo();
-    const modeloId =
-        conversa?.modeloId ??
-        estado.modelos.find((item) => item.id === ultimoModeloId)?.id ??
-        estado.motor.modeloId ??
-        estado.modelos[0]?.id ??
-        '';
-    const modelo = estado.modelos.find((item) => item.id === modeloId);
-    const niveis = modelo?.assinatura ? [] : niveisRaciocinio(modelo);
+    }, modeloAceitaAudio(modelo));
+    const gravacao = useGravacaoAudio(`${ativa}:${modeloId}:${visivel}`, anexos.anexar, dados.definirErro);
+    const niveis = modelo?.assinatura || modelo?.chatgptWeb ? [] : niveisRaciocinio(modelo);
     const nivel = resolverNivelRaciocinio(modelo, conversa?.nivelRaciocinio);
     const motorOcupado = ['carregando', 'instalando'].includes(estado.motor.fase);
     const ultimaResposta = conversa?.mensagens
         .slice()
         .reverse()
         .find((mensagem) => mensagem.papel === 'assistant');
+    const fala = useFala(ponte, dados.definirErro);
+    const podeFalar = modeloFalaRespostas(modelo) && estado.motor.modeloId === modeloId && !!estado.motor.suportaFala;
+    const emExecucaoAqui = !!conversa && estado.conversaEmExecucao === conversa.id;
+    const execucaoAnterior = useRef(emExecucaoAqui);
     const ultimaMensagemNavegador = conversa?.mensagens
         .slice()
         .reverse()
@@ -102,7 +135,17 @@ export function TelaConversa({
     useEffect(() => {
         definirCatalogoAberto(false);
         acompanhar.current = true;
-    }, [ativa]);
+        fala.parar();
+    }, [ativa, fala.parar]);
+
+    useEffect(() => {
+        const concluiu = execucaoAnterior.current && !emExecucaoAqui;
+        execucaoAnterior.current = emExecucaoAqui;
+        if (!concluiu || !podeFalar || !visivel || ultimaResposta?.estado === 'erro') return;
+        const pedido = conversa?.mensagens.slice().reverse().find((mensagem) => mensagem.papel === 'user');
+        const pedidoFalado = pedido?.imagens?.some((anexo) => anexo.mime === 'audio/wav');
+        if (pedidoFalado && ultimaResposta?.texto.trim()) void fala.falar(ultimaResposta.id, ultimaResposta.texto);
+    }, [emExecucaoAqui]);
 
     useEffect(() => {
         if (!visivel) {
@@ -124,6 +167,13 @@ export function TelaConversa({
     }
 
     async function enviar(tipo: 'fila' | 'direcao' = 'direcao') {
+        if (gravacao.ocupada) return;
+        if (editando) {
+            const mensagem = conversa?.mensagens.find((item) => item.id === editando.mensagemId);
+            if (!texto.trim() && !mensagem?.imagens?.length) return;
+            if (await reenviar(editando.mensagemId, texto)) definirEdicao(null);
+            return;
+        }
         if (codeEmExecucao) {
             if (!texto.trim() || enviando || anexos.importando || anexos.imagens.length || !ultimaResposta) return;
             definirEnviando(true);
@@ -138,7 +188,8 @@ export function TelaConversa({
             }
             return;
         }
-        if ((!texto.trim() && !anexos.imagens.length) || ocupado || motorOcupado || anexos.importando) return;
+        if ((!texto.trim() && !anexos.imagens.length) || ocupado || motorOcupado || anexos.importando ||
+            gravacao.ocupada) return;
         definirEnviando(true);
         try {
             const atual = await obterConversa();
@@ -221,6 +272,10 @@ export function TelaConversa({
     }
 
     function definirTexto(texto: string) {
+        if (editando) {
+            definirEdicao({ ...editando, texto });
+            return;
+        }
         const atual = conversa ?? dados.criarRascunho(modo);
         dados.alterarRascunho(atual, { rascunho: texto });
         selecionar(atual.id);
@@ -233,6 +288,7 @@ export function TelaConversa({
     return (
         <div
             data-ui={`tela-conversa ${inicial ? 'tela-inicial' : ''}`}
+            ref={tela}
             className={[
                 'flex flex-col flex-1 min-w-0 min-h-0',
                 rolagemDiscreta,
@@ -270,6 +326,7 @@ export function TelaConversa({
                             '[&_>_p]:text-[13px] [&_>_p]:text-center',
                         ].join(' ')}
                     >
+                        <div data-ui="hero-conversa" className="flex flex-col items-center">
                         <MoonIcon
                             size={38}
                             weight="thin"
@@ -279,7 +336,13 @@ export function TelaConversa({
                         <h1 className="text-[29px] leading-[1.3] font-[450] tracking-[-0.7px] mt-0 mb-[13px] mx-0">
                             {modo === 'chat' ? 'O que vamos explorar?' : 'Em que vamos trabalhar?'}
                         </h1>
-                        {modo === 'chat' ? <p>Tudo no seu computador.</p> : seletorProjeto}
+                        </div>
+                        <div data-ui="detalhe-hero" className="flex h-10 items-center justify-center text-[13px]">
+                            {modo === 'chat' ? <p className="m-0 text-secundario">{modelo?.chatgptWeb
+                                ? 'Converse com sua conta do ChatGPT.' : modelo?.openrouter || modelo?.assinatura
+                                    ? 'Converse com o modelo selecionado.' : 'Tudo no seu computador.'}</p>
+                                : seletorProjeto}
+                        </div>
                         {estado.modelos.length === 0 && (
                             <button
                                 data-ui="botao mt-6"
@@ -305,19 +368,34 @@ export function TelaConversa({
                             <MensagemConversa
                                 key={mensagem.id}
                                 mensagem={mensagem}
+                                enviarOpenUI={!ocupado && !motorOcupado && ponte ? (conteudo) => {
+                                    void executar(() => ponte.enviar(conversa.id, conteudo, []));
+                                } : undefined}
+                                conversaId={conversa?.id}
                                 previaNavegador={
                                     mensagem === ultimaMensagemNavegador
                                         ? dados.previasNavegador[conversa.id]
                                         : undefined
                                 }
-                                emExecucao={estado.conversaEmExecucao === conversa.id && mensagem === ultimaResposta}
+                                emExecucao={
+                                    (estado.conversaEmExecucao === conversa.id || filhaEmExecucao) &&
+                                    mensagem === ultimaResposta
+                                }
                                 modo={modo}
                                 ponte={ponte}
                                 executar={executar}
-                                reenviar={modo === 'chat' && ponte ? reenviar : undefined}
+                                reenviar={modo === 'chat' && !modelo?.chatgptWeb && ponte ? (mensagemId, texto) => {
+                                    definirEdicao({ conversaId: conversa.id, mensagemId, texto });
+                                    campoMensagem.current?.focus();
+                                } : undefined}
+                                editando={editando?.mensagemId === mensagem.id}
+                                cancelarEdicao={() => definirEdicao(null)}
                                 edicaoDesativada={ocupado || motorOcupado || anexos.importando}
+                                falando={fala.mensagemFalando === mensagem.id}
+                                alternarFala={podeFalar ? fala.alternar : undefined}
                                 regerar={
                                     modo === 'chat' &&
+                                    !modelo?.chatgptWeb &&
                                     ponte &&
                                     conversa.mensagens.slice(0, indice).some((item) => item.papel === 'user')
                                         ? regerar
@@ -395,7 +473,7 @@ export function TelaConversa({
                     onDragOver={(evento) => {
                         if (!evento.dataTransfer.types.includes('Files')) return;
                         evento.preventDefault();
-                        if (!ocupado && !anexos.importando) definirArrastando(true);
+                        if (!editando && !ocupado && !anexos.importando) definirArrastando(true);
                     }}
                     onDragLeave={(evento) => {
                         if (!evento.currentTarget.contains(evento.relatedTarget as Node)) definirArrastando(false);
@@ -403,7 +481,9 @@ export function TelaConversa({
                     onDrop={(evento) => {
                         evento.preventDefault();
                         definirArrastando(false);
-                        if (!ocupado && !anexos.importando) void anexos.anexar(Array.from(evento.dataTransfer.files));
+                        if (!editando && !ocupado && !anexos.importando) {
+                            void anexos.anexar(Array.from(evento.dataTransfer.files));
+                        }
                     }}
                     onSubmit={(evento) => {
                         evento.preventDefault();
@@ -415,14 +495,15 @@ export function TelaConversa({
                         type="file"
                         hidden
                         multiple
-                        accept="image/png,image/jpeg,image/webp"
-                        aria-label="Selecionar imagens"
+                        accept={modeloAceitaAudio(modelo) ? 'image/png,image/jpeg,image/webp,audio/*' :
+                            'image/png,image/jpeg,image/webp'}
+                        aria-label="Selecionar anexos"
                         onChange={(evento) => {
                             void anexos.anexar(Array.from(evento.target.files ?? []));
                             evento.target.value = '';
                         }}
                     />
-                    {!!anexos.imagens.length && (
+                    {!editando && !!anexos.imagens.length && (
                         <div
                             data-ui="anexos-entrada"
                             className="flex flex-wrap gap-[10px] mb-[12px] pt-[14px] pb-0 px-[16px]"
@@ -451,6 +532,7 @@ export function TelaConversa({
                         </div>
                     )}
                     <textarea
+                        ref={campoMensagem}
                         aria-label="Mensagem"
                         placeholder={modo === 'code' ? 'Descreva o que você quer fazer' : 'Escreva sua mensagem'}
                         rows={3}
@@ -461,11 +543,12 @@ export function TelaConversa({
                             const arquivos = Array.from(evento.clipboardData.files);
                             if (!arquivos.length) return;
                             evento.preventDefault();
-                            if (!ocupado && !anexos.importando) void anexos.anexar(arquivos);
+                            if (!editando && !ocupado && !anexos.importando) void anexos.anexar(arquivos);
                         }}
                         onKeyUp={(evento) => definirCtrlPressionado(evento.ctrlKey || evento.metaKey)}
                         onBlur={() => definirCtrlPressionado(false)}
                         onKeyDown={(evento) => {
+                            if (evento.key === 'Escape' && editando && !ocupado) definirEdicao(null);
                             definirCtrlPressionado(evento.ctrlKey || evento.metaKey);
                             if (evento.key === 'Enter' && !evento.shiftKey && !evento.nativeEvent.isComposing) {
                                 evento.preventDefault();
@@ -486,6 +569,7 @@ export function TelaConversa({
                         ].join(' ')}
                     >
                         <CatalogoModelos
+                            modo={modo}
                             estado={estado}
                             ponte={ponte}
                             executar={executar}
@@ -494,6 +578,10 @@ export function TelaConversa({
                             definirAberto={definirCatalogoAberto}
                             selecionar={(id) => alterarOpcoes({ modeloId: id })}
                         />
+                        {modelo?.chatgptWeb && <ControleChatGpt conversa={conversa}
+                            emExecucao={emExecucaoAqui}
+                            persistida={dados.estadoPersistido.conversas.some((item) => item.id === conversa?.id)}
+                            ponte={ponte} executar={executar} />}
                         {!!niveis.length && (
                             <MenuOpcoesEntrada
                                 key={`raciocinio-${ativa}-${modeloId}`}
@@ -511,6 +599,7 @@ export function TelaConversa({
                             />
                         )}
                         {modo === 'code' && (
+                            <div data-ui="opcoes-code" className="flex shrink-0 items-center gap-[10px]">
                             <MenuOpcoesEntrada
                                 key={`permissao-${ativa}`}
                                 rotulo="Permissão da conversa"
@@ -528,7 +617,8 @@ export function TelaConversa({
                                     {
                                         valor: 'aprovacao',
                                         nome: 'Pedir aprovação',
-                                        descricao: 'Leituras no projeto. Escritas e comandos pedem aprovação.',
+                                        descricao: 'Arquivos no projeto. Escritas pedem aprovação. '
+                                            + 'Comandos aprovados podem acessar todo o computador.',
                                     },
                                     {
                                         valor: 'completo',
@@ -539,6 +629,14 @@ export function TelaConversa({
                                 ]}
                                 alterar={(valor) => alterarOpcoes({ acessoCompleto: valor === 'completo' })}
                             />
+                        <EconomiaTokens
+                            key={`economia-${ativa}`}
+                            economia={conversa?.economiaTokens}
+                            rtkDisponivel={!!estado.rtkDisponivel}
+                            desativado={ocupado}
+                            alterar={(economiaTokens) => alterarOpcoes({ economiaTokens })}
+                        />
+                            </div>
                         )}
                         <div className="flex-1" />
                         {anexos.importando && (
@@ -555,7 +653,7 @@ export function TelaConversa({
                                 ].join(' ')}
                                 role="status"
                             >
-                                Preparando imagens
+                                Preparando anexos
                             </span>
                         )}
                         {conversa?.mensagens.at(-1)?.usoContexto && (
@@ -590,13 +688,34 @@ export function TelaConversa({
                                 "[[data-ui~=rodape-sidebar]_&[aria-current='page']]:text-[#b5a2dc]",
                                 '[@media(width<=760px)]:[[data-ui~=sidebar]_[data-ui~=marca]_&]:hidden',
                             ].join(' ')}
-                            aria-label="Anexar imagens"
-                            title="Anexar imagens"
-                            disabled={ocupado || anexos.importando || anexos.imagens.length >= 4}
+                            aria-label="Anexar arquivos"
+                            title={modelo?.chatgptWeb ? 'Envie anexos pela janela do ChatGPT'
+                                : modeloAceitaAudio(modelo) ? 'Anexar imagens ou áudio' : 'Anexar imagens'}
+                            disabled={!!modelo?.chatgptWeb || !!editando || ocupado || anexos.importando || gravacao.ocupada ||
+                                anexos.imagens.length >= 4}
                             onClick={() => seletorImagens.current?.click()}
                         >
                             <PaperclipIcon size={18} />
                         </button>
+                        {modeloAceitaAudio(modelo) && (
+                            <button type="button" data-ui="gravar-audio"
+                                aria-label={gravacao.estado === 'gravando' ? 'Concluir gravação' : 'Gravar áudio'}
+                                title={gravacao.estado === 'gravando' ? 'Concluir gravação' : 'Gravar áudio'}
+                                disabled={!!editando || ocupado || anexos.importando || anexos.imagens.length >= 4 ||
+                                    ['solicitando', 'preparando'].includes(gravacao.estado)}
+                                onClick={() => gravacao.estado === 'gravando'
+                                    ? gravacao.concluir() : void gravacao.iniciar()}
+                                className={`flex items-center gap-[6px] shrink-0 border-0 bg-transparent p-[4px]
+                                    ${gravacao.estado === 'gravando' ? 'text-red-400' : 'text-secundario'}`}
+                            >
+                                {gravacao.estado === 'gravando' ? <StopIcon size={18} /> :
+                                    <MicrophoneIcon size={18} />}
+                                {gravacao.estado === 'gravando' && <span className="text-[12px] tabular-nums">
+                                    {Math.floor(gravacao.segundos / 60)}:
+                                    {String(gravacao.segundos % 60).padStart(2, '0')}
+                                </span>}
+                            </button>
+                        )}
                         {codeEmExecucao && texto.trim() ? (
                             <button
                                 data-ui="botao-enviar"
@@ -617,7 +736,7 @@ export function TelaConversa({
                                     <QueueIcon size={20} weight="bold" />
                                 )}
                             </button>
-                        ) : estado.conversaEmExecucao || enviando || motorOcupado ? (
+                        ) : estado.conversaEmExecucao || filhaEmExecucao || enviando || motorOcupado ? (
                             <button
                                 data-ui="botao-enviar botao-interromper"
                                 className={[
@@ -644,15 +763,19 @@ export function TelaConversa({
                                     'shrink-0 border-0 border-solid border-current',
                                 ].join(' ')}
                                 type="submit"
-                                aria-label="Enviar mensagem"
+                                aria-label={editando ? 'Salvar e reenviar mensagem' : 'Enviar mensagem'}
                                 disabled={
-                                    (!texto.trim() && !anexos.imagens.length) ||
+                                    (!texto.trim() && !(editando
+                                        ? conversa?.mensagens.find((item) => item.id === editando.mensagemId)?.imagens?.length
+                                        : anexos.imagens.length)) ||
                                     !modeloId ||
                                     anexos.importando ||
+                                    gravacao.ocupada ||
                                     selecionandoProjeto
                                 }
                             >
-                                <ArrowUpIcon size={20} weight="bold" />
+                                {editando ? <CheckIcon size={20} weight="bold" /> :
+                                    <ArrowUpIcon size={20} weight="bold" />}
                             </button>
                         )}
                     </div>

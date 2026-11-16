@@ -1,6 +1,13 @@
 import { formatarCusto } from '../../shared/openrouter';
 import { TextoAtividade } from './TextoAtividade';
-import { ArrowsClockwiseIcon, CaretRightIcon, InfoIcon, PencilSimpleIcon } from '@phosphor-icons/react';
+import {
+    ArrowsClockwiseIcon,
+    CaretRightIcon,
+    InfoIcon,
+    PencilSimpleIcon,
+    SpeakerHighIcon,
+    StopIcon,
+} from '@phosphor-icons/react';
 import { lazy, memo, Suspense, useState } from 'react';
 import type { Mensagem, PonteSelene } from '../../shared/contratos';
 import { agruparAtividade, obterResumoTrabalho } from '../../shared/atividade';
@@ -8,13 +15,26 @@ import { GrupoAcoesConversa } from './GrupoAcoesConversa';
 import type { Executar } from './Configuracoes';
 import { AcaoConversa } from './AcaoConversa';
 import { ImagemConversa } from './ImagemConversa';
-import { EditorMensagem } from './EditorMensagem';
 import { NavegadorConversa } from './NavegadorConversa';
 import type { PreviaNavegador } from '../../shared/web';
+import { AlteracoesTurno } from './AlteracoesTurno';
+import { RestaurarTurno } from './RestaurarTurno';
+
+const InterfaceOpenUI = lazy(() => import('./InterfaceOpenUI'));
 
 const TextoMarkdown = lazy(() => import('./TextoMarkdown'));
 
-function Texto({ texto }: { texto: string }) {
+function Texto({ texto, openui = false, gerando = false, enviar }: {
+    texto: string; openui?: boolean; gerando?: boolean; enviar?: (texto: string) => void;
+}) {
+    if (openui && texto.includes('```openui')) {
+        const partes = texto.split(/```openui\s*([\s\S]*?)(?:```|$)/g);
+        return <>{partes.map((parte, indice) => indice % 2
+            ? <Suspense key={indice} fallback={<pre>{parte}</pre>}>
+                <InterfaceOpenUI codigo={parte} gerando={gerando && indice === partes.length - 2} enviar={enviar} />
+            </Suspense>
+            : <Texto key={indice} texto={parte} />)}</>;
+    }
     if (!texto.trim()) return null;
     return (
         <div
@@ -61,33 +81,46 @@ function Texto({ texto }: { texto: string }) {
 /** Apresenta o texto e recolhe sequências concluídas na ordem real da conversa. */
 export const MensagemConversa = memo(function MensagemConversa({
     mensagem,
+    conversaId,
     modo = 'chat',
     emExecucao = false,
     ponte,
     executar,
     reenviar,
+    editando = false,
+    cancelarEdicao,
     regerar,
     edicaoDesativada = false,
     previaNavegador,
+    falando = false,
+    alternarFala,
+    enviarOpenUI,
 }: {
+    enviarOpenUI?: (texto: string) => void;
     mensagem: Mensagem;
+    conversaId?: string;
     modo?: 'chat' | 'code';
     emExecucao?: boolean;
     ponte?: PonteSelene;
     executar: Executar;
-    reenviar?: (mensagemId: string, texto: string) => Promise<boolean>;
+    reenviar?: (mensagemId: string, texto: string) => void;
+    editando?: boolean;
+    cancelarEdicao?: () => void;
     regerar?: (mensagemId: string) => Promise<void>;
     edicaoDesativada?: boolean;
     previaNavegador?: PreviaNavegador;
+    falando?: boolean;
+    alternarFala?: (mensagemId: string, texto: string) => void;
 }) {
     const [mostrarTokens, definirMostrarTokens] = useState(false);
-    const [editando, definirEditando] = useState(false);
     const tokens = mensagem.desempenho?.tokensPorSegundo;
     const gerando = emExecucao && mensagem.estado === 'gerando' && !mensagem.concluidoEm;
     const resumo = modo === 'code' ? obterResumoTrabalho(mensagem) : null;
+    const podeOuvir = !!alternarFala && mensagem.papel === 'assistant' && !gerando && !!mensagem.texto.trim();
     const atividade = (resumo?.atividade ?? agruparAtividade(mensagem)).map((bloco, indice) =>
         bloco.tipo === 'texto' ? (
-            <Texto key={`texto-${indice}`} texto={bloco.texto} />
+            <Texto key={`texto-${indice}`} texto={bloco.texto} openui={mensagem.papel === 'assistant'}
+                gerando={gerando} enviar={enviarOpenUI} />
         ) : bloco.tipo === 'grupo' ? (
             <GrupoAcoesConversa
                 key={`grupo-${bloco.acoes[0]!.id}`}
@@ -117,7 +150,10 @@ export const MensagemConversa = memo(function MensagemConversa({
             id={`mensagem-${mensagem.id}`}
             data-ui={`mensagem ${mensagem.papel === 'user' ? 'mensagem-usuario usuario-direita' : ''}`}
             className={[
-                'mb-[35px] text-[14px] leading-[1.8]',
+                'group/mensagem mb-[35px] text-[14px] leading-[1.8]',
+                'transition-opacity duration-150 ease-out starting:opacity-0 motion-reduce:transition-none',
+                editando ? '[&_[data-ui~=markdown]]:outline [&_[data-ui~=markdown]]:outline-dashed' : '',
+                editando ? '[&_[data-ui~=markdown]]:outline-[#7772bc] [&_[data-ui~=markdown]]:bg-transparent!' : '',
                 mensagem.papel === 'user'
                     ? ['[&&]:flex', '[&&]:flex-col', '[&&]:items-end', '[&&]:gap-[8px]'].join(' ')
                     : '',
@@ -137,7 +173,7 @@ export const MensagemConversa = memo(function MensagemConversa({
             <div
                 data-ui="conteudo"
                 className={[
-                    'relative group/mensagem',
+                    'relative',
                     '[[data-ui~=usuario-direita]_&]:flex',
                     '[[data-ui~=usuario-direita]_&]:flex-col',
                     '[[data-ui~=usuario-direita]_&]:gap-[12px]',
@@ -186,16 +222,7 @@ export const MensagemConversa = memo(function MensagemConversa({
                         <Texto texto={mensagem.raciocinio} />
                     </details>
                 )}
-                {editando && reenviar && modo === 'chat' && mensagem.papel === 'user' ? (
-                    <EditorMensagem
-                        texto={mensagem.texto}
-                        possuiImagens={!!mensagem.imagens?.length}
-                        ocupado={edicaoDesativada}
-                        cancelar={() => definirEditando(false)}
-                        reenviar={(texto) => reenviar(mensagem.id, texto)}
-                    />
-                ) : (
-                    <div data-ui="atividade-tarefa" className="">
+                <div data-ui="atividade-tarefa">
                         {resumo ? (
                             <>
                                 <details data-ui="resumo-trabalho" className="mb-[14px] text-secundario group/trabalho">
@@ -208,12 +235,18 @@ export const MensagemConversa = memo(function MensagemConversa({
                                         {atividade}
                                     </div>
                                 </details>
-                                <Texto texto={resumo.textoFinal} />
+                                <Texto texto={resumo.textoFinal} openui gerando={gerando} enviar={enviarOpenUI} />
                             </>
                         ) : (
                             atividade
                         )}
                         {painelNavegador}
+                </div>
+                {editando && (
+                    <div className="flex items-center justify-end gap-3 text-[11px] text-secundario">
+                        <span>Editando no campo de mensagem</span>
+                        <button type="button" onClick={cancelarEdicao} disabled={edicaoDesativada}
+                            className="font-medium text-principal hover:underline">Cancelar</button>
                     </div>
                 )}
                 {modo === 'chat' && mensagem.papel === 'user' && reenviar && !editando && (
@@ -223,9 +256,10 @@ export const MensagemConversa = memo(function MensagemConversa({
                         aria-label="Editar e reenviar mensagem"
                         title="Editar e reenviar mensagem"
                         disabled={edicaoDesativada}
-                        onClick={() => definirEditando(true)}
+                        onClick={() => reenviar(mensagem.id, mensagem.texto)}
                         className={[
-                            'absolute top-full right-0 grid place-items-center rounded-[6px] size-[24px]',
+                            'absolute top-full right-0 z-10 grid place-items-center rounded-[6px] size-[24px]',
+                            'transition-opacity duration-200 motion-reduce:transition-none',
                             'opacity-0 pointer-events-none group-hover/mensagem:opacity-100',
                             'group-hover/mensagem:pointer-events-auto focus-visible:opacity-100',
                             'focus-visible:pointer-events-auto text-secundario hover:text-principal hover:bg-hover',
@@ -308,6 +342,24 @@ export const MensagemConversa = memo(function MensagemConversa({
                             ···
                         </span>
                     )}
+                {mensagem.alteracoes && conversaId && !gerando && (
+                    <AlteracoesTurno
+                        alteracoes={mensagem.alteracoes}
+                        conversaId={conversaId}
+                        mensagemId={mensagem.id}
+                        ponte={ponte}
+                        executar={executar}
+                    />
+                )}
+                {mensagem.checkpoint && conversaId && ponte && !gerando && (
+                    <RestaurarTurno conversaId={conversaId} mensagemId={mensagem.id} ponte={ponte} executar={executar} />
+                )}
+                {mensagem.checkpointRestaurado && (
+                    <p className="text-xs text-secundario mt-2">Arquivos restaurados.</p>
+                )}
+                {mensagem.avisoCheckpoint && (
+                    <p className="text-xs text-secundario mt-2">Recuperação de arquivos: {mensagem.avisoCheckpoint}</p>
+                )}
                 {mensagem.estado === 'interrompida' && (
                     <span
                         data-ui="texto-secundario"
@@ -339,7 +391,8 @@ export const MensagemConversa = memo(function MensagemConversa({
                     </span>
                 )}
                 {mensagem.papel === 'assistant' &&
-                    (!!tokens || mensagem.provedor === 'openrouter' || (modo === 'chat' && regerar && !gerando)) && (
+                    (!!tokens || mensagem.provedor === 'openrouter' || podeOuvir ||
+                        (modo === 'chat' && regerar && !gerando)) && (
                         <div
                             data-ui="velocidade-mensagem"
                             className={[
@@ -393,6 +446,21 @@ export const MensagemConversa = memo(function MensagemConversa({
                                     ].join(' ')}
                                 >
                                     <ArrowsClockwiseIcon size={14} />
+                                </button>
+                            )}
+                            {podeOuvir && (
+                                <button
+                                    type="button"
+                                    aria-label={falando ? 'Parar leitura' : 'Ouvir resposta'}
+                                    title={falando ? 'Parar leitura' : 'Ouvir resposta'}
+                                    aria-pressed={falando}
+                                    onClick={() => alternarFala!(mensagem.id, mensagem.texto)}
+                                    className={[
+                                        'inline-flex items-center justify-center rounded-[6px] p-[8px] text-secundario',
+                                        'hover:text-principal hover:bg-hover aria-pressed:text-[#b5a2dc]',
+                                    ].join(' ')}
+                                >
+                                    {falando ? <StopIcon size={14} /> : <SpeakerHighIcon size={14} />}
                                 </button>
                             )}
                             {mostrarTokens && mensagem.provedor === 'openrouter' && (

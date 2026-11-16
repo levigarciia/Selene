@@ -4,6 +4,7 @@ import { Aplicativo } from './Aplicativo';
 import { AcessoNavegador } from './components/AcessoNavegador';
 import { EfeitoComputador } from './components/EfeitoComputador';
 import './tailwind.css';
+import '@fontsource-variable/inter';
 
 const raiz = document.getElementById('root');
 if (!raiz) throw new Error('A raiz da interface não foi encontrada.');

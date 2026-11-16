@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { setTimeout as esperar } from 'node:timers/promises';
-import { esquemaBackend, type PonteSelene } from '../shared/contratos';
+import { esquemaBackend, esquemaDados, type PonteSelene } from '../shared/contratos';
 import { validarCatalogo, validarDownloadReal } from './validarCatalogo';
 import { validarNavegacao } from './validarNavegacao';
 import { pidMotor, validarSalvamento } from './validarSalvamento';
@@ -14,6 +14,21 @@ const raiz = resolve('.teste-dados');
 await mkdir(raiz, { recursive: true });
 await mkdir('artifacts', { recursive: true });
 const dados = await mkdtemp(resolve(raiz, 'desktop-'));
+await writeFile(resolve(dados, 'selene.json'), JSON.stringify(esquemaDados.parse({
+    versao: 1, configuracao: {}, modelos: [], conversas: [{
+        id: randomUUID(), titulo: 'Conversa de teste', modo: 'code', acessoCompleto: true,
+        atualizadoEm: new Date().toISOString(), mensagens: [{
+            id: randomUUID(), papel: 'assistant', texto: 'Contexto de teste', estado: 'concluida',
+            criadoEm: new Date().toISOString(),
+        }],
+    }, {
+        id: randomUUID(), titulo: 'Conversa para menu de contexto', modo: 'code',
+        atualizadoEm: new Date().toISOString(), mensagens: [{
+            id: randomUUID(), papel: 'assistant', texto: 'Contexto do menu', estado: 'concluida',
+            criadoEm: new Date().toISOString(),
+        }],
+    }],
+})));
 if (process.env.SELENE_TESTE_RUNTIME) {
     await symlink(resolve(process.env.SELENE_TESTE_RUNTIME), resolve(dados, 'runtime'), 'junction');
 }
@@ -64,6 +79,7 @@ try {
         return resultado.valor.conversas[0].id;
     });
     const titulo = 'Conversa persistida no desktop';
+    await pagina.getByRole('button', { name: 'Conversa de teste', exact: true }).click();
     await pagina.getByRole('textbox', { name: 'Título da conversa' }).fill(titulo);
     await pagina.getByRole('textbox', { name: 'Título da conversa' }).press('Enter');
     await pagina.getByRole('button', { name: titulo, exact: true }).waitFor();
@@ -101,9 +117,10 @@ try {
     await pagina.getByRole('button', { name: 'Code', exact: true }).click();
     await pagina.getByRole('button', { name: titulo, exact: true }).click();
     await pagina.getByText('Resposta salva com velocidade de geração', { exact: true }).waitFor();
-    await pagina.getByRole('button', { name: 'Mostrar tokens por segundo', exact: true }).click();
+    await pagina.getByText('Resposta salva com velocidade de geração', { exact: true }).hover();
+    await pagina.getByRole('button', { name: 'Mostrar informações da resposta', exact: true }).click();
     await pagina.getByRole('tooltip').getByText('55 tokens/s', { exact: true }).waitFor();
-    await pagina.getByRole('button', { name: 'Esconder tokens por segundo', exact: true }).click();
+    await pagina.getByRole('button', { name: 'Esconder informações da resposta', exact: true }).click();
     await pagina.getByRole('tooltip').waitFor({ state: 'hidden' });
     await pagina.waitForFunction(
         () => document.querySelector('[aria-label="Permissão da conversa"]')?.textContent === 'Acesso completo',

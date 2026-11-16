@@ -2,7 +2,17 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { XIcon } from '@phosphor-icons/react';
 
 /** Exibe um diálogo com foco contido e fechamento pelo teclado. */
-export function Modal({ titulo, fechar, children }: { titulo: string; fechar: () => void; children: ReactNode }) {
+export function Modal({
+    titulo,
+    fechar,
+    children,
+    amplo = false,
+}: {
+    titulo: string;
+    fechar: () => void;
+    children: ReactNode;
+    amplo?: boolean;
+}) {
     const referencia = useRef<HTMLDialogElement>(null);
     const tituloId = useId();
     useEffect(() => {
@@ -15,7 +25,8 @@ export function Modal({ titulo, fechar, children }: { titulo: string; fechar: ()
             ref={referencia}
             data-ui="modal"
             className={[
-                'bg-superficie text-principal rounded-[15px] w-[min(580px,_90vw)] max-h-[85dvh] overflow-y-auto',
+                'bg-superficie text-principal rounded-[15px] max-h-[85dvh] overflow-y-auto',
+                amplo ? 'w-[min(1200px,_94vw)]' : 'w-[min(580px,_90vw)]',
                 'p-[25px] m-auto border border-solid border-[#393d45]',
                 '[&::backdrop]:bg-[rgb(0_0_0_/_65%)] [&_h2]:font-[550] [&_h2]:text-[17px]',
             ].join(' ')}

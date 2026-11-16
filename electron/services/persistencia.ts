@@ -1,9 +1,11 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { esquemaDados, type Dados } from '../../shared/contratos';
 import { reunirRegistrosUso } from '../../shared/estatisticas';
 import { migrarProjetos } from './projetos';
 import { recuperarPullRequests } from '../../shared/pullRequests';
+import { gravarAtomico } from './arquivosSeguros';
+import { comBloqueioDados } from './bloqueioDados';
 
 /**
  * Remove entradas de modelos remotos gravadas sem o vínculo OpenRouter. Elas aparecem como modelos locais
@@ -11,7 +13,8 @@ import { recuperarPullRequests } from '../../shared/pullRequests';
  */
 export function removerModelosRemotosOrfaos(dados: Dados): boolean {
     const orfaos = dados.modelos.filter(
-        (modelo) => !modelo.openrouter && !modelo.assinatura && !modelo.catalogoId && modelo.tamanho === 0,
+        (modelo) => !modelo.openrouter && !modelo.assinatura && !modelo.chatgptWeb
+            && !modelo.catalogoId && modelo.tamanho === 0,
     );
     if (!orfaos.length) return false;
     const substitutos = new Map<string, string>();
@@ -32,13 +35,16 @@ export function removerModelosRemotosOrfaos(dados: Dados): boolean {
 export class Persistencia {
     dados: Dados = esquemaDados.parse({ versao: 1, configuracao: {}, modelos: [], conversas: [] });
     private fila: Promise<void> = Promise.resolve();
+    private versaoDisco: string | null = null;
+    avisoRecuperacao?: string;
 
     constructor(private readonly pasta: string) {}
 
     async abrir(): Promise<void> {
         await mkdir(this.pasta, { recursive: true });
         try {
-            const texto = await readFile(join(this.pasta, 'selene.json'), 'utf8');
+            const texto = await this.lerDados();
+            this.versaoDisco = texto;
             const bruto = JSON.parse(texto);
             if (bruto.perfilMotor === undefined && bruto.configuracao?.backend === 'vulkan') {
                 bruto.configuracao.backend = 'auto';
@@ -85,14 +91,74 @@ export class Persistencia {
         }
     }
 
+    private async lerDados(): Promise<string> {
+        const destino = join(this.pasta, 'selene.json');
+        let original: string | null = null;
+        let falha: unknown;
+        try {
+            original = await readFile(destino, 'utf8');
+            esquemaDados.parse(JSON.parse(original));
+            return original;
+        } catch (erro) {
+            falha = erro;
+        }
+        for (let indice = 1; indice <= 3; indice++) {
+            let copia: string;
+            try {
+                copia = await readFile(join(this.pasta, `selene.backup.${indice}.json`), 'utf8');
+                esquemaDados.parse(JSON.parse(copia));
+            } catch {
+                continue;
+            }
+            await comBloqueioDados(join(this.pasta, 'selene.lock'), async () => {
+                const atual = await this.lerAtual();
+                if (atual !== original) throw new Error('Os dados mudaram durante a recuperação.');
+                if (original !== null) {
+                    const instante = new Date().toISOString().replace(/[:.]/g, '');
+                    await writeFile(join(this.pasta, `selene.corrompido.${instante}.json`), original, { flag: 'wx' });
+                }
+                await gravarAtomico(destino, copia);
+            });
+            this.avisoRecuperacao = 'Histórico recuperado de uma cópia local. O arquivo danificado foi preservado.';
+            return copia;
+        }
+        throw falha;
+    }
+
+    private async lerAtual(): Promise<string | null> {
+        try {
+            return await readFile(join(this.pasta, 'selene.json'), 'utf8');
+        } catch (erro) {
+            if ((erro as NodeJS.ErrnoException).code === 'ENOENT') return null;
+            throw erro;
+        }
+    }
+
     salvar(): Promise<void> {
         this.dados.registrosUso = reunirRegistrosUso(this.dados);
         const texto = JSON.stringify(esquemaDados.parse(this.dados), null, 4);
-        const gravar = async () => {
-            const temporario = join(this.pasta, 'selene.json.tmp');
-            await writeFile(temporario, texto, 'utf8');
-            await rename(temporario, join(this.pasta, 'selene.json'));
-        };
+        const gravar = () => comBloqueioDados(join(this.pasta, 'selene.lock'), async () => {
+            const atual = await this.lerAtual();
+            if (atual !== this.versaoDisco) {
+                throw new Error('Outra instância alterou o histórico. Reabra a Selene antes de salvar.');
+            }
+            if (atual !== null) {
+                esquemaDados.parse(JSON.parse(atual));
+                for (let indice = 2; indice >= 1; indice--) {
+                    const anterior = await readFile(join(this.pasta, `selene.backup.${indice}.json`), 'utf8')
+                        .catch((erro: NodeJS.ErrnoException) => {
+                            if (erro.code !== 'ENOENT') throw erro;
+                            return null;
+                        });
+                    if (anterior !== null) {
+                        await gravarAtomico(join(this.pasta, `selene.backup.${indice + 1}.json`), anterior);
+                    }
+                }
+                await gravarAtomico(join(this.pasta, 'selene.backup.1.json'), atual);
+            }
+            await gravarAtomico(join(this.pasta, 'selene.json'), texto);
+            this.versaoDisco = texto;
+        });
         const proxima = this.fila.then(gravar, gravar);
         this.fila = proxima;
         return proxima;

@@ -52,7 +52,7 @@ export function LinhaConversaSidebar({
             />
         );
     }
-    const atividade = obterAtividadeConversa(conversa, estado.conversaEmExecucao);
+    const atividade = obterAtividadeConversa(conversa, estado.conversaEmExecucao, estado.subagentesEmExecucao);
     const mensagem = [...conversa.mensagens].reverse().find((item) => item.papel === 'assistant');
     const modelo = estado.modelos.find((item) => item.id === conversa.modeloId);
     const branch = conversa.pullRequests?.at(-1)?.branch;
@@ -239,7 +239,7 @@ export function LinhaConversaSidebar({
                             className={[
                                 [
                                     'truncate',
-                                    '[[data-ui~=item-conversa][data-ui~=selecionado]_&]:font-semibold',
+                                    'font-medium',
                                     'block w-full',
                                 ].join(' '),
                                 'leading-[1.5]',

@@ -1,7 +1,7 @@
 import type { Modelo } from './contratos';
 
-export type FamiliaModelo = 'qwen' | 'llama' | 'gemma' | 'deepseek';
-export type CapacidadeModelo = 'raciocinio' | 'ferramentas' | 'code';
+export type FamiliaModelo = 'qwen' | 'llama' | 'gemma' | 'deepseek' | 'liquid';
+export type CapacidadeModelo = 'raciocinio' | 'ferramentas' | 'code' | 'audio';
 export type ArquivoProjetor = { arquivo: string; tamanho: number; sha256: string };
 export type ModeloCatalogo = {
     id: string;
@@ -158,6 +158,23 @@ export const catalogoModelos: ModeloCatalogo[] = [
             sha256: 'acaf5b55d24ebd38c71fa220dc58c9a36776ec543b17728a4b322fc8d92f1de4',
         },
     },
+    {
+        id: 'lfm3-omni-2b-q4',
+        familia: 'liquid',
+        nome: 'LFM3 Omni 2B',
+        repositorio: 'LiquidAI/LFM3-Omni-2B-GGUF',
+        arquivo: 'LFM3-Omni-2B-Q4_K_M.gguf',
+        revisao: '5bcc26f7968f71d26e066027a70978529dbb605d',
+        tamanho: 1099630080,
+        sha256: '9f8d30e9d4fd7a9349d586e077988229b3ca0a0e4ad730897563d1eccc9893e2',
+        descricao: 'Texto, imagens e entrada de áudio com motor LFM3 específico em Vulkan ou CPU.',
+        capacidades: ['ferramentas', 'audio'],
+        projetorVisual: {
+            arquivo: 'mmproj-LFM3-Omni-2B-Q8_0.gguf',
+            tamanho: 540892768,
+            sha256: '720ff4fc09df0e026c4ec641d0c698bf27b5bcd50561944c88eda5e3dffe1839',
+        },
+    },
 ];
 
 /** Identifica arquivos já disponíveis, incluindo importações com o nome e tamanho da edição do catálogo. */
@@ -167,6 +184,12 @@ export function encontrarModeloLocal(item: ModeloCatalogo, modelos: Modelo[]): M
             modelo.catalogoId === item.id ||
             (modelo.caminho.split(/[\\/]/).at(-1) === item.arquivo && modelo.tamanho === item.tamanho),
     );
+}
+
+/** Indica se o modelo local recebe imagens, por projetor importado ou pelo projetor previsto no catálogo. */
+export function modeloLocalComVisao(modelo: Modelo): boolean {
+    if (modelo.projetorVisual) return true;
+    return catalogoModelos.some((item) => !!item.projetorVisual && !!encontrarModeloLocal(item, [modelo]));
 }
 
 /** Formata tamanhos de arquivo na mesma unidade usada em todo o catálogo. */

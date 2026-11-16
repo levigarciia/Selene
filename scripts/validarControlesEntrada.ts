@@ -33,6 +33,7 @@ export async function validarControlesEntrada(): Promise<void> {
             {
                 id: randomUUID(),
                 titulo: 'Controles da entrada',
+                rascunho: 'Pedido de teste',
                 modo: 'code',
                 modeloId: qwen,
                 atualizadoEm: new Date().toISOString(),

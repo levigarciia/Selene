@@ -5,6 +5,7 @@ import { formatarTamanho, catalogoModelos, encontrarModeloLocal } from '../../sh
 import { configuracaoParaModelo } from '../../shared/configuracaoMotor';
 import type { HardwareLocal } from '../../shared/compatibilidadeModelo';
 import { estimarVelocidadeModelo } from '../../shared/velocidadeModelo';
+import { backendParaModelo } from '../../shared/runtimeModelo';
 import type { Executar } from './Configuracoes';
 import { Modal } from './Modal';
 import { PerfilModelo } from './PerfilModelo';
@@ -24,7 +25,7 @@ export function ModelosConfiguracoes({
 }) {
     const [removendo, definirRemovendo] = useState<Modelo | null>(null);
     const ocupado = !!estado.conversaEmExecucao || ['instalando', 'carregando'].includes(estado.motor.fase);
-    const locais = estado.modelos.filter((modelo) => !modelo.openrouter && !modelo.assinatura);
+    const locais = estado.modelos.filter((modelo) => !modelo.openrouter && !modelo.assinatura && !modelo.chatgptWeb);
     return (
         <>
             <section id="config-modelos" tabIndex={-1} className="flex flex-col gap-2.5 outline-none">
@@ -46,16 +47,18 @@ export function ModelosConfiguracoes({
                         {locais.map((modelo) => {
                             const item = catalogoModelos.find((item) => encontrarModeloLocal(item, [modelo]));
                             const configuracao = configuracaoParaModelo(estado.configuracao, modelo);
+                            const carregado = estado.motor.modeloId === modelo.id && estado.motor.fase === 'pronto';
+                            const backend = carregado ? estado.motor.backendAtivo :
+                                backendParaModelo(modelo, configuracao.backend);
                             const estimativa = estimarVelocidadeModelo({
                                 tamanho: modelo.tamanho,
                                 hardware,
                                 contexto: configuracao.limitesAutomaticos ? 2048 : configuracao.contexto,
                                 projetor: item?.projetorVisual?.tamanho,
-                                somenteCpu: configuracao.backend === 'cpu',
+                                somenteCpu: backend === 'cpu',
                                 camadasGpu: configuracao.limitesAutomaticos ? undefined : configuracao.camadasGpu,
                                 identificacao: item?.nome ?? modelo.nome,
                             });
-                            const carregado = estado.motor.modeloId === modelo.id && estado.motor.fase === 'pronto';
                             return (
                                 <div key={modelo.id} data-ui="linha-modelo" className="px-4 py-3 max-sm:px-3">
                                     <div className="flex items-center gap-4">
@@ -66,7 +69,8 @@ export function ModelosConfiguracoes({
                                             </h3>
                                             <p className="mt-1 text-xs text-discreto" title={estimativa.detalhe}>
                                                 {formatarTamanho(modelo.tamanho)} · {estimativa.rotulo}
-                                                {carregado ? ' · Carregado' : ''}
+                                                {carregado ? ` · Carregado em ${backend === 'cpu' ? 'CPU' :
+                                                    backend === 'vulkan' ? 'Vulkan' : 'ROCm'}` : ''}
                                             </p>
                                         </div>
                                         <button

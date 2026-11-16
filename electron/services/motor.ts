@@ -9,6 +9,8 @@ import { detectarBackend, detectarDispositivo } from './dispositivosMotor';
 import { mesmaConfiguracaoMotor } from '../../shared/configuracaoMotor';
 import { argumentosMemoriaMotor, contextoAposFalha, contextoDoServidor } from './limitesModelo';
 import { prepararProjetorVisual } from './projetorVisual';
+import { corrigirCabecalhoWav, idiomaFala } from '../../shared/audio';
+import { backendParaModelo, exigeRuntimeLfm3, pastaRuntimeLfm3, pastaRuntimeLfm3Vulkan } from '../../shared/runtimeModelo';
 
 async function reservarPorta(): Promise<number> {
     const servidor = createServer();
@@ -115,8 +117,14 @@ export class MotorLocal {
                 },
             );
             controle.signal.throwIfAborted();
-            backend = await this.resolverBackend(configuracao.backend, controle.signal);
-            const executavel = await this.prepararRuntime(backend, controle.signal);
+            const runtimeLfm3 = exigeRuntimeLfm3(modelo);
+            backend = await this.resolverBackend(backendParaModelo(modelo, configuracao.backend), controle.signal);
+            const executavel = runtimeLfm3
+                ? await localizarServidor(join(this.raiz, backend === 'cpu' ? pastaRuntimeLfm3 : pastaRuntimeLfm3Vulkan))
+                : await this.prepararRuntime(backend, controle.signal);
+            if (!executavel) {
+                throw new Error(`Prepare o motor LFM3 com bun scripts/prepararMotorLfm3.ts ${backend}.`);
+            }
             this.atualizar({
                 fase: 'carregando',
                 progresso: undefined,
@@ -145,9 +153,12 @@ export class MotorLocal {
                     this.chave,
                     '-np',
                     '1',
-                    ...argumentosMemoriaMotor(configuracao, backend, contextoTentado, !!projetorVisual),
+                    ...argumentosMemoriaMotor(
+                        configuracao, backend, contextoTentado, !!projetorVisual, runtimeLfm3 ? 8192 : 2048,
+                    ),
                     '--jinja',
                     '--no-webui',
+                    ...(runtimeLfm3 ? ['--reasoning', 'off'] : []),
                     ...(projetorVisual ? ['--mmproj', projetorVisual] : []),
                     ...argumentosGpu,
                 ],
@@ -194,7 +205,11 @@ export class MotorLocal {
                         contextoDisponivel,
                         progresso: undefined,
                         suportaImagens: propriedades?.modalities?.vision === true,
-                        detalhe: alternativa ? `${modelo.nome}. ROCm indisponível; usando Vulkan.` : modelo.nome,
+                        suportaAudio: propriedades?.modalities?.audio === true,
+                        suportaFala: runtimeLfm3 && !!projetorVisual,
+                        detalhe: runtimeLfm3
+                            ? `${modelo.nome}. Motor LFM3 em ${backend === 'cpu' ? 'CPU' : 'Vulkan'}.`
+                            : alternativa ? `${modelo.nome}. ROCm indisponível; usando Vulkan.` : modelo.nome,
                     });
                     return;
                 }
@@ -238,6 +253,8 @@ export class MotorLocal {
             dispositivo: undefined,
             recarregamentoPendente: false,
             suportaImagens: false,
+            suportaAudio: false,
+            suportaFala: false,
             contextoDisponivel: undefined,
         });
     }
@@ -266,6 +283,21 @@ export class MotorLocal {
             body: JSON.stringify(corpo),
             signal: sinal,
         });
+    }
+
+    /** Sintetiza um trecho de resposta em WAV pelo endpoint de voz do motor LFM3 carregado. */
+    async sintetizarFala(texto: string, sinal: AbortSignal): Promise<Uint8Array> {
+        if (this.estado.fase !== 'pronto' || !this.estado.suportaFala) {
+            throw new Error('Carregue o LFM3 Omni com o projetor para ouvir as respostas.');
+        }
+        const resposta = await fetch(`http://127.0.0.1:${this.porta}/tts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.chave}` },
+            body: JSON.stringify({ input: texto, lang: idiomaFala(texto), voice: 'female', n_predict: 1024 }),
+            signal: sinal,
+        });
+        if (!resposta.ok) throw new Error(`O motor recusou a síntese de voz (${resposta.status}).`);
+        return corrigirCabecalhoWav(new Uint8Array(await resposta.arrayBuffer()));
     }
 
     private async resolverBackend(backend: BackendMotor, sinal: AbortSignal): Promise<BackendRuntime> {

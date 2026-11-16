@@ -1,5 +1,6 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { CaretDownIcon, CheckIcon } from '@phosphor-icons/react';
+import { useMenuEntrada } from '../hooks/useMenuEntrada';
 
 type Opcao = { valor: string; nome: string; descricao?: string };
 
@@ -21,50 +22,12 @@ export function MenuOpcoesEntrada({
     desativado: boolean;
     alterar: (valor: string) => Promise<void>;
 }) {
-    const [aberto, definirAberto] = useState(false);
     const [salvando, definirSalvando] = useState(false);
     const id = useId();
-    const raiz = useRef<HTMLDivElement>(null);
-    const gatilho = useRef<HTMLButtonElement>(null);
-    const menu = useRef<HTMLDivElement>(null);
-    const abertoPorToque = useRef(false);
-
-    useLayoutEffect(() => {
-        if (!aberto || !menu.current || !gatilho.current) return;
-        const posicionar = () => {
-            if (!menu.current || !gatilho.current) return;
-            const origem = gatilho.current.getBoundingClientRect();
-            const limites = menu.current.getBoundingClientRect();
-            const esquerda = Math.max(8, Math.min(origem.left, window.innerWidth - limites.width - 8));
-            menu.current.style.left = `${esquerda}px`;
-            menu.current.style.bottom = `${window.innerHeight - origem.top + 10}px`;
-        };
-        posicionar();
-        if (!abertoPorToque.current) {
-            menu.current.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus({ preventScroll: true });
-        }
-        window.addEventListener('resize', posicionar);
-        window.visualViewport?.addEventListener('resize', posicionar);
-        return () => {
-            window.removeEventListener('resize', posicionar);
-            window.visualViewport?.removeEventListener('resize', posicionar);
-        };
-    }, [aberto]);
-
-    useEffect(() => {
-        if (!aberto) return;
-        const fora = (evento: PointerEvent) => {
-            if (!raiz.current?.contains(evento.target as Node)) definirAberto(false);
-        };
-        document.addEventListener('pointerdown', fora);
-        return () => {
-            document.removeEventListener('pointerdown', fora);
-        };
-    }, [aberto]);
-
-    useEffect(() => {
-        if (desativado) definirAberto(false);
-    }, [desativado]);
+    const { aberto, definirAberto, raiz, gatilho, menu, abertoPorToque } = useMenuEntrada(
+        desativado,
+        '[aria-checked="true"]',
+    );
 
     async function escolher(escolha: string) {
         if (salvando || desativado) return;

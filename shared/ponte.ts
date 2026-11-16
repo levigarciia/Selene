@@ -9,6 +9,12 @@ interface Transporte {
 /** Mantém os mesmos contratos no desktop e no navegador. */
 export function criarPonte(transporte: Transporte): PonteSelene {
     return {
+        cadastrarChatGptWeb: () => transporte.invocar('cadastrarChatGptWeb'),
+        abrirChatGptWeb: (id) => transporte.invocar('abrirChatGptWeb', id),
+        confirmarRevisaoChatGpt: (id) => transporte.invocar('confirmarRevisaoChatGpt', id),
+        isolarConversa: (id) => transporte.invocar('isolarConversa', id),
+        prepararRestauracao: (id, mensagemId) => transporte.invocar('prepararRestauracao', id, mensagemId),
+        restaurarTurno: (id, mensagemId, token) => transporte.invocar('restaurarTurno', id, mensagemId, token),
         acessoWeb: () => transporte.invocar('acessoWeb'),
         configurarAcessoWeb: (configuracao) => transporte.invocar('configurarAcessoWeb', configuracao),
         renovarChaveWeb: () => transporte.invocar('renovarChaveWeb'),
@@ -43,6 +49,7 @@ export function criarPonte(transporte: Transporte): PonteSelene {
         importarProjetor: (id) => transporte.invocar('importarProjetor', id),
         anexarImagens: (imagens) => transporte.invocar('anexarImagens', imagens),
         lerImagem: (id) => transporte.invocar('lerImagem', id),
+        sintetizarFala: (texto) => transporte.invocar('sintetizarFala', texto),
         descartarImagens: (ids) => transporte.invocar('descartarImagens', ids),
         baixarModelo: (id) => transporte.invocar('baixarModelo', id),
         cancelarDownload: (id) => transporte.invocar('cancelarDownload', id),
@@ -78,6 +85,8 @@ export function criarPonte(transporte: Transporte): PonteSelene {
             transporte.invocar('acaoGit', projetoId, acao, mensagem, conversaId),
         vincularPullRequest: (conversaId, url) => transporte.invocar('vincularPullRequest', conversaId, url),
         desvincularPullRequest: (conversaId, url) => transporte.invocar('desvincularPullRequest', conversaId, url),
+        lerPatchTurno: (conversaId, mensagemId, caminho) =>
+            transporte.invocar('lerPatchTurno', conversaId, mensagemId, caminho),
         abrirItemGitHubNoChat: (entrada) => transporte.invocar('abrirItemGitHubNoChat', entrada),
         atualizarPullRequests: (conversaId) => transporte.invocar('atualizarPullRequests', conversaId),
         detalhesPullRequest: (conversaId, url) => transporte.invocar('detalhesPullRequest', conversaId, url),

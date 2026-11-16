@@ -37,6 +37,11 @@ Quando a ativação falha, o controlador pode clicar no ponto do campo, depois d
 de destino e não está coberto por outro aplicativo. A janela precisa estar visível.
 Digitar substitui o conteúdo do campo sem pressionar Enter. O envio exige uma ação separada.
 `pressionar` com `referencia` foca e confere o elemento antes de enviar a tecla.
+Jogos e janelas sem árvore de acessibilidade, como o Minecraft, são controlados pela captura da tela, que exige um
+modelo com visão. `clicar` aceita `x` e `y` de 0 a 1000 proporcionais à imagem, além de `botao` e `duracao`;
+o ponto precisa pertencer à janela observada. `mover` envia deslocamento relativo do mouse (`dx`, `dy`) para girar
+câmeras. `pressionar` aceita letras, dígitos, `Space`, `Shift`, `Control` e `duracao` de até 5000 ms para segurar
+teclas. As teclas levam código de varredura, exigido por jogos que leem o teclado físico.
 Campos editáveis incluem `valor` quando a acessibilidade oferece leitura, limitado a 1000 caracteres.
 O retorno da ferramenta confirma execução da entrada. O modelo precisa conferir o campo e o histórico para confirmar envio.
 O controlador não recebe scripts ou comandos arbitrários do modelo.

@@ -23,6 +23,10 @@ const nomes: Record<string, string> = {
     lembrar: 'Salvando memória',
     buscar_conversas: 'Buscando conversas',
     esquecer: 'Apagando memória',
+    capacidades_orquestrador: 'Consultando subagentes disponíveis',
+    delegar_tarefa: 'Delegando a subagente',
+    status_tarefa: 'Consultando subagente',
+    cancelar_tarefa: 'Cancelando subagente',
 };
 const nomesConcluidos: Record<string, string> = {
     listar_arquivos: 'Explorou',
@@ -42,6 +46,10 @@ const nomesConcluidos: Record<string, string> = {
     lembrar: 'Memória salva',
     buscar_conversas: 'Buscou conversas',
     esquecer: 'Memória apagada',
+    capacidades_orquestrador: 'Consultou subagentes disponíveis',
+    delegar_tarefa: 'Delegou a subagente',
+    status_tarefa: 'Consultou subagente',
+    cancelar_tarefa: 'Cancelou subagente',
 };
 const estados: Record<Acao['estado'], string> = {
     preparando: 'Preparando ação',

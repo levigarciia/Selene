@@ -83,6 +83,9 @@ export function estimarVelocidadeModelo({
     });
     if (!hardware) return indisponivel('Consulte o hardware para estimar tokens por segundo.');
     if (tamanho <= 0) return indisponivel('O tamanho dos pesos não está disponível.');
+    if (/\blfm3\b/i.test(identificacao)) {
+        return indisponivel('A arquitetura do LFM3 ainda não possui uma estimativa calibrada para este motor.');
+    }
     if (/\bmoe\b|\b\d+b[- ]a\d+b\b|coder[- ]v2|mixtral/i.test(identificacao)) {
         return indisponivel('Modelos MoE precisam de informações dos parâmetros ativos para estimar velocidade.');
     }

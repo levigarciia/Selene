@@ -20,7 +20,7 @@ export function BarraJanela({
                 'border-solid border-b-borda text-[12px] [-webkit-app-region:drag] py-0',
             ].join(' ')}
         >
-            <div className="flex items-center gap-3 min-w-0">{children}</div>
+            <div data-ui="conteudo-topbar" className="flex items-center gap-3 min-w-0">{children}</div>
             <div
                 data-ui="acoes-janela"
                 className={[

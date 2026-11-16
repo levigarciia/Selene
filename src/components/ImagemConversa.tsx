@@ -32,6 +32,15 @@ export function ImagemConversa({
             ativo = false;
         };
     }, [imagem.id, previa, ponte]);
+    if (imagem.mime === 'audio/wav') {
+        return (
+            <div data-ui="previa-audio" className="max-w-full rounded-[8px] border border-borda p-[10px]">
+                <div className="text-[12px] text-secundario mb-[6px]">{imagem.nome}</div>
+                {url ? <audio controls preload="metadata" src={url} aria-label={imagem.nome}
+                    className="max-w-full h-[36px]" /> : <span>{erro || 'Carregando áudio'}</span>}
+            </div>
+        );
+    }
     return (
         <>
             <button

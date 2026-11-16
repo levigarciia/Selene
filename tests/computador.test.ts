@@ -32,6 +32,25 @@ describe('Controle autorizado do computador', () => {
         expect(esquemaComputador.parse({ acao: 'clicar', referencia: 'e1' }).observacao).toBeUndefined();
     });
 
+    test('aceita controle de jogos por coordenadas, movimento relativo e teclas seguradas', () => {
+        for (const entrada of [
+            { acao: 'clicar', x: 500, y: 500, botao: 'direito', duracao: 1500 },
+            { acao: 'mover', dx: -300, dy: 40 },
+            { acao: 'pressionar', tecla: 'W', duracao: 2000 },
+            { acao: 'pressionar', tecla: 'Space' },
+        ]) {
+            expect(esquemaComputador.safeParse(entrada).success).toBe(true);
+        }
+        for (const entrada of [
+            { acao: 'clicar', x: 500 },
+            { acao: 'clicar', x: 1001, y: 0 },
+            { acao: 'mover', dx: 10 },
+            { acao: 'pressionar', tecla: 'W', duracao: 60000 },
+        ]) {
+            expect(esquemaComputador.safeParse(entrada).success).toBe(false);
+        }
+    });
+
     test('o Chat não oferece nem executa controle nativo', async () => {
         expect(obterFerramentas('chat', true, true).some((item) => item.function.name === 'controlar_computador')).toBe(
             false,
