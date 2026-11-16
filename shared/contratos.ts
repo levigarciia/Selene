@@ -3,7 +3,7 @@ import type { EstadoAtualizacao } from './atualizacoes';
 import { esquemaIconeProjeto, type IconeDeProjeto } from './iconesProjetos';
 import { esquemaProjetoChat, type ProjetoChat, type EdicaoProjetoChat } from './projetosChat';
 import { esquemaNovoModeloAssinatura } from './assinaturas';
-import { esquemaModeloAssinatura, esquemaProvedorAssinatura } from './assinaturas';
+import { esquemaModeloAssinatura, esquemaProvedorAssinatura, esquemaEsforcoAssinatura } from './assinaturas';
 import { esquemaMemoria } from './memoria';
 import { esquemaScriptProjeto, type EventoTerminal } from './repositorio';
 import type * as Repositorio from './repositorio';
@@ -19,7 +19,9 @@ import { esquemaVinculoChatGpt } from './chatgptWeb';
 export const esforcosOpenRouter = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type EsforcoOpenRouter = (typeof esforcosOpenRouter)[number];
 /** Níveis que a Selene guarda por conversa. Os locais usam os quatro primeiros. */
-export const niveisRaciocinioTodos = ['desativado', 'baixo', 'medio', 'alto', 'xhigh', 'max'] as const;
+export const niveisRaciocinioTodos = [
+    'desativado', 'baixo', 'medio', 'alto', 'xhigh', 'max', 'minimo', 'ultra',
+] as const;
 
 export const esquemaBackend = z.enum(['auto', 'cpu', 'vulkan', 'rocm']);
 export type BackendMotor = z.infer<typeof esquemaBackend>;
@@ -70,6 +72,7 @@ export const esquemaModelo = z.object({
         .object({
             provedor: esquemaProvedorAssinatura,
             id: esquemaModeloAssinatura,
+            esforcos: z.array(esquemaEsforcoAssinatura).optional(),
         })
         .optional(),
 });
@@ -154,7 +157,7 @@ export const esquemaMensagem = z.object({
     custoUsd: z.number().nonnegative().optional(),
     provedor: z.literal('openrouter').optional(),
     modeloUsoId: z.string().uuid().optional(),
-    imagens: z.array(esquemaImagem).max(4).optional(),
+    imagens: z.array(esquemaImagem).optional(),
     blocoEconomia: z.string().max(4000).optional(),
     alteracoes: esquemaAlteracoesTurno.optional(),
     checkpoint: z.boolean().optional(),
@@ -173,7 +176,7 @@ export const esquemaConversa = z.object({
     projetoChatId: z.string().uuid().nullable().optional(),
     chatgptWeb: esquemaVinculoChatGpt.optional(),
     rascunho: z.string().max(30000).optional(),
-    anexosRascunho: z.number().int().min(0).max(4).optional(),
+    anexosRascunho: z.number().int().min(0).optional(),
     pastaTrabalho: z.string().min(1).optional(),
     pastaRepositorio: z.string().min(1).optional(),
     acessoCompleto: z.boolean().default(false),

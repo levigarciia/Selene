@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
     esquemaModeloAssinatura,
+    esquemaEsforcoAssinatura,
+    type EsforcoAssinatura,
     modelosAssinatura,
     type EstadoAssinatura,
     type ModeloAssinaturaDisponivel,
@@ -13,7 +15,7 @@ import {
     type ProvedorAssinatura,
 } from '../../shared/assinaturas';
 import { responderCodexAppServer } from './codexAppServer';
-import type { HookInput, Options } from '@anthropic-ai/claude-agent-sdk';
+import type { HookInput, Options, ModelInfo } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
 /** Limite de texto reunido de uma única resposta, impedindo que um CLI defeituoso consuma a memória. */
@@ -91,6 +93,9 @@ export async function assinaturaCompletar(
         throw new Error('A inscrição Codex está disponível somente no Code. No Chat, use Claude, modelo local ou OpenRouter.');
     }
     const imagens = obterImagensAssinatura(corpo);
+    const esforco = esquemaEsforcoAssinatura.optional().parse(
+        (corpo as { reasoning_effort?: unknown }).reasoning_effort,
+    );
     const fila = new FilaFluxo();
     const fluxo = fila.criar();
     let publicado = '';
@@ -104,7 +109,7 @@ export async function assinaturaCompletar(
     const resposta =
         alvo.provedor === 'claude'
             ? responderClaudeSdk(alvo.id, prompt, sinal, pasta, acessoCompleto, publicar, opcoes.acoes, opcoes.mcp,
-                { modo, sessao: opcoes.sessao, aoSessao: opcoes.aoSessao, imagens })
+                { modo, sessao: opcoes.sessao, aoSessao: opcoes.aoSessao, imagens, esforco })
             : responderCodexAppServer(
                   validarModeloAssinatura(alvo.id),
                   prompt,
@@ -114,7 +119,7 @@ export async function assinaturaCompletar(
                   publicar,
                   opcoes.acoes,
                   opcoes.mcp,
-                  { sessao: opcoes.sessao, aoSessao: opcoes.aoSessao, imagens },
+                  { sessao: opcoes.sessao, aoSessao: opcoes.aoSessao, imagens, esforco },
               );
     // O fluxo é devolvido antes da resposta terminar: o texto aparece enquanto o harness trabalha, e as
     // aprovações pedidas no meio da execução chegam à interface sem esperar o fim.
@@ -316,6 +321,7 @@ async function responderClaudeSdk(
     mcp?: McpHarness,
     configuracao: {
         modo: 'chat' | 'code'; sessao?: string; aoSessao?: (id: string) => Promise<void>; imagens: string[];
+        esforco?: EsforcoAssinatura;
     } = { modo: 'code', imagens: [] },
 ): Promise<string> {
     const modeloValidado = validarModeloAssinatura(modelo);
@@ -342,6 +348,8 @@ async function responderClaudeSdk(
             prompt: (async function* () { yield entrada; })(),
             options: {
                 model: modeloValidado,
+                ...(['low', 'medium', 'high', 'xhigh', 'max'].includes(configuracao.esforco ?? '')
+                    ? { effort: configuracao.esforco as NonNullable<Options['effort']> } : {}),
                 cwd: pasta,
                 ...(configuracao.sessao ? { resume: configuracao.sessao } : {}),
                 ...(configuracao.modo === 'chat' ? { tools: [], mcpServers: {}, settingSources: [] } : {}),
@@ -501,6 +509,7 @@ const esquemaCacheCodex = z.object({
             display_name: z.string().optional(),
             visibility: z.string().optional(),
             priority: z.number().optional(),
+            supported_reasoning_levels: z.array(z.object({ effort: z.string() })).optional(),
         }),
     ),
 });
@@ -512,7 +521,58 @@ export function interpretarCacheCodex(conteudo: string): ModeloAssinaturaDisponi
     return validado.data.models
         .filter((modelo) => modelo.visibility === 'list' && esquemaModeloAssinatura.safeParse(modelo.slug).success)
         .sort((a, b) => (a.priority ?? Infinity) - (b.priority ?? Infinity))
-        .map((modelo) => ({ id: modelo.slug, nome: modelo.display_name || modelo.slug }));
+        .map((modelo) => ({
+            id: modelo.slug, nome: modelo.display_name || modelo.slug,
+            ...(modelo.supported_reasoning_levels ? {
+                esforcos: modelo.supported_reasoning_levels.flatMap(({ effort }) => {
+                    const validado = esquemaEsforcoAssinatura.safeParse(effort);
+                    return validado.success ? [validado.data] : [];
+                }),
+            } : {}),
+        }));
+}
+
+let consultaModelosClaude: Promise<ModeloAssinaturaDisponivel[]> | undefined;
+
+async function consultarModelosClaude(): Promise<ModeloAssinaturaDisponivel[]> {
+    const { query } = await import('@anthropic-ai/claude-agent-sdk');
+    const executavel = await localizarClaude();
+    const controle = new AbortController();
+    const prazo = setTimeout(() => controle.abort(), 5000);
+    let liberar = () => {};
+    const aguardar = new Promise<void>((resolver) => { liberar = resolver; });
+    const consulta = query({
+        prompt: (async function* (): AsyncGenerator<SDKUserMessage> { await aguardar; })(),
+        options: {
+            cwd: tmpdir(), tools: [], settingSources: [], abortController: controle,
+            pathToClaudeCodeExecutable: executavel,
+        },
+    });
+    try {
+        return interpretarCapacidadesClaude(await consulta.supportedModels());
+    } finally {
+        clearTimeout(prazo);
+        liberar();
+        consulta.close();
+    }
+}
+
+/** Usa somente os níveis anunciados pelo próprio Claude Code para cada modelo. */
+export function interpretarCapacidadesClaude(modelos: ModelInfo[]): ModeloAssinaturaDisponivel[] {
+    const disponiveis = new Map<string, ModeloAssinaturaDisponivel>();
+    for (const modelo of modelos) {
+        const id = modelo.resolvedModel ?? modelo.value;
+        if (!esquemaModeloAssinatura.safeParse(id).success) continue;
+        const anterior = disponiveis.get(id);
+        const aliases = [...new Set([...(anterior?.aliases ?? []), modelo.value])];
+        disponiveis.set(id, {
+            id,
+            nome: anterior?.nome ?? id.replace(/^claude-/, 'Claude '),
+            aliases,
+            esforcos: modelo.supportsEffort ? modelo.supportedEffortLevels ?? [] : [],
+        });
+    }
+    return [...disponiveis.values()];
 }
 
 const familiasClaude = ['fable', 'opus', 'sonnet', 'haiku'];
@@ -551,13 +611,18 @@ export function interpretarModelosClaude(ids: string[]): ModeloAssinaturaDisponi
 }
 
 /**
- * Lista os modelos de cada inscrição. O Codex publica o catálogo da conta no próprio cache; o Claude vem
- * do catálogo público do OpenRouter. Assim novos lançamentos aparecem sem atualizar a Selene. Se a consulta
+ * Lista os modelos de cada inscrição. O Codex publica o catálogo da conta no próprio cache; o Claude anuncia
+ * os modelos e esforços pelo SDK oficial, com o catálogo público do OpenRouter como alternativa.
+ * Assim novos lançamentos aparecem sem atualizar a Selene. Se a consulta
  * falhar, o Claude cai para os apelidos que o CLI resolve sozinho para a versão atual.
  */
 export async function listarModelosAssinatura(
     idsCatalogo: () => Promise<string[]> = async () => [],
     pastaUsuario = homedir(),
+    consultarClaude: () => Promise<ModeloAssinaturaDisponivel[]> = () => {
+        consultaModelosClaude ??= consultarModelosClaude().catch(() => []);
+        return consultaModelosClaude;
+    },
 ): Promise<ModelosAssinatura> {
     let chatgpt: ModeloAssinaturaDisponivel[] = [];
     try {
@@ -567,7 +632,8 @@ export async function listarModelosAssinatura(
     }
     let claude: ModeloAssinaturaDisponivel[] = [];
     try {
-        claude = interpretarModelosClaude(await idsCatalogo());
+        claude = await consultarClaude();
+        if (!claude.length) claude = interpretarModelosClaude(await idsCatalogo());
     } catch {
         // Sem rede, os apelidos continuam funcionando.
     }

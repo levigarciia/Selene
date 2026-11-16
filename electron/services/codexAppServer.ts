@@ -1,3 +1,4 @@
+import type { EsforcoAssinatura } from '../../shared/assinaturas';
 import { spawn } from 'node:child_process';
 import type { AcoesExternas, McpHarness } from './assinaturas';
 import { encerrarProcesso } from './processos';
@@ -126,7 +127,7 @@ export function responderCodexAppServer(
     acoes?: AcoesExternas,
     mcp?: McpHarness,
     configuracao: {
-        sessao?: string; aoSessao?: (id: string) => Promise<void>; imagens?: string[];
+        sessao?: string; aoSessao?: (id: string) => Promise<void>; imagens?: string[]; esforco?: EsforcoAssinatura;
     } = {},
 ): Promise<string> {
     if (sinal.aborted) return Promise.reject(new Error('Tarefa interrompida pelo usuário.'));
@@ -344,7 +345,8 @@ export function responderCodexAppServer(
             const threadId = inicio.thread?.id;
             if (!threadId) throw new Error('O Codex não abriu a conversa.');
             await configuracao.aoSessao?.(threadId);
-            await pedir('turn/start', { threadId, input: [
+            await pedir('turn/start', { threadId,
+                ...(configuracao.esforco ? { effort: configuracao.esforco } : {}), input: [
                 { type: 'text', text: prompt, text_elements: [] },
                 ...(configuracao.imagens ?? []).map((url) => ({ type: 'image', url })),
             ] });

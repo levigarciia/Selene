@@ -51,10 +51,17 @@ test('mostra os esforços informados pelo OpenRouter e envia o valor exato', () 
         ...qwen,
         catalogoId: undefined,
         caminho: 'openai/gpt-5',
-        openrouter: { id: 'openai/gpt-5', contexto: 8192, imagens: false, ferramentas: true, raciocinio: true, esforcos },
+        openrouter: {
+            id: 'openai/gpt-5',
+            contexto: 8192,
+            imagens: false,
+            ferramentas: true,
+            raciocinio: true,
+            esforcos,
+        },
     });
     const gpt = remoto(['xhigh', 'high', 'medium', 'low', 'minimal']);
-    expect(niveisRaciocinio(gpt)).toEqual(['desativado', 'xhigh', 'alto', 'medio', 'baixo']);
+    expect(niveisRaciocinio(gpt)).toEqual(['desativado', 'xhigh', 'alto', 'medio', 'baixo', 'minimo']);
     expect(nomesRaciocinio.xhigh).toBe('Extra alto');
     expect(parametrosRaciocinio(gpt, 'xhigh', 1000)).toEqual({ reasoning: { effort: 'xhigh' } });
 
@@ -164,4 +171,35 @@ test('cancelar durante o raciocínio interrompe o envio e preserva o nível esco
     expect(agente.conversaId).toBeNull();
 });
 
-
+test('esforço de assinatura respeita o catálogo e chega ao corpo enviado pelo agente', async () => {
+    const modelo: Modelo = {
+        ...qwen,
+        catalogoId: undefined,
+        assinatura: { provedor: 'chatgpt', id: 'gpt-teste', esforcos: ['low', 'high', 'ultra'] },
+    };
+    expect(niveisRaciocinio(modelo)).toEqual(['baixo', 'alto', 'ultra']);
+    expect(resolverNivelRaciocinio(modelo, 'medio')).toBe('baixo');
+    expect(parametrosRaciocinio(modelo, 'max', 1024)).toEqual({ reasoning_effort: 'low' });
+    const conversa = esquemaConversa.parse({
+        id: randomUUID(),
+        titulo: 'Esforço',
+        modo: 'code',
+        atualizadoEm: new Date().toISOString(),
+        modeloId: modelo.id,
+        nivelRaciocinio: 'ultra',
+    });
+    const agente = new Agente({
+        salvar: async () => {},
+        publicar: () => {},
+        completar: async (corpo) => {
+            expect(corpo).toHaveProperty('reasoning_effort', 'ultra');
+            expect(corpo).not.toHaveProperty('reasoning_budget_tokens');
+            return new Response(
+                'data: {"choices":[{"delta":{"content":"OK"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+            );
+        },
+    });
+    await agente.executar(conversa, 'Responda OK', esquemaConfiguracao.parse({}), [], modelo);
+    expect(conversa.mensagens.at(-1)?.estado).toBe('concluida');
+    expect(conversa.nivelRaciocinio).toBe('ultra');
+});

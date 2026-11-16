@@ -88,7 +88,7 @@ Implementação de 9 de outubro de 2026, validada em perfil desktop isolado.
 * Seleção, colagem, arraste, remoção e ampliação passaram no Electron.
 * PNG, JPEG e WebP passaram pelo seletor real. O compositor converte os arquivos para PNG antes do IPC,
   com fundo branco para transparência; o processo principal valida a decodificação e grava a cópia JPEG.
-* Cada envio aceita até quatro imagens PNG, JPEG ou WebP de até 10 MB antes da normalização.
+* Cada envio aceita imagens PNG, JPEG ou WebP de até 10 MB antes da normalização, sem limite fixo de quantidade.
   As cópias são JPEG, limitadas a 1536 pixels no maior lado e 4 MB por arquivo. Os originais são preservados.
 * Arquivos sem decodificação válida, formatos fora da lista, identificadores desconhecidos e duplicados são recusados.
 * Anexos ficam em arquivos locais, com metadados no histórico. A limpeza preserva referências compartilhadas.
@@ -462,3 +462,14 @@ O defeito dos seletores antigos foi reproduzido na conversa real e corrigido par
 O guia de uso e os limites estão em `CHATGPT.md`.
 O teste de retomada reinicia o Electron, carrega diretamente o link persistido e atrasa a exibição do histórico.
 Ele confirma que a conversa original recebeu somente a mensagem nova. O link também é preservado em envios incertos.
+
+## Esforço e anexos de assinatura em novembro de 2026
+
+Em 16 de novembro, 306 testes passaram e a compilação foi concluída. Os testes incluem capacidades anunciadas,
+níveis incompatíveis, múltiplas imagens, descoberta além de seis níveis e leitura de remotos com proprietário distinto,
+sem alterar a confiança do Git nem carregar includes. A descoberta na pasta DomeCode terminou sem avisos.
+
+O script scripts/validarEsforcoAnexosAssinatura.ts abriu uma instância isolada da Selene,
+validou seis opções de esforço do Codex e selecionou Baixo pela interface. Um envio real com seis imagens verdes
+recebeu a resposta Verde; os seis anexos foram persistidos. O catálogo do Claude foi consultado pelo SDK oficial,
+incluindo os esforços disponíveis. Essa consulta não substitui um envio real com Claude, não realizado nesta validação.

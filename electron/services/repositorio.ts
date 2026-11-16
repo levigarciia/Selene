@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import {
     buscaGitHub,
     lerNumstat,
@@ -162,6 +162,29 @@ export async function repositorioDoProjeto(pasta: string): Promise<string | null
     return null;
 }
 
+/** Lê somente URLs da configuração explícita, sem confiar no repositório nem carregar includes. */
+export async function lerRemotoSemExecutarRepositorio(pasta: string): Promise<string | null> {
+    let pastaGit = join(pasta, '.git');
+    if (!(await stat(pastaGit)).isDirectory()) {
+        const referencia = /^gitdir: (.+)$/m.exec(await readFile(pastaGit, 'utf8'));
+        if (!referencia) throw new Error('Referência Git inválida.');
+        pastaGit = resolve(pasta, referencia[1].trim());
+    }
+    const comum = await readFile(join(pastaGit, 'commondir'), 'utf8').catch((erro: NodeJS.ErrnoException) => {
+        if (erro.code !== 'ENOENT') throw erro;
+        return null;
+    });
+    const configuracao = join(comum ? resolve(pastaGit, comum.trim()) : pastaGit, 'config');
+    const resultado = await executar('git', dirname(configuracao), [
+        'config', '--no-includes', '--file', configuracao, '--get-regexp', '^remote[.].*[.]url$',
+    ]);
+    if (resultado.codigo === 1) return null;
+    if (resultado.codigo !== 0) throw new Error('Não foi possível ler os remotos do repositório.');
+    const remotos = resultado.saida.trim().split('\n').map((linha) => /^(\S+)\s+(.+)$/.exec(linha));
+    remotos.sort((a, b) => Number(b?.[1] === 'remote.origin.url') - Number(a?.[1] === 'remote.origin.url'));
+    return remotos.map((remoto) => remoto ? repositorioGitHub(remoto[2]) : null).find(Boolean) ?? null;
+}
+
 /** Descobre repositórios GitHub em uma pasta agregadora e mantém os diagnósticos de cada pasta. */
 export async function repositoriosDoProjeto(pasta: string): Promise<{
     repositorios: { pasta: string; github: string }[];
@@ -177,11 +200,11 @@ export async function repositoriosDoProjeto(pasta: string): Promise<{
     for (const caminho of descoberta.pastas) {
         const nome = relative(pasta, caminho) || 'Projeto';
         try {
-            const github = await repositorioDoProjeto(caminho);
-            if (!github) {
-                avisos.push(`${nome}: nenhum remoto no GitHub.`);
-                continue;
-            }
+            const github = await repositorioDoProjeto(caminho).catch((erro: unknown) => {
+                if (!(erro instanceof Error) || !/dubious ownership/i.test(erro.message)) throw erro;
+                return lerRemotoSemExecutarRepositorio(caminho);
+            });
+            if (!github) continue;
             if (encontrados.has(github.toLowerCase())) continue;
             encontrados.add(github.toLowerCase());
             repositorios.push({ pasta: caminho, github });

@@ -584,3 +584,10 @@ com resposta textual acompanhada na Selene e vínculo persistente com a conversa
 Essa decisão própria não amplia a paridade com o Odysseus. Limites e validação estão em `CHATGPT.md`.
 Conversas do ChatGPT são retomadas automaticamente pelo link persistido, inclusive depois de reiniciar a Selene.
 O histórico nativo deve carregar antes de um novo envio; os textos anteriores não são reenviados nesse caminho.
+
+Por solicitação do usuário, o seletor de esforço considera as capacidades anunciadas pelo Codex e pelo Claude Code.
+O esforço escolhido acompanha cada envio, incluindo sessões retomadas. Imagens também são aceitas pelos harnesses
+de assinatura, sem o antigo bloqueio textual e sem limite fixo de quantidade na Selene. Continuam valendo os limites
+de tamanho por arquivo e de contexto do modelo. A descoberta GitHub em pastas agregadoras percorre caminhos profundos
+e ignora repositórios sem remoto GitHub. Quando o Git recusa o proprietário, apenas os remotos da configuração
+explícita são lidos, sem includes e sem alterar a confiança do Git. São decisões próprias da Selene.

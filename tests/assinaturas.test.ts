@@ -62,6 +62,7 @@ describe('descoberta de modelos das inscrições', () => {
         const modelos = await listarModelosAssinatura(
             () => Promise.reject(new Error('sem rede')),
             join(tmpdir(), `selene-sem-codex-${Date.now()}`),
+            async () => [],
         );
         expect(modelos.chatgpt).toEqual(modelosAssinatura.chatgpt);
         expect(modelos.claude.map((modelo) => modelo.id)).toEqual(['opus', 'sonnet', 'haiku']);
@@ -70,10 +71,14 @@ describe('descoberta de modelos das inscrições', () => {
 
 describe('prompt dos CLIs', () => {
     test('converte mensagens e preserva instrução do sistema e ordem', () => {
-        expect(montarPromptAssinatura({ messages: [
-            { role: 'system', content: 'Instrução' },
-            { role: 'user', content: 'Pergunta' },
-        ] })).toBe('[system]\nInstrução\n\n[user]\nPergunta');
+        expect(
+            montarPromptAssinatura({
+                messages: [
+                    { role: 'system', content: 'Instrução' },
+                    { role: 'user', content: 'Pergunta' },
+                ],
+            }),
+        ).toBe('[system]\nInstrução\n\n[user]\nPergunta');
     });
 
     test('recusa modelo com caracteres para injeção de argumentos', () => {
@@ -116,8 +121,65 @@ describe('apresentarItemCodex', () => {
             'ler_pagina_web',
         );
         expect(
-            apresentarItemCodex({ type: 'fileChange', changes: [{ path: 'a.txt', kind: { type: 'add' }, diff: 'oi' }] })?.nome,
+            apresentarItemCodex({ type: 'fileChange', changes: [{ path: 'a.txt', kind: { type: 'add' }, diff: 'oi' }] })
+                ?.nome,
         ).toBe('escrever_arquivo');
         expect(apresentarItemCodex({ type: 'reasoning' })).toBeNull();
     });
+});
+
+test('preserva capacidades anunciadas e ignora esforços desconhecidos do Codex', () => {
+    const [modelo] = interpretarCacheCodex(
+        JSON.stringify({
+            models: [
+                {
+                    slug: 'gpt-teste',
+                    visibility: 'list',
+                    supported_reasoning_levels: [{ effort: 'low' }, { effort: 'ultra' }, { effort: 'inexistente' }],
+                },
+            ],
+        }),
+    );
+    expect(modelo.esforcos).toEqual(['low', 'ultra']);
+});
+
+test('deduplica aliases do Claude sem inventar esforço para modelos incompatíveis', async () => {
+    const { interpretarCapacidadesClaude } = await import('../electron/services/assinaturas');
+    const modelos = interpretarCapacidadesClaude([
+        {
+            value: 'default',
+            resolvedModel: 'claude-teste',
+            displayName: 'Padrão',
+            description: '',
+            supportsEffort: true,
+            supportedEffortLevels: ['low', 'high'],
+        },
+        {
+            value: 'opus',
+            resolvedModel: 'claude-teste',
+            displayName: 'Opus',
+            description: '',
+            supportsEffort: true,
+            supportedEffortLevels: ['low', 'high'],
+        },
+        { value: 'haiku', displayName: 'Haiku', description: '', supportsEffort: false },
+    ]);
+    expect(modelos).toHaveLength(2);
+    expect(modelos[0].aliases).toEqual(['default', 'opus']);
+    expect(modelos[0].esforcos).toEqual(['low', 'high']);
+    expect(modelos[1].esforcos).toEqual([]);
+});
+
+test('transporta mais de quatro imagens sem perder a ordem e recusa áudio de assinatura', async () => {
+    const { obterImagensAssinatura } = await import('../electron/services/assinaturas');
+    const imagens = Array.from(
+        { length: 9 },
+        (_, indice) => 'data:image/jpeg;base64,' + Buffer.from(String(indice)).toString('base64'),
+    );
+    expect(
+        obterImagensAssinatura({
+            messages: [{ role: 'user', content: imagens.map((url) => ({ type: 'image_url', image_url: { url } })) }],
+        }),
+    ).toEqual(imagens);
+    expect(() => obterImagensAssinatura({ messages: [{ content: [{ type: 'input_audio' }] }] })).toThrow('áudio');
 });

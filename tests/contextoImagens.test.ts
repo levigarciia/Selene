@@ -112,7 +112,7 @@ describe('Anexos de imagens', () => {
         expect(JSON.stringify(reaberta.dados)).not.toContain('base64');
     });
 
-    test('recusa IDs desconhecidos, duplicação, MIME inválido e limites de tamanho ou quantidade', async () => {
+    test('recusa IDs desconhecidos, duplicação, MIME inválido e excesso de tamanho', async () => {
         const anexos = new AnexosImagens(
             await criarPasta(),
             () => [],
@@ -120,7 +120,7 @@ describe('Anexos de imagens', () => {
         );
         expect(() => anexos.obter(['../../segredo'])).toThrow('não encontrada');
         await expect(anexos.importar([{ ...entrada, dados: 'data:image/svg+xml;base64,aW1hZ2Vt' }])).rejects.toThrow();
-        await expect(anexos.importar(Array(5).fill(entrada))).rejects.toThrow('quatro');
+        expect(await anexos.importar(Array(40).fill(entrada))).toHaveLength(40);
         await expect(
             anexos.importar([
                 { ...entrada, dados: 'data:image/png;base64,' + Buffer.alloc(10 * 1024 ** 2 + 1).toString('base64') },

@@ -17,7 +17,6 @@ const PASTAS_IGNORADAS = new Set([
     '.gradle',
     '.kotlin',
 ]);
-const PROFUNDIDADE_MAXIMA = 6;
 const LIMITE_PASTAS = 2000;
 
 /** Descobre raízes Git internas sem atravessar links, dependências ou a árvore de um repositório encontrado. */
@@ -49,11 +48,6 @@ export async function descobrirPastasRepositorios(pasta: string): Promise<{
             (entrada) =>
                 entrada.isDirectory() && !entrada.isSymbolicLink() && !PASTAS_IGNORADAS.has(entrada.name.toLowerCase()),
         );
-        if (atual.profundidade >= PROFUNDIDADE_MAXIMA) {
-            if (filhas.length)
-                avisos.push(`${relative(pasta, atual.caminho)}: limite de profundidade da busca atingido.`);
-            continue;
-        }
         filhas.sort((a, b) => a.name.localeCompare(b.name));
         for (const filha of filhas) {
             pendentes.push({ caminho: join(atual.caminho, filha.name), profundidade: atual.profundidade + 1 });

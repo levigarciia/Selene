@@ -116,7 +116,7 @@ export function TelaConversa({
         }
     }, modeloAceitaAudio(modelo));
     const gravacao = useGravacaoAudio(`${ativa}:${modeloId}:${visivel}`, anexos.anexar, dados.definirErro);
-    const niveis = modelo?.assinatura || modelo?.chatgptWeb ? [] : niveisRaciocinio(modelo);
+    const niveis = modelo?.chatgptWeb ? [] : niveisRaciocinio(modelo);
     const nivel = resolverNivelRaciocinio(modelo, conversa?.nivelRaciocinio);
     const motorOcupado = ['carregando', 'instalando'].includes(estado.motor.fase);
     const ultimaResposta = conversa?.mensagens

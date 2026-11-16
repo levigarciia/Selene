@@ -479,13 +479,17 @@ async function cadastrarModeloAssinatura(provedor: ProvedorAssinatura, id?: stri
     const existente = persistencia.dados.modelos.find(
         (modelo) => modelo.assinatura?.provedor === provedor && modelo.assinatura.id === anunciado.id,
     );
-    if (existente) return existente;
+    if (existente?.assinatura) {
+        existente.assinatura.esforcos = anunciado.esforcos;
+        await salvar();
+        return existente;
+    }
     const modelo: Modelo = {
         id: randomUUID(),
         nome: nome ?? anunciado.nome,
         caminho: `${provedor}:${anunciado.id}`,
         tamanho: 0,
-        assinatura: { provedor, id: anunciado.id },
+        assinatura: { provedor, id: anunciado.id, esforcos: anunciado.esforcos },
     };
     persistencia.dados.modelos.push(modelo);
     try {
@@ -727,7 +731,7 @@ function registrarOperacoes(): void {
     registrar('abrirRelease', z.tuple([z.string().max(80).optional()]), async ([versao]) => {
         await shell.openExternal(urlRelease(versao));
     });
-    registrar('anexarImagens', z.tuple([z.array(esquemaEntradaImagem).min(1).max(4)]), ([imagens]) =>
+    registrar('anexarImagens', z.tuple([z.array(esquemaEntradaImagem).min(1)]), ([imagens]) =>
         anexos.importar(imagens),
     );
     registrar('lerImagem', z.tuple([uuid]), ([id]) => anexos.ler(id));
@@ -735,7 +739,7 @@ function registrarOperacoes(): void {
         const audio = await motor.sintetizarFala(texto, AbortSignal.timeout(120000));
         return `data:audio/wav;base64,${Buffer.from(audio).toString('base64')}`;
     });
-    registrar('descartarImagens', z.tuple([z.array(uuid).max(32)]), ([ids]) => anexos.descartar(ids));
+    registrar('descartarImagens', z.tuple([z.array(uuid)]), ([ids]) => anexos.descartar(ids));
     registrar('importarProjetor', z.tuple([uuid]), async ([id]) => {
         exigirLivre();
         const modelo = persistencia.dados.modelos.find((item) => item.id === id);
@@ -1064,12 +1068,6 @@ function registrarOperacoes(): void {
             publicarEstado();
             return;
         }
-        if (
-            modelo.assinatura &&
-            (imagens.length || preparada.mensagens.some((mensagem) => mensagem.imagens?.length))
-        ) {
-            throw new Error('Os provedores de assinatura aceitam apenas mensagens de texto nesta versão.');
-        }
         const configuracao = configuracaoParaModelo(persistencia.dados.configuracao, modelo);
         const precisaLigar =
             !modelo.openrouter &&
@@ -1156,7 +1154,7 @@ function registrarOperacoes(): void {
         const envio = pai.enviosPendentes?.at(-1);
         if (envio) await enviarMensagem(paiId, envio.texto, [], undefined, envio.id);
     };
-    registrar('enviar', z.tuple([uuid, z.string().trim().max(30000), z.array(uuid).max(4)]), ([id, texto, ids]) =>
+    registrar('enviar', z.tuple([uuid, z.string().trim().max(30000), z.array(uuid)]), ([id, texto, ids]) =>
         enviarMensagem(id, texto, ids),
     );
     registrar(
@@ -1277,6 +1275,14 @@ app.whenReady()
         if (!instanciaPrincipal) return;
         persistencia = new Persistencia(app.getPath('userData'));
         await persistencia.abrir();
+        const catalogoInscricoes = persistencia.dados.modelos.some((modelo) => modelo.assinatura)
+            ? await listarModelosAssinatura() : { chatgpt: [], claude: [] };
+        for (const modelo of persistencia.dados.modelos) {
+            if (!modelo.assinatura) continue;
+            const anunciado = catalogoInscricoes[modelo.assinatura.provedor]
+                .find((item) => item.id === modelo.assinatura!.id || item.aliases?.includes(modelo.assinatura!.id));
+            if (anunciado?.esforcos) modelo.assinatura.esforcos = anunciado.esforcos;
+        }
         chatgptWeb = new ChatGptWeb();
         conversaChatGpt = new ConversaChatGpt({ navegador: chatgptWeb, salvar, publicar: publicarEstado });
         if (persistencia.avisoRecuperacao) dialog.showErrorBox('Histórico recuperado', persistencia.avisoRecuperacao);

@@ -23,7 +23,14 @@ export type EstadoAssinatura =
     | { estado: 'nao-autenticado'; mensagem: string }
     | { estado: 'pronto'; mensagem: string; conta?: string };
 
-export type ModeloAssinaturaDisponivel = { id: string; nome: string };
+export const esquemaEsforcoAssinatura = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+export type EsforcoAssinatura = z.infer<typeof esquemaEsforcoAssinatura>;
+export type ModeloAssinaturaDisponivel = {
+    id: string;
+    nome: string;
+    esforcos?: EsforcoAssinatura[];
+    aliases?: string[];
+};
 export type ModelosAssinatura = Record<ProvedorAssinatura, ModeloAssinaturaDisponivel[]>;
 
 /**
@@ -40,7 +47,11 @@ export const modelosAssinatura: ModelosAssinatura = {
 };
 
 /** Identificadores aceitos pela interface de CLI, sem caracteres que alterem a lista de argumentos. */
-export const esquemaModeloAssinatura = z.string().min(1).max(120).regex(/^[A-Za-z0-9._:-]+$/);
+export const esquemaModeloAssinatura = z
+    .string()
+    .min(1)
+    .max(120)
+    .regex(/^[A-Za-z0-9._:-]+$/);
 
 /** Validadores de dados recebidos pelo IPC ao cadastrar modelos de assinatura. */
 export const esquemaNovoModeloAssinatura = z.object({

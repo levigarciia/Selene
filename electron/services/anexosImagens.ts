@@ -36,12 +36,7 @@ export class AnexosImagens {
 
     /** Importa imagens do compositor sem permitir caminhos fornecidos pelo renderer. */
     async importar(entradas: EntradaImagem[]): Promise<ImagemRascunho[]> {
-        if (!entradas.length || entradas.length > 4) {
-            throw new Error('Anexe até quatro imagens por mensagem.');
-        }
-        if (this.pendentes.size + entradas.length > 32) {
-            throw new Error('Remova imagens de outros rascunhos antes de anexar novos arquivos.');
-        }
+        if (!entradas.length) throw new Error('Escolha ao menos um anexo.');
         const preparadas = entradas.map((entrada) => {
             const validada = esquemaEntradaImagem.parse(entrada);
             const bytes = Buffer.from(validada.dados.split(',')[1], 'base64');
@@ -79,7 +74,7 @@ export class AnexosImagens {
 
     /** Resolve exclusivamente anexos importados neste processo ou referenciados no histórico. */
     obter(ids: string[]): ImagemAnexada[] {
-        if (ids.length > 4 || new Set(ids).size !== ids.length) throw new Error('Lista de imagens inválida.');
+        if (new Set(ids).size !== ids.length) throw new Error('Lista de imagens inválida.');
         return ids.map((id) => {
             const imagem =
                 this.pendentes.get(id) ??

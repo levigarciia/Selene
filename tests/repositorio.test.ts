@@ -58,7 +58,7 @@ describe('descoberta de repositórios do projeto', () => {
             await symlink(pasta, join(pasta, 'atalho'), process.platform === 'win32' ? 'junction' : 'dir');
             const resultado = await repositoriosDoProjeto(pasta);
             expect(resultado.repositorios.map((item) => item.github).sort()).toEqual(['dono/api', 'dono/plugin']);
-            expect(resultado.avisos).toEqual(['SemRemoto: nenhum remoto no GitHub.']);
+            expect(resultado.avisos).toEqual([]);
             await mkdir(join(api, 'src'));
             expect((await repositoriosDoProjeto(join(api, 'src'))).repositorios[0].github).toBe('dono/api');
         } finally {
@@ -196,4 +196,55 @@ describe('lista do GitHub', () => {
         expect(tempoRelativo('2026-10-12T11:30:00Z', agora)).toBe('30 min');
         expect(tempoRelativo('2026-10-10T12:00:00Z', agora)).toBe('2 d');
     });
+});
+
+test('descobre repositório além de seis níveis sem avisos de pastas comuns', async () => {
+    const pasta = await mkdtemp(join(tmpdir(), 'selene-profundo-'));
+    try {
+        const profundo = join(pasta, ...Array(10).fill('nivel'));
+        await mkdir(profundo, { recursive: true });
+        execFileSync('git', ['init', '-q', profundo]);
+        expect(await descobrirPastasRepositorios(pasta)).toEqual({ pastas: [profundo], avisos: [] });
+    } finally {
+        await rm(pasta, { recursive: true, force: true });
+    }
+});
+
+test('lê remoto sem autorizar proprietário e sem carregar includes da configuração', async () => {
+    const { writeFile } = await import('node:fs/promises');
+    const { lerRemotoSemExecutarRepositorio } = await import('../electron/services/repositorio');
+    const pasta = await mkdtemp(join(tmpdir(), 'selene-remoto-seguro-'));
+    try {
+        execFileSync('git', ['init', '-q', pasta]);
+        await writeFile(
+            join(pasta, '.git', 'externo'),
+            '[remote "origin"]\nurl = https://github.com/dono/externo.git\n',
+        );
+        await writeFile(
+            join(pasta, '.git', 'config'),
+            '[include]\npath = externo\n[remote "backup"]\nurl = https://github.com/dono/local.git\n',
+        );
+        expect(await lerRemotoSemExecutarRepositorio(pasta)).toBe('dono/local');
+        await writeFile(join(pasta, '.git', 'config'), '[include]\npath = externo\n');
+        expect(await lerRemotoSemExecutarRepositorio(pasta)).toBeNull();
+    } finally {
+        await rm(pasta, { recursive: true, force: true });
+    }
+});
+
+test('descoberta encontra remoto quando o Git recusa o proprietário', async () => {
+    const pasta = await mkdtemp(join(tmpdir(), 'selene-proprietario-'));
+    const anterior = process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+    try {
+        execFileSync('git', ['init', '-q', pasta]);
+        execFileSync('git', ['-C', pasta, 'remote', 'add', 'origin', 'https://github.com/dono/projeto.git']);
+        process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = '1';
+        const resultado = await repositoriosDoProjeto(pasta);
+        expect(resultado.repositorios).toEqual([{ pasta, github: 'dono/projeto' }]);
+        expect(resultado.avisos).toEqual([]);
+    } finally {
+        if (anterior === undefined) delete process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER;
+        else process.env.GIT_TEST_ASSUME_DIFFERENT_OWNER = anterior;
+        await rm(pasta, { recursive: true, force: true });
+    }
 });

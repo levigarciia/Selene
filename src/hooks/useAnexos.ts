@@ -54,18 +54,18 @@ export function useAnexos(
             return informarErro('Este modelo não aceita áudio de entrada.');
         }
         if (!ponte) return informarErro('Anexe arquivos no aplicativo desktop.');
-        if (imagens.length + arquivos.length > 4) return informarErro('Anexe até quatro arquivos por mensagem.');
         bloqueio.current = true;
         definirImportando(true);
         informarErro('');
         try {
-            const entradas = await Promise.all(arquivos.map(lerArquivo));
-            const resultado = await ponte.anexarImagens(entradas);
-            if (!resultado.ok) throw new Error(resultado.erro);
-            definirRascunhos((anteriores) => ({
-                ...anteriores,
-                [chave]: [...(anteriores[chave] ?? []), ...resultado.valor],
-            }));
+            for (const arquivo of arquivos) {
+                const resultado = await ponte.anexarImagens([await lerArquivo(arquivo)]);
+                if (!resultado.ok) throw new Error(resultado.erro);
+                definirRascunhos((anteriores) => ({
+                    ...anteriores,
+                    [chave]: [...(anteriores[chave] ?? []), ...resultado.valor],
+                }));
+            }
         } catch (erro) {
             informarErro(erro instanceof Error ? erro.message : 'Não foi possível anexar os arquivos.');
         } finally {
