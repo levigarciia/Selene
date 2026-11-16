@@ -71,9 +71,6 @@ const instrucaoResumo = [
     'Se houver resumo anterior, atualize com o novo trecho e preserve informações ainda relevantes.',
 ].join('\n');
 
-/** Modelos de janela enorme (ex.: 1M) não devem acumular histórico até o limite: cada chamada reenvia tudo e o cache expira em ~5 min. */
-const tetoContextoOperacional = 100_000;
-
 type DependenciasContexto = {
     completar: (corpo: unknown, sinal: AbortSignal) => Promise<Response>;
     registrar: (resumo: string, antigas: MensagemModelo[]) => Promise<void>;
@@ -93,11 +90,11 @@ export class CompactadorContexto {
         ferramentas?: unknown,
     ): Promise<void> {
         sinal.throwIfAborted();
-        const contexto = Math.min(configuracao.contexto, tetoContextoOperacional);
+        const contexto = configuracao.contexto;
         const limite = contexto - configuracao.maxTokens - 256;
         const antes = estimarTokens(mensagens, ferramentas);
         if (antes <= limite * 0.85) {
-            resposta.usoContexto = { tokens: antes, limite: configuracao.contexto };
+            resposta.usoContexto = { tokens: antes, limite: contexto };
             this.dependencias.publicar();
             return;
         }
@@ -145,7 +142,7 @@ export class CompactadorContexto {
         if (!antigas.length) {
             if (antes > limite)
                 throw new Error('Não há histórico suficiente para compactar. Reduza o envio ou inicie outra conversa.');
-            resposta.usoContexto = { tokens: antes, limite: configuracao.contexto };
+            resposta.usoContexto = { tokens: antes, limite: contexto };
             return;
         }
         resposta.faseContexto = 'compactando';
@@ -173,7 +170,7 @@ export class CompactadorContexto {
                 tokensAntes: antes,
                 tokensDepois: depois,
             });
-            resposta.usoContexto = { tokens: depois, limite: configuracao.contexto };
+            resposta.usoContexto = { tokens: depois, limite: contexto };
         } finally {
             delete resposta.faseContexto;
             this.dependencias.publicar();
